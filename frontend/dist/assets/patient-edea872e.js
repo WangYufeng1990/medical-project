@@ -1,1 +1,0 @@
-import{r as e}from"./request-d53dad3a.js";function i(t){return e.get("/patients",{params:t})}function r(t){return e.get(`/patients/${t}`)}function u(t){return e.post("/patients",t)}function s(t,n){return e.put(`/patients/${t}`,n)}function p(t){return e.delete(`/patients/${t}`)}export{r as a,u as c,p as d,i as g,s as u};

@@ -1,1 +1,0 @@
-import{p as e}from"./patientRequest-4b8028e7.js";function i(){return e.get("/patient/me")}function r(t){return e.get("/patient/me/appointments",{params:t})}function p(t){return e.get("/patient/me/prescriptions",{params:t})}function s(t){return e.get("/patient/me/bills",{params:t})}export{p as a,s as b,i as c,r as g};

@@ -1,5 +1,20 @@
-.idea/
-*.iml
-target/
-*.log
+# ==========================================
+# 1. 后端隔离 (medical-server)
+# ==========================================
+medical-server/target/
+medical-server/.idea/
+medical-server/*.iml
+medical-server/*.log
+
+# ==========================================
+# 2. 前端隔离 (medical-web)
+# ==========================================
+medical-web/node_modules/
+medical-web/.next/
+medical-web/dist/
+medical-web/.env.local
+
+# ==========================================
+# 3. 系统通用缓存
+# ==========================================
 .DS_Store
