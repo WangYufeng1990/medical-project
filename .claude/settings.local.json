@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql *)",
+      "Bash(brew services *)",
+      "Bash(export JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-17.jdk/Contents/Home)",
+      "Bash(mvn clean *)",
+      "Bash(/usr/libexec/java_home *)",
+      "Bash(export JAVA_HOME=\"/Users/fairylord/Library/Java/JavaVirtualMachines/corretto-17.0.12/Contents/Home\")",
+      "Bash(jar tf *)",
+      "Bash(npm install *)",
+      "Bash(mvn spring-boot:run -q)",
+      "Bash(curl -s http://localhost:8080/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(mvn package *)",
+      "Bash(mvn -f /Users/fairylord/IdeaProjects/my-java-project/pom.xml package -DskipTests -q)",
+      "Bash(java -jar /Users/fairylord/IdeaProjects/my-java-project/target/medical-0.0.1-SNAPSHOT.jar)",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(pkill -f \"medical-0.0.1-SNAPSHOT.jar\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Total after create:', d['data']['total'], 'patients'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f'  {r[\\\\\"roleName\\\\\"]} \\({r[\\\\\"roleCode\\\\\"]}\\)'\\) for r in d['data']['records']]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(npx vite *)",
+      "Bash(redis-cli ping *)",
+      "Bash(echo \"Backend PID: $!\")",
+      "Bash(echo \"Frontend PID: $!\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Backend: OK - User: {d['data']['realName']}, Role: {d['data']['roles']}\\\\\"\\)\")",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['message']\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"newpass123\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Login with new password: {d['message']}, User: {d['data']['realName']}\\\\\"\\)\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"OK - {d['data']['realName']} \\({d['data']['roles']}\\)\\\\\"\\)\")",
+      "Bash(npm run *)",
+      "Bash(lsof *)",
+      "Bash(kill -9 12077 12091)",
+      "Bash(mvn -f pom.xml spring-boot:run -Dspring-boot.run.profiles=h2 -DskipTests)"
+    ]
+  }
+}

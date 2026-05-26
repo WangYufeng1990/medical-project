@@ -1,0 +1,133 @@
+CREATE TABLE IF NOT EXISTS sys_user (
+    id BIGINT NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    real_name VARCHAR(50) DEFAULT NULL,
+    phone VARCHAR(20) DEFAULT NULL,
+    email VARCHAR(100) DEFAULT NULL,
+    gender TINYINT DEFAULT 0,
+    status TINYINT DEFAULT 1,
+    avatar VARCHAR(255) DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_username (username)
+);
+
+CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT NOT NULL,
+    role_name VARCHAR(50) NOT NULL,
+    role_code VARCHAR(50) NOT NULL,
+    description VARCHAR(200) DEFAULT NULL,
+    status TINYINT DEFAULT 1,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_role_code (role_code)
+);
+
+CREATE TABLE IF NOT EXISTS sys_menu (
+    id BIGINT NOT NULL,
+    parent_id BIGINT NOT NULL DEFAULT 0,
+    menu_name VARCHAR(50) NOT NULL,
+    path VARCHAR(200) DEFAULT NULL,
+    component VARCHAR(200) DEFAULT NULL,
+    icon VARCHAR(50) DEFAULT NULL,
+    type VARCHAR(20) NOT NULL DEFAULT 'MENU',
+    permission VARCHAR(100) DEFAULT NULL,
+    sort INT DEFAULT 0,
+    status TINYINT DEFAULT 1,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS sys_user_role (
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS sys_role_menu (
+    role_id BIGINT NOT NULL,
+    menu_id BIGINT NOT NULL,
+    PRIMARY KEY (role_id, menu_id)
+);
+
+CREATE TABLE IF NOT EXISTS patient (
+    id BIGINT NOT NULL,
+    username VARCHAR(50) DEFAULT NULL,
+    password VARCHAR(255) DEFAULT NULL,
+    name VARCHAR(50) NOT NULL,
+    gender TINYINT DEFAULT 0,
+    age INT DEFAULT 0,
+    id_card VARCHAR(200) DEFAULT NULL,
+    phone VARCHAR(200) DEFAULT NULL,
+    address VARCHAR(200) DEFAULT NULL,
+    medical_history TEXT DEFAULT NULL,
+    allergies VARCHAR(500) DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS appointment (
+    id BIGINT NOT NULL,
+    patient_id BIGINT NOT NULL,
+    doctor_id BIGINT NOT NULL,
+    appointment_time TIMESTAMP NOT NULL,
+    status INT DEFAULT 0,
+    description VARCHAR(500) DEFAULT NULL,
+    notes TEXT DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS prescription (
+    id BIGINT NOT NULL,
+    patient_id BIGINT NOT NULL,
+    doctor_id BIGINT NOT NULL,
+    diagnosis VARCHAR(500) NOT NULL,
+    prescription_date DATE NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS prescription_item (
+    id BIGINT NOT NULL,
+    prescription_id BIGINT NOT NULL,
+    drug_name VARCHAR(100) NOT NULL,
+    specification VARCHAR(50) DEFAULT NULL,
+    dosage VARCHAR(50) NOT NULL,
+    frequency VARCHAR(50) NOT NULL,
+    duration INT DEFAULT 0,
+    quantity INT DEFAULT 1,
+    unit_price DECIMAL(10,2) DEFAULT 0.00,
+    notes VARCHAR(200) DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS bill (
+    id BIGINT NOT NULL,
+    patient_id BIGINT NOT NULL,
+    prescription_id BIGINT DEFAULT NULL,
+    amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    status INT DEFAULT 0,
+    pay_time TIMESTAMP DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);

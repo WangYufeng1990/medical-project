@@ -1,0 +1,1 @@
+import{r as n}from"./request-d53dad3a.js";function o(t){return n.get("/appointments",{params:t})}function i(t){return n.get(`/appointments/${t}`)}function r(t){return n.post("/appointments",t)}function a(t,e){return n.put(`/appointments/${t}`,e)}function u(t){return n.delete(`/appointments/${t}`)}export{i as a,r as c,u as d,o as g,a as u};

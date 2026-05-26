@@ -1,0 +1,31 @@
+spring:
+  profiles:
+    active: h2
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/medical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+knife4j:
+  enable: true
+
+jwt:
+  secret: change-me-to-a-256-bit-secret-key-in-production
+  expiration: 86400000
