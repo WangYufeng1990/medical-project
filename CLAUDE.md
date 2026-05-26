@@ -13,10 +13,11 @@ A Spring Boot backend for a frontend-backend separated medical management system
 | Language | Java | 17 (LTS) |
 | Framework | Spring Boot | 3.x (latest stable) |
 | Build Tool | Maven | wrapper included |
-| ORM | MyBatis-Plus | 3.5+ |
+| ORM | Spring Data JPA + Querydsl | Hibernate 6.x provider |
 | Database | MySQL | 8.0+ |
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
-| Auth | Spring Security + JWT | stateless, token-based |
+| Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
+| FHIR | HAPI FHIR R4 | 7.x (org.hl7.fhir.r4) |
 | API Doc | Knife4j (Swagger wrapper) | latest |
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
@@ -24,13 +25,14 @@ A Spring Boot backend for a frontend-backend separated medical management system
 | Testing | JUnit 5 + Spring Boot Test | bundled |
 
 **Explicitly excluded (DO NOT introduce):**
-- No JPA/Hibernate (MyBatis-Plus is the single ORM)
+- No MyBatis/MyBatis-Plus (Spring Data JPA is the single ORM)
 - No Spring Cloud / microservices (this is a monolithic backend)
 - No gRPC, GraphQL (REST only)
 - No Elasticsearch, MongoDB, Neo4j (MySQL + Redis only)
 - No message queues (RabbitMQ, Kafka, RocketMQ) unless a concrete async requirement arises
 - No MapStruct, ModelMapper or any object-mapping library. DTO ↔ Entity conversion logic MUST be encapsulated inside DTO classes (static factory `fromEntity()` / instance `toEntity()` methods). Never scatter conversion code in Controllers or Services.
 - No Shiro (Spring Security is the single auth framework)
+- No self-issued JWT (OAuth2 Resource Server handles token validation against external IdP JWKS endpoint)
 
 ---
 
@@ -50,8 +52,8 @@ src/
     │   ├── module/                          # ---- business modules ----
     │   │   ├── system/                      #   system management (users, roles, menus)
     │   │   │   ├── controller/
-    │   │   │   ├── service/  + impl/
-    │   │   │   ├── mapper/
+    │   │   │   ├── service/
+    │   │   │   ├── repository/              #   Spring Data JPA repositories
     │   │   │   ├── entity/
     │   │   │   └── dto/
     │   │   ├── patient/                     #   patient records
@@ -63,8 +65,7 @@ src/
     └── resources/
         ├── application.yml                  # default config
         ├── application-dev.yml              # dev profile
-        ├── application-prod.yml             # prod profile
-        └── mapper/                          # MyBatis XML mappings (if any)
+        └── application-prod.yml             # prod profile
 ```
 
 **Rules:**
@@ -72,14 +73,14 @@ src/
 - `common/` is strictly for cross-cutting concerns. Business logic goes into modules.
 - No cyclic references between modules. If two modules need the same thing, it belongs in `common/`.
 - DTOs go in the module's own `dto/` directory, not a global one.
-- All custom MyBatis XML files MUST live under `src/main/resources/mapper/`. File names must match Mapper interface names exactly (`PatientMapper.xml` ↔ `PatientMapper.java`). No subdirectories. This prevents Maven from silently excluding them from the build artifact.
+- JPA repositories live in each module's `repository/` directory. Naming: `{Entity}Repository`.
 
 ---
 
 ## Development Principles (Non-Negotiable)
 
 ### 1. Zero Fluff
-- **No docstrings or comments on code that is self-explanatory.** A method named `findPatientById` does not need a Javadoc explaining "Finds a patient by ID."
+- **No docstrings or comments on code that is self-explanatory.**
 - A comment is only justified when the WHY is non-obvious — a subtle invariant, a deliberate workaround, a constraint dictated by an upstream system.
 - Do not write "implementation plan" documents, README files, or any documentation unless explicitly asked.
 
@@ -90,7 +91,7 @@ src/
 - No "just in case" or "we might need it later" dependencies.
 
 ### 3. Code Generation Discipline
-- **Do not generate boilerplate code proactively.** Wait for a concrete request from the user before creating entities, controllers, services, mappers, or DTOs.
+- **Do not generate boilerplate code proactively.** Wait for a concrete request from the user.
 - When asked to implement something, generate only the files directly needed — no extra "helper" classes, no speculative abstractions, no half-finished stubs.
 - Three similar lines of code is better than a premature abstraction.
 
@@ -104,24 +105,24 @@ src/
 - HTTP verbs strictly by semantics: GET for reads, POST for creates, PUT for full updates, PATCH for partial updates, DELETE for deletes.
 - Path naming: `/api/v1/<module>/<resource>`, e.g., `/api/v1/patients/{id}`
 - Paging parameters use a shared `PageQuery` base class.
-- All paginated endpoints MUST return `Result<PageResult<T>>`. `PageResult<T>` is a single standardized wrapper containing `total`, `size`, `current`, and `records`. Never leak raw MyBatis-Plus `Page` objects into the API response.
+- All paginated endpoints MUST return `Result<PageResult<T>>`. `PageResult<T>` is a single standardized wrapper containing `total`, `size`, `current`, and `records`. Never leak raw Spring Data `Page` objects into the API response.
 
 ### 6. Security
-- Stateless JWT authentication. Every request carries `Authorization: Bearer <token>`.
-- Passwords are hashed with BCrypt.
-- Medical data fields requiring AES encryption MUST use MyBatis-Plus `@TableField(typeHandler = AesTypeHandler.class)` or a registered MyBatis interceptor configured in `common/config/`. NEVER write manual encrypt/decrypt wrappers in Service classes — encryption must be transparent to business logic.
-- Role-based access control: `@PreAuthorize("hasRole('ADMIN')")` on controller methods.
+- OAuth2 Resource Server validates JWTs issued by external IdP against its JWKS endpoint.
+- Passwords are hashed with BCrypt (for local fallback accounts only).
+- Medical data fields requiring AES encryption MUST use JPA `@Convert(converter = AesAttributeConverter.class)` on entity fields. NEVER write manual encrypt/decrypt wrappers in Service classes — encryption must be transparent to business logic.
+- Role-based access control via `@PreAuthorize("hasRole('ADMIN')")`, mapping JWT claims to Spring Security GrantedAuthorities via a custom `JwtAuthenticationConverter`.
 
 ### 7. Database
 - All tables MUST have `id`, `create_time`, `update_time` columns — inherited from `BaseEntity`.
-- Logical delete only (`is_deleted` flag), never physical DELETE.
-- Index foreign keys and frequently queried columns.
+- Logical delete only (`is_deleted` flag) via `@SQLDelete` / Hibernate `@Where`, never physical DELETE.
+- Index foreign keys and frequently queried columns via `@Table(indexes = ...)`.
 - Medical data integrity: use `@Version` optimistic locking on critical entities.
 
 ### 8. Testing
 - Write tests only when asked.
 - When asked, cover: the happy path, one edge case, one failure mode. No more.
-- Use `@WebMvcTest` for controllers, `@MybatisPlusTest` for mappers.
+- Use `@WebMvcTest` for controllers, `@DataJpaTest` for repositories.
 
 ### 9. Git
 - Do not initialize git or make commits unless explicitly asked.
