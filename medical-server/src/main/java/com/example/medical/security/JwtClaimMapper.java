@@ -21,6 +21,9 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         Long userId = extractUserId(jwt);
 
         List<String> groups = jwt.getClaimAsStringList("groups");
+        if (groups == null) {
+            groups = jwt.getClaimAsStringList("roles");
+        }
         List<String> scopes = jwt.getClaimAsStringList("scp");
         if (groups == null) groups = List.of();
         if (scopes == null) scopes = List.of();

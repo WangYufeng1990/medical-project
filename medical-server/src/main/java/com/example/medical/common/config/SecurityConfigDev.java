@@ -7,7 +7,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -16,11 +18,19 @@ import java.nio.charset.StandardCharsets;
 @Profile("!prod")
 public class SecurityConfigDev {
 
+    private static final byte[] DEV_KEY = "medical-dev-jwt-secret-key-for-local-development-only"
+            .getBytes(StandardCharsets.UTF_8);
+
     @Bean
     public JwtDecoder jwtDecoder() {
-        byte[] keyBytes = "medical-dev-jwt-secret-key-for-local-development-only"
-                .getBytes(StandardCharsets.UTF_8);
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "HmacSHA256");
+        SecretKeySpec key = new SecretKeySpec(DEV_KEY, "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(key).build();
+    }
+
+    @Bean
+    public JwtEncoder jwtEncoder() {
+        SecretKeySpec key = new SecretKeySpec(DEV_KEY, "HmacSHA256");
+        JWKSource<SecurityContext> jwkSource = new ImmutableSecret<>(key);
+        return new NimbusJwtEncoder(jwkSource);
     }
 }

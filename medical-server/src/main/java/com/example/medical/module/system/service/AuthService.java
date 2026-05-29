@@ -10,11 +10,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -24,14 +28,15 @@ public class AuthService {
 
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtEncoder jwtEncoder;
 
-    @Value("${okta.client-id}")
+    @Value("${okta.client-id:#{null}}")
     private String clientId;
 
-    @Value("${okta.client-secret}")
+    @Value("${okta.client-secret:#{null}}")
     private String clientSecret;
 
-    @Value("${okta.issuer-uri}")
+    @Value("${okta.issuer-uri:#{null}}")
     private String issuerUri;
 
     @SuppressWarnings("unchecked")
@@ -48,20 +53,22 @@ public class AuthService {
         List<String> roles = sysUserRepository.findRoleCodesByUserId(user.getId());
         List<String> permissions = sysUserRepository.findPermissionsByUserId(user.getId());
 
-        Map<String, Object> tokenResponse = callOktaTokenEndpoint(request.getUsername(), request.getPassword());
+        TokenPair tokens = exchangeForTokens(user.getId(), user.getUsername(),
+                request.getPassword(), roles);
 
-        String accessToken = (String) tokenResponse.get("access_token");
-        String refreshToken = (String) tokenResponse.get("refresh_token");
-
-        return LoginResponse.fromEntity(user, roles, permissions, accessToken, refreshToken);
+        return LoginResponse.fromEntity(user, roles, permissions,
+                tokens.accessToken(), tokens.refreshToken());
     }
 
     public LoginResponse refresh(String refreshToken) {
+        if (clientId == null || issuerUri == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED,
+                    "Token refresh not available in dev mode — log in again");
+        }
         Map<String, Object> tokenResponse = callOktaRefreshEndpoint(refreshToken);
 
         String accessToken = (String) tokenResponse.get("access_token");
         String newRefreshToken = (String) tokenResponse.get("refresh_token");
-        String idToken = (String) tokenResponse.get("id_token");
 
         RestTemplate restTemplate = new RestTemplate();
         String userinfoUrl = issuerUri + "/v1/userinfo";
@@ -74,11 +81,34 @@ public class AuthService {
         String username = userInfo != null ? (String) userInfo.getOrDefault("sub", "unknown") : "unknown";
         Long userId = userInfo != null ? resolveUserId(userInfo) : 0L;
 
-        return LoginResponse.forRefresh(accessToken, newRefreshToken != null ? newRefreshToken : refreshToken,
+        return LoginResponse.forRefresh(accessToken,
+                newRefreshToken != null ? newRefreshToken : refreshToken,
                 userId, username, List.of(), List.of());
     }
 
-    private Map<String, Object> callOktaTokenEndpoint(String username, String password) {
+    private TokenPair exchangeForTokens(Long userId, String username,
+                                         String password, List<String> roles) {
+        if (clientId == null || issuerUri == null) {
+            return generateDevToken(userId, username, roles);
+        }
+        return callOktaTokenEndpoint(username, password);
+    }
+
+    private TokenPair generateDevToken(Long userId, String username, List<String> roles) {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .subject(username)
+                .id(userId.toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(7200))
+                .claim("roles", roles)
+                .claim("scp", List.of("openid", "profile", "email"))
+                .build();
+        String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+        return new TokenPair(token, null);
+    }
+
+    private TokenPair callOktaTokenEndpoint(String username, String password) {
         RestTemplate restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
@@ -100,7 +130,10 @@ public class AuthService {
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Okta authentication failed");
         }
-        return response.getBody();
+        Map<String, Object> res = response.getBody();
+        return new TokenPair(
+                (String) res.get("access_token"),
+                (String) res.get("refresh_token"));
     }
 
     private Map<String, Object> callOktaRefreshEndpoint(String refreshToken) {
@@ -131,8 +164,13 @@ public class AuthService {
         Object uid = userInfo.get("uid");
         if (uid instanceof Number n) return n.longValue();
         if (uid instanceof String s) {
-            try { return Long.valueOf(s); } catch (NumberFormatException ignored) {}
+            try {
+                return Long.valueOf(s);
+            } catch (NumberFormatException ignored) {
+            }
         }
         return 0L;
     }
+
+    private record TokenPair(String accessToken, String refreshToken) {}
 }

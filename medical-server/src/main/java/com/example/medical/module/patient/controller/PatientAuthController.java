@@ -14,12 +14,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -33,6 +38,7 @@ public class PatientAuthController {
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtEncoder jwtEncoder;
 
     @Value("${okta.client-id:#{null}}")
     private String clientId;
@@ -65,25 +71,41 @@ public class PatientAuthController {
         Patient patient = patientRepository.findById(auth.getPatientId())
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
 
-        TokenPair tokens = exchangeForTokens(request.getUsername(), request.getPassword());
+        TokenPair tokens = exchangeForTokens(auth.getUsername(), request.getPassword(), patient.getId());
 
         return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
-                patient.getId(), patient.getName(), request.getUsername()));
+                patient.getId(), patient.getName(), auth.getUsername()));
     }
 
     @PostMapping("/refresh")
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody PatientRefreshRequest request) {
+        if (clientId == null || issuerUri == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Token refresh not available in dev mode — log in again");
+        }
         TokenPair tokens = callOktaRefreshEndpoint(request.getRefreshToken());
-
         return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
                 null, null, null));
     }
 
-    private TokenPair exchangeForTokens(String username, String password) {
+    private TokenPair exchangeForTokens(String username, String password, Long patientId) {
         if (clientId == null || issuerUri == null) {
-            return new TokenPair("dev-token-" + username, null);
+            return generateDevToken(patientId, username);
         }
         return callOktaPasswordGrant(username, password);
+    }
+
+    private TokenPair generateDevToken(Long patientId, String username) {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .subject(username)
+                .id(patientId.toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(7200))
+                .claim("roles", List.of("PATIENT"))
+                .claim("scp", List.of("openid", "profile"))
+                .build();
+        String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+        return new TokenPair(token, null);
     }
 
     private TokenPair callOktaPasswordGrant(String username, String password) {
@@ -96,7 +118,7 @@ public class PatientAuthController {
         body.add("grant_type", "password");
         body.add("username", username);
         body.add("password", password);
-        body.add("scope", "openid profile");
+        body.add("scope", "openid profile groups");
 
         ResponseEntity<Map> response = rt.exchange(
                 issuerUri + "/v1/token", HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
