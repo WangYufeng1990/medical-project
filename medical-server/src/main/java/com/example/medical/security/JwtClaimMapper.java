@@ -48,8 +48,13 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
             } catch (NumberFormatException ignored) {
             }
         }
-        String sub = jwt.getSubject();
-        String fallback = sub != null ? sub : "0";
-        return (long) fallback.hashCode();
+        String jti = jwt.getId();
+        if (jti != null) {
+            try {
+                return Long.valueOf(jti);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0L;
     }
 }

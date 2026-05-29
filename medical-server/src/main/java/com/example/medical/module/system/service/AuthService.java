@@ -101,6 +101,7 @@ public class AuthService {
                 .id(userId.toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(7200))
+                .claim("uid", userId.toString())
                 .claim("roles", roles)
                 .claim("scp", List.of("openid", "profile", "email"))
                 .build();

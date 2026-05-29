@@ -101,6 +101,7 @@ public class PatientAuthController {
                 .id(patientId.toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(7200))
+                .claim("uid", patientId.toString())
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile"))
                 .build();
