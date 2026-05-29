@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 public class BillFormDTO {
@@ -14,20 +15,44 @@ public class BillFormDTO {
     private Long patientId;
 
     private Long prescriptionId;
+    private Long appointmentId;
 
-    @NotNull(message = "Amount is required")
-    @Positive(message = "Amount must be positive")
-    private BigDecimal amount;
+    @NotNull(message = "Total charge is required")
+    @Positive(message = "Total charge must be positive")
+    private BigDecimal totalCharge;
 
-    private Integer status;
+    private String billType;
+    private String cptCodes;
+    private String icd10Codes;
+    private String placeOfServiceCode;
+    private String billingProviderNpi;
+    private String renderingProviderNpi;
+    private String insurancePayerName;
+    private String priorAuthorizationNumber;
+    private BigDecimal copayAmount;
+    private LocalDate claimFilingDate;
 
     public Bill toEntity() {
         Bill b = new Bill();
         b.setPatientId(patientId);
         b.setPrescriptionId(prescriptionId);
-        b.setAmount(amount);
-        b.setPaidAmount(BigDecimal.ZERO);
-        b.setStatus(status != null ? status : 0);
+        b.setAppointmentId(appointmentId);
+        b.setTotalCharge(totalCharge);
+        b.setBillType(billType != null ? billType : "PROFESSIONAL");
+        b.setClaimStatus("DRAFT");
+        b.setCptCodes(cptCodes);
+        b.setIcd10Codes(icd10Codes);
+        b.setPlaceOfServiceCode(placeOfServiceCode);
+        b.setBillingProviderNpi(billingProviderNpi);
+        b.setRenderingProviderNpi(renderingProviderNpi);
+        b.setInsurancePayerName(insurancePayerName);
+        b.setPriorAuthorizationNumber(priorAuthorizationNumber);
+        b.setCopayAmount(copayAmount);
+        b.setPatientPaidAmount(BigDecimal.ZERO);
+        b.setInsuranceAdjustment(BigDecimal.ZERO);
+        b.setInsurancePayment(BigDecimal.ZERO);
+        b.setPatientResponsibility(totalCharge);
+        b.setClaimFilingDate(claimFilingDate);
         return b;
     }
 }

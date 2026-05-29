@@ -1,6 +1,6 @@
 package com.example.medical.module.appointment.controller;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
@@ -23,9 +23,9 @@ public class AppointmentController {
     public Result<PageResult<AppointmentVO>> page(@RequestParam(defaultValue = "1") long page,
                                                   @RequestParam(defaultValue = "10") long size,
                                                   @RequestParam(required = false) Integer status) {
-        IPage<AppointmentVO> result = appointmentService.page(page, size, status);
-        return Result.ok(PageResult.of(result.getTotal(), result.getSize(),
-                result.getCurrent(), result.getRecords()));
+        Page<AppointmentVO> result = appointmentService.page(page, size, status);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
     }
 
     @GetMapping("/{id}")

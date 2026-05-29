@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="medical-server"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <springProfile name="h2,dev">
+            <!-- Human-readable for development -->
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </springProfile>
+        <springProfile name="!h2 &amp; !dev">
+            <!-- Structured JSON for production / SIEM ingestion -->
+            <encoder>
+                <pattern>
+                    {"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","severity":"%level","logger":"%logger","thread":"%thread","message":"%msg"}%n
+                </pattern>
+            </encoder>
+        </springProfile>
+    </appender>
+
+    <springProfile name="prod">
+        <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/audit.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>logs/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>90</maxHistory>
+            </rollingPolicy>
+            <encoder>
+                <pattern>
+                    {"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","severity":"%level","logger":"%logger","message":"%msg"}%n
+                </pattern>
+            </encoder>
+        </appender>
+
+        <logger name="com.example.medical.common.audit" level="INFO" additivity="false">
+            <appender-ref ref="AUDIT_FILE"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.example.medical" level="INFO"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>
+    <logger name="org.hibernate.engine.transaction" level="WARN"/>
+    <logger name="org.springframework.security" level="INFO"/>
+</configuration>

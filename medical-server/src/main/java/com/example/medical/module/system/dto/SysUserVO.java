@@ -20,12 +20,40 @@ public class SysUserVO {
     private Integer gender;
     private Integer status;
     private String avatar;
+    private String npi;
+    private String stateLicenseNumber;
+    private String licenseState;
+    private String deaNumberLast4;
+    private String taxonomyCode;
+    private String credentials;
+    private String specialty;
     private List<String> roles;
     private LocalDateTime createTime;
 
     public static SysUserVO fromEntity(SysUser user, List<String> roles) {
-        return new SysUserVO(user.getId(), user.getUsername(), user.getRealName(),
-                user.getPhone(), user.getEmail(), user.getGender(), user.getStatus(),
-                user.getAvatar(), roles, user.getCreateTime());
+        return new SysUserVO(
+                user.getId(),
+                user.getUsername(),
+                user.getRealName(),
+                user.getPhone(),
+                user.getEmail(),
+                user.getGender(),
+                user.getStatus(),
+                user.getAvatar(),
+                user.getNpi(),
+                user.getStateLicenseNumber(),
+                user.getLicenseState(),
+                maskLast4(user.getDeaNumber()),
+                user.getTaxonomyCode(),
+                user.getCredentials(),
+                user.getSpecialty(),
+                roles,
+                user.getCreateTime());
+    }
+
+    private static String maskLast4(String value) {
+        if (value == null || value.isBlank()) return null;
+        if (value.length() <= 4) return "****";
+        return "****" + value.substring(value.length() - 4);
     }
 }

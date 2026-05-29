@@ -1,9 +1,10 @@
 package com.example.medical.module.prescription.controller;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
+import com.example.medical.module.prescription.dto.PrescriptionUpdateFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
 import com.example.medical.module.prescription.service.PrescriptionService;
 import jakarta.validation.Valid;
@@ -22,9 +23,9 @@ public class PrescriptionController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<PrescriptionVO>> page(@RequestParam(defaultValue = "1") long page,
                                                    @RequestParam(defaultValue = "10") long size) {
-        IPage<PrescriptionVO> result = prescriptionService.page(page, size);
-        return Result.ok(PageResult.of(result.getTotal(), result.getSize(),
-                result.getCurrent(), result.getRecords()));
+        Page<PrescriptionVO> result = prescriptionService.page(page, size);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
     }
 
     @GetMapping("/{id}")
@@ -37,6 +38,14 @@ public class PrescriptionController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<Void> create(@Valid @RequestBody PrescriptionFormDTO dto) {
         prescriptionService.create(dto);
+        return Result.ok();
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    public Result<Void> update(@PathVariable Long id,
+                               @Valid @RequestBody PrescriptionUpdateFormDTO dto) {
+        prescriptionService.update(id, dto);
         return Result.ok();
     }
 

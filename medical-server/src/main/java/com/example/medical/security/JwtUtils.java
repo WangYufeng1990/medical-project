@@ -1,50 +1,48 @@
 package com.example.medical.security;
 
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 
 @Component
 public class JwtUtils {
 
-    private final SecretKey key;
+    private final JwtEncoder jwtEncoder;
+    private final JwtDecoder jwtDecoder;
     private final long expiration;
 
-    public JwtUtils(@Value("${jwt.secret}") String secret,
+    public JwtUtils(JwtEncoder jwtEncoder,
+                    JwtDecoder jwtDecoder,
                     @Value("${jwt.expiration}") long expiration) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.jwtEncoder = jwtEncoder;
+        this.jwtDecoder = jwtDecoder;
         this.expiration = expiration;
     }
 
     public String generateToken(Long userId, String username, Map<String, Object> claims) {
-        Date now = new Date();
-        return Jwts.builder()
-                .claims(claims)
+        Instant now = Instant.now();
+        JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
                 .subject(username)
                 .id(String.valueOf(userId))
                 .issuedAt(now)
-                .expiration(new Date(now.getTime() + expiration))
-                .signWith(key)
-                .compact();
+                .expiresAt(now.plusMillis(expiration));
+        if (claims != null) {
+            claims.forEach(builder::claim);
+        }
+        return jwtEncoder.encode(JwtEncoderParameters.from(builder.build())).getTokenValue();
     }
 
-    public Claims parseToken(String token) {
-        return Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+    public Jwt parseToken(String token) {
+        return jwtDecoder.decode(token);
     }
 
     public boolean validateToken(String token) {
         try {
-            parseToken(token);
+            jwtDecoder.decode(token);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             return false;
@@ -52,10 +50,14 @@ public class JwtUtils {
     }
 
     public Long getUserIdFromToken(String token) {
-        return Long.valueOf(parseToken(token).getId());
+        return Long.valueOf(jwtDecoder.decode(token).getId());
     }
 
     public String getUsernameFromToken(String token) {
-        return parseToken(token).getSubject();
+        return jwtDecoder.decode(token).getSubject();
+    }
+
+    public Date getExpirationFromToken(String token) {
+        return Date.from(jwtDecoder.decode(token).getExpiresAt());
     }
 }

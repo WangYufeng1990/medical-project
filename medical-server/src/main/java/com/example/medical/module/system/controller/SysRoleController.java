@@ -1,6 +1,6 @@
 package com.example.medical.module.system.controller;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.SysRoleFormDTO;
@@ -23,9 +23,9 @@ public class SysRoleController {
     public Result<PageResult<SysRoleVO>> page(@RequestParam(defaultValue = "1") long page,
                                               @RequestParam(defaultValue = "10") long size,
                                               @RequestParam(required = false) String keyword) {
-        IPage<SysRoleVO> result = sysRoleService.page(page, size, keyword);
-        return Result.ok(PageResult.of(result.getTotal(), result.getSize(),
-                result.getCurrent(), result.getRecords()));
+        Page<SysRoleVO> result = sysRoleService.page(page, size, keyword);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
     }
 
     @PostMapping

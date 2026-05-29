@@ -6,21 +6,22 @@ spring:
     password:
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
   sql:
     init:
       mode: always
       schema-locations: classpath:sql/schema.sql
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-
-mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 logging:
   level:

@@ -1,16 +1,16 @@
 package com.example.medical.module.system.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.core.util.StrUtil;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.system.dto.SysRoleFormDTO;
 import com.example.medical.module.system.dto.SysRoleVO;
 import com.example.medical.module.system.entity.SysRole;
-import com.example.medical.module.system.mapper.SysRoleMapper;
-import cn.hutool.core.util.StrUtil;
+import com.example.medical.module.system.repository.SysRoleRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,46 +18,42 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SysRoleService {
 
-    private final SysRoleMapper sysRoleMapper;
+    private final SysRoleRepository sysRoleRepository;
 
-    public IPage<SysRoleVO> page(long page, long size, String keyword) {
-        LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<SysRole>()
-                .and(StrUtil.isNotBlank(keyword), w -> w
-                        .like(SysRole::getRoleName, keyword)
-                        .or()
-                        .like(SysRole::getRoleCode, keyword))
-                .orderByDesc(SysRole::getCreateTime);
-
-        Page<SysRole> pageParam = new Page<>(page, size);
-        return sysRoleMapper.selectPage(pageParam, wrapper).convert(SysRoleVO::fromEntity);
+    public Page<SysRoleVO> page(long page, long size, String keyword) {
+        Specification<SysRole> spec = (root, query, cb) -> {
+            if (StrUtil.isBlank(keyword)) return null;
+            String pattern = "%" + keyword + "%";
+            return cb.or(
+                    cb.like(root.get("roleName"), pattern),
+                    cb.like(root.get("roleCode"), pattern));
+        };
+        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        return sysRoleRepository.findAll(spec, pageable).map(SysRoleVO::fromEntity);
     }
 
     @Transactional
     public void create(SysRoleFormDTO dto) {
-        if (sysRoleMapper.selectCount(new LambdaQueryWrapper<SysRole>()
-                .eq(SysRole::getRoleCode, dto.getRoleCode())) > 0) {
+        if (sysRoleRepository.existsByRoleCode(dto.getRoleCode())) {
             throw new BusinessException(ResultCode.CONFLICT, "Role code already exists");
         }
-        sysRoleMapper.insert(dto.toEntity());
+        sysRoleRepository.save(dto.toEntity());
     }
 
     @Transactional
     public void update(Long id, SysRoleFormDTO dto) {
-        SysRole role = sysRoleMapper.selectById(id);
-        if (role == null) {
-            throw new BusinessException(ResultCode.NOT_FOUND, "Role not found");
-        }
+        SysRole role = sysRoleRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Role not found"));
         if (!role.getRoleCode().equals(dto.getRoleCode())
-                && sysRoleMapper.selectCount(new LambdaQueryWrapper<SysRole>()
-                        .eq(SysRole::getRoleCode, dto.getRoleCode())) > 0) {
+                && sysRoleRepository.existsByRoleCode(dto.getRoleCode())) {
             throw new BusinessException(ResultCode.CONFLICT, "Role code already exists");
         }
         dto.applyTo(role);
-        sysRoleMapper.updateById(role);
+        sysRoleRepository.save(role);
     }
 
     @Transactional
     public void delete(Long id) {
-        sysRoleMapper.deleteById(id);
+        sysRoleRepository.deleteById(id);
     }
 }

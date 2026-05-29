@@ -8,10 +8,11 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor(access = AccessLevel.PUBLIC)
 public class LoginResponse {
 
     private String token;
+    private String refreshToken;
     private Long userId;
     private String username;
     private String realName;
@@ -19,8 +20,15 @@ public class LoginResponse {
     private List<String> permissions;
 
     public static LoginResponse fromEntity(SysUser user, List<String> roles,
-                                           List<String> permissions, String token) {
-        return new LoginResponse(token, user.getId(), user.getUsername(),
+                                           List<String> permissions, String token,
+                                           String refreshToken) {
+        return new LoginResponse(token, refreshToken, user.getId(), user.getUsername(),
                 user.getRealName(), roles, permissions);
+    }
+
+    public static LoginResponse forRefresh(String token, String refreshToken,
+                                            Long userId, String username,
+                                            List<String> roles, List<String> permissions) {
+        return new LoginResponse(token, refreshToken, userId, username, null, roles, permissions);
     }
 }

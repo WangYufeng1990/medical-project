@@ -18,13 +18,24 @@ public class AppointmentVO {
     private String doctorName;
     private LocalDateTime appointmentTime;
     private Integer status;
+    private String visitType;
+    private String chiefComplaint;
+    private String department;
+    private Integer duration;
+    private String cptCode;
+    private LocalDateTime checkInTime;
+    private LocalDateTime checkOutTime;
     private String description;
     private String notes;
     private LocalDateTime createTime;
 
     public static AppointmentVO fromEntity(Appointment a, String patientName, String doctorName) {
-        return new AppointmentVO(a.getId(), a.getPatientId(), patientName,
-                a.getDoctorId(), doctorName, a.getAppointmentTime(), a.getStatus(),
+        return new AppointmentVO(
+                a.getId(), a.getPatientId(), patientName,
+                a.getDoctorId(), doctorName, a.getAppointmentTime(),
+                a.getStatus(), a.getVisitType(), a.getChiefComplaint(),
+                a.getDepartment(), a.getDuration(), a.getCptCode(),
+                a.getCheckInTime(), a.getCheckOutTime(),
                 a.getDescription(), a.getNotes(), a.getCreateTime());
     }
 }

@@ -5,7 +5,7 @@ import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.SysUserVO;
 import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.mapper.SysUserMapper;
+import com.example.medical.module.system.repository.SysUserRepository;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,37 +22,45 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserProfileController {
 
-    private final SysUserMapper sysUserMapper;
+    private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
 
     @GetMapping
     public Result<SysUserVO> profile(@AuthenticationPrincipal LoginUser loginUser) {
-        SysUser user = sysUserMapper.selectById(loginUser.getUserId());
-        List<String> roles = sysUserMapper.selectRoleCodesByUserId(loginUser.getUserId());
+        SysUser user = sysUserRepository.findById(loginUser.getUserId())
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
+        List<String> roles = sysUserRepository.findRoleCodesByUserId(loginUser.getUserId());
         return Result.ok(SysUserVO.fromEntity(user, roles));
     }
 
     @PutMapping
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                       @Valid @RequestBody ProfileUpdateRequest request) {
-        SysUser user = sysUserMapper.selectById(loginUser.getUserId());
+        SysUser user = sysUserRepository.findById(loginUser.getUserId())
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
         user.setRealName(request.getRealName());
         user.setPhone(request.getPhone());
         user.setEmail(request.getEmail());
         user.setGender(request.getGender());
-        sysUserMapper.updateById(user);
+        user.setNpi(request.getNpi());
+        user.setLicenseState(request.getLicenseState());
+        user.setTaxonomyCode(request.getTaxonomyCode());
+        user.setCredentials(request.getCredentials());
+        user.setSpecialty(request.getSpecialty());
+        sysUserRepository.save(user);
         return Result.ok();
     }
 
     @PutMapping("/password")
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PasswordChangeRequest request) {
-        SysUser user = sysUserMapper.selectById(loginUser.getUserId());
+        SysUser user = sysUserRepository.findById(loginUser.getUserId())
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Old password is incorrect");
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        sysUserMapper.updateById(user);
+        sysUserRepository.save(user);
         return Result.ok();
     }
 
@@ -62,6 +70,11 @@ public class UserProfileController {
         private String phone;
         private String email;
         private Integer gender;
+        private String npi;
+        private String licenseState;
+        private String taxonomyCode;
+        private String credentials;
+        private String specialty;
     }
 
     @Data

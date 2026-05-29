@@ -20,7 +20,25 @@ public class PrescriptionFormDTO {
     @NotBlank(message = "Diagnosis is required")
     private String diagnosis;
 
+    private String icd10Codes;
+
     private LocalDate prescriptionDate;
+
+    private String prescriptionType;
+
+    private String rxStatus;
+
+    private String prescriberNpi;
+
+    private String deaNumber;
+
+    private String controlledSchedule;
+
+    private String pharmacyName;
+
+    private String pharmacyPhone;
+
+    private String pharmacyNpi;
 
     @NotEmpty(message = "Prescription items are required")
     private List<PrescriptionItemDTO> items;

@@ -18,6 +18,13 @@ public class SysUserFormDTO {
     private String email;
     private Integer gender;
     private Integer status;
+    private String npi;
+    private String stateLicenseNumber;
+    private String licenseState;
+    private String deaNumber;
+    private String taxonomyCode;
+    private String credentials;
+    private String specialty;
 
     public SysUser toEntity() {
         SysUser user = new SysUser();
@@ -28,6 +35,13 @@ public class SysUserFormDTO {
         user.setEmail(email);
         user.setGender(gender);
         user.setStatus(status);
+        user.setNpi(npi);
+        user.setStateLicenseNumber(stateLicenseNumber);
+        user.setLicenseState(licenseState);
+        user.setDeaNumber(deaNumber);
+        user.setTaxonomyCode(taxonomyCode);
+        user.setCredentials(credentials);
+        user.setSpecialty(specialty);
         return user;
     }
 
@@ -37,5 +51,12 @@ public class SysUserFormDTO {
         user.setEmail(email);
         user.setGender(gender);
         user.setStatus(status);
+        user.setNpi(npi);
+        user.setStateLicenseNumber(stateLicenseNumber);
+        user.setLicenseState(licenseState);
+        user.setDeaNumber(deaNumber);
+        user.setTaxonomyCode(taxonomyCode);
+        user.setCredentials(credentials);
+        user.setSpecialty(specialty);
     }
 }

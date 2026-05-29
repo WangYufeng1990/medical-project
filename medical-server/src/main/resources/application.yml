@@ -2,9 +2,14 @@ spring:
   profiles:
     active: h2
 
+  cache:
+    type: redis
+    redis:
+      time-to-live: 30m
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/medical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/medical?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Chicago&useSSL=true&requireSSL=true&verifyServerCertificate=true&sslMode=VERIFY_CA
     username: root
     password: root
 
@@ -13,19 +18,22 @@ spring:
       host: localhost
       port: 6379
 
-mybatis-plus:
-  mapper-locations: classpath:mapper/**/*.xml
-  global-config:
-    db-config:
-      logic-delete-field: isDeleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
-  configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
 
 knife4j:
   enable: true
 
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
 jwt:
-  secret: change-me-to-a-256-bit-secret-key-in-production
-  expiration: 86400000
+  secret: ${JWT_SECRET:change-me-to-a-256-bit-secret-key-in-production}
+  expiration: 7200000
+  refresh-expiration: 604800000

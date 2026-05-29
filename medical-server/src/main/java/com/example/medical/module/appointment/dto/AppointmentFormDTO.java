@@ -18,6 +18,11 @@ public class AppointmentFormDTO {
     @NotNull(message = "Appointment time is required")
     private LocalDateTime appointmentTime;
 
+    private String visitType;
+    private String chiefComplaint;
+    private String department;
+    private Integer duration;
+    private String cptCode;
     private String description;
     private String notes;
     private Integer status;
@@ -27,6 +32,11 @@ public class AppointmentFormDTO {
         a.setPatientId(patientId);
         a.setDoctorId(doctorId);
         a.setAppointmentTime(appointmentTime);
+        a.setVisitType(visitType);
+        a.setChiefComplaint(chiefComplaint);
+        a.setDepartment(department);
+        a.setDuration(duration);
+        a.setCptCode(cptCode);
         a.setDescription(description);
         a.setNotes(notes);
         a.setStatus(status != null ? status : 0);
@@ -37,6 +47,11 @@ public class AppointmentFormDTO {
         a.setPatientId(patientId);
         a.setDoctorId(doctorId);
         a.setAppointmentTime(appointmentTime);
+        a.setVisitType(visitType);
+        a.setChiefComplaint(chiefComplaint);
+        a.setDepartment(department);
+        a.setDuration(duration);
+        a.setCptCode(cptCode);
         a.setDescription(description);
         a.setNotes(notes);
         a.setStatus(status);

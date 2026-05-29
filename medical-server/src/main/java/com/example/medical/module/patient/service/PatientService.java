@@ -1,16 +1,19 @@
 package com.example.medical.module.patient.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.core.util.StrUtil;
+import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.patient.dto.PatientFormDTO;
 import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.mapper.PatientMapper;
-import cn.hutool.core.util.StrUtil;
+import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,45 +21,50 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PatientService {
 
-    private final PatientMapper patientMapper;
+    private final PatientRepository patientRepository;
 
-    public IPage<PatientVO> page(long page, long size, String keyword) {
-        LambdaQueryWrapper<Patient> wrapper = new LambdaQueryWrapper<Patient>()
-                .and(StrUtil.isNotBlank(keyword), w -> w
-                        .like(Patient::getName, keyword)
-                        .or()
-                        .like(Patient::getPhone, keyword))
-                .orderByDesc(Patient::getCreateTime);
-
-        Page<Patient> pageParam = new Page<>(page, size);
-        return patientMapper.selectPage(pageParam, wrapper).convert(PatientVO::fromEntity);
+    public Page<PatientVO> page(long page, long size, String keyword) {
+        Specification<Patient> spec = (root, query, cb) -> {
+            if (StrUtil.isBlank(keyword)) return null;
+            String pattern = "%" + keyword + "%";
+            return cb.or(
+                    cb.like(root.get("name"), pattern),
+                    cb.like(root.get("mrn"), pattern),
+                    cb.like(root.get("phoneMobile"), pattern),
+                    cb.like(root.get("email"), pattern));
+        };
+        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
     }
 
+    @Cacheable(value = "patients", key = "#id")
     public PatientVO getById(Long id) {
-        Patient patient = patientMapper.selectById(id);
-        if (patient == null) {
-            throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
-        }
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
         return PatientVO.fromEntity(patient);
     }
 
     @Transactional
+    @Auditable(module = "patient", action = "CREATE")
+    @CacheEvict(value = "patients", allEntries = true)
     public void create(PatientFormDTO dto) {
-        patientMapper.insert(dto.toEntity());
+        patientRepository.save(dto.toEntity());
     }
 
     @Transactional
+    @Auditable(module = "patient", action = "UPDATE")
+    @CacheEvict(value = "patients", key = "#id")
     public void update(Long id, PatientFormDTO dto) {
-        Patient patient = patientMapper.selectById(id);
-        if (patient == null) {
-            throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
-        }
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
         dto.applyTo(patient);
-        patientMapper.updateById(patient);
+        patientRepository.save(patient);
     }
 
     @Transactional
+    @Auditable(module = "patient", action = "DELETE")
+    @CacheEvict(value = "patients", key = "#id")
     public void delete(Long id) {
-        patientMapper.deleteById(id);
+        patientRepository.deleteById(id);
     }
 }

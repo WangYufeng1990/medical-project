@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/medical_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/medical_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Chicago
 
 server:
   port: 8080

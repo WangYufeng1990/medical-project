@@ -19,14 +19,26 @@ public class PrescriptionVO {
     private Long doctorId;
     private String doctorName;
     private String diagnosis;
+    private String icd10Codes;
     private LocalDate prescriptionDate;
+    private String prescriptionType;
+    private String rxStatus;
+    private String prescriberNpi;
+    private String controlledSchedule;
+    private String pharmacyName;
+    private String pharmacyPhone;
     private List<PrescriptionItemVO> items;
     private LocalDateTime createTime;
 
     public static PrescriptionVO fromEntity(Prescription p, String patientName,
                                             String doctorName, List<PrescriptionItemVO> items) {
-        return new PrescriptionVO(p.getId(), p.getPatientId(), patientName,
+        return new PrescriptionVO(
+                p.getId(), p.getPatientId(), patientName,
                 p.getDoctorId(), doctorName, p.getDiagnosis(),
-                p.getPrescriptionDate(), items, p.getCreateTime());
+                p.getIcd10Codes(), p.getPrescriptionDate(),
+                p.getPrescriptionType(), p.getRxStatus(),
+                p.getPrescriberNpi(), p.getControlledSchedule(),
+                p.getPharmacyName(), p.getPharmacyPhone(),
+                items, p.getCreateTime());
     }
 }
