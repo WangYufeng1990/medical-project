@@ -30,7 +30,7 @@ public class ExportController {
     private final BillRepository billRepository;
 
     @GetMapping("/patients")
-    @Auditable(module = "export", action = "EXPORT_PATIENTS")
+    @Auditable(module = "export", action = "EXPORT_PATIENTS", phiAccess = true)
     public ResponseEntity<String> exportPatients() {
         List<Patient> patients = patientRepository.findAll(
                 Sort.by(Sort.Direction.DESC, "createTime"));
@@ -69,7 +69,7 @@ public class ExportController {
     }
 
     @GetMapping("/bills")
-    @Auditable(module = "export", action = "EXPORT_BILLS")
+    @Auditable(module = "export", action = "EXPORT_BILLS", phiAccess = true)
     public ResponseEntity<String> exportBills() {
         List<Bill> bills = billRepository.findAll(
                 Sort.by(Sort.Direction.DESC, "createTime"));

@@ -42,7 +42,7 @@ public class PatientService {
     }
 
     @Transactional
-    @Auditable(module = "patient", action = "CREATE")
+    @Auditable(module = "patient", action = "CREATE", phiAccess = true)
     public void create(PatientFormDTO dto) {
         patientRepository.save(dto.toEntity());
     }

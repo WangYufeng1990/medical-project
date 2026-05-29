@@ -10,4 +10,11 @@ import java.lang.annotation.Target;
 public @interface Auditable {
     String module();
     String action();
+
+    /**
+     * Whether this method accesses or mutates Protected Health Information.
+     * When {@code true}, method parameter values are masked as [PHI] in the
+     * audit detail field to prevent ePHI from leaking into audit logs.
+     */
+    boolean phiAccess() default false;
 }
