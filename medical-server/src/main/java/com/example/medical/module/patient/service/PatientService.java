@@ -9,8 +9,6 @@ import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,7 +35,7 @@ public class PatientService {
         return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
     }
 
-    @Cacheable(value = "patients", key = "#id")
+    // Not cached — patient data contains PHI; Redis lacks field-level encryption
     public PatientVO getById(Long id) {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
@@ -46,14 +44,12 @@ public class PatientService {
 
     @Transactional
     @Auditable(module = "patient", action = "CREATE")
-    @CacheEvict(value = "patients", allEntries = true)
     public void create(PatientFormDTO dto) {
         patientRepository.save(dto.toEntity());
     }
 
     @Transactional
     @Auditable(module = "patient", action = "UPDATE")
-    @CacheEvict(value = "patients", key = "#id")
     public void update(Long id, PatientFormDTO dto) {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
@@ -63,7 +59,6 @@ public class PatientService {
 
     @Transactional
     @Auditable(module = "patient", action = "DELETE")
-    @CacheEvict(value = "patients", key = "#id")
     public void delete(Long id) {
         patientRepository.deleteById(id);
     }

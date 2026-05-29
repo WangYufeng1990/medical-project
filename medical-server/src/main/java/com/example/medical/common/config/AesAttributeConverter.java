@@ -24,6 +24,9 @@ public class AesAttributeConverter implements AttributeConverter<String, String>
     private static SecretKey resolveKey() {
         String key = System.getenv("AES_KEY");
         if (key == null || key.isBlank()) {
+            key = System.getProperty("aes.key");
+        }
+        if (key == null || key.isBlank()) {
             throw new IllegalStateException(
                     "AES_KEY environment variable is required but not set. " +
                     "Generate with: openssl rand -base64 32");
