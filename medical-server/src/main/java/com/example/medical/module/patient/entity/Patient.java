@@ -25,6 +25,7 @@ public class Patient extends BaseEntity {
     @Column(name = "ssn")
     private String ssn;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "name")
     private String name;
 

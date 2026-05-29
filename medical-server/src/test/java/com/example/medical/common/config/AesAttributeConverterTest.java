@@ -9,7 +9,7 @@ class AesAttributeConverterTest {
 
     @BeforeAll
     static void setUp() {
-        System.setProperty("aes.key", "test-aes-key-for-unit-tests-32bytes!");
+        AesCryptoUtil.initializeForTest("test-aes-key-for-unit-tests-32bytes!");
     }
 
     private final AesAttributeConverter converter = new AesAttributeConverter();
@@ -37,5 +37,12 @@ class AesAttributeConverterTest {
         String enc1 = converter.convertToDatabaseColumn(plaintext);
         String enc2 = converter.convertToDatabaseColumn(plaintext);
         assertNotEquals(enc1, enc2, "GCM should produce different ciphertext due to random IV");
+    }
+
+    @Test
+    void shouldReturnPlaceholderOnDecryptFailure() {
+        String result = AesCryptoUtil.decrypt("not-valid-hex-data");
+        assertEquals("[DECRYPT_FAILED]", result,
+                "Corrupt data should return placeholder, not throw");
     }
 }

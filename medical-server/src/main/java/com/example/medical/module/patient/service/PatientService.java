@@ -25,10 +25,9 @@ public class PatientService {
         Specification<Patient> spec = (root, query, cb) -> {
             if (StrUtil.isBlank(keyword)) return null;
             String pattern = "%" + keyword + "%";
+            // name and phoneMobile are encrypted — LIKE on ciphertext is not meaningful
             return cb.or(
-                    cb.like(root.get("name"), pattern),
                     cb.like(root.get("mrn"), pattern),
-                    cb.like(root.get("phoneMobile"), pattern),
                     cb.like(root.get("email"), pattern));
         };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
