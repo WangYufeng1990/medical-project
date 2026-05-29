@@ -6,18 +6,15 @@ import com.example.medical.module.system.dto.LoginRequest;
 import com.example.medical.module.system.dto.LoginResponse;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
-import com.example.medical.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RBucket;
-import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,16 +22,19 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final SecureRandom RNG = new SecureRandom();
-
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtils jwtUtils;
-    private final RedissonClient redissonClient;
 
-    @Value("${jwt.refresh-expiration:604800000}")
-    private long refreshExpiration;
+    @Value("${okta.client-id}")
+    private String clientId;
 
+    @Value("${okta.client-secret}")
+    private String clientSecret;
+
+    @Value("${okta.issuer-uri}")
+    private String issuerUri;
+
+    @SuppressWarnings("unchecked")
     public LoginResponse login(LoginRequest request) {
         SysUser user = sysUserRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password"));
@@ -45,62 +45,94 @@ public class AuthService {
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }
 
-        List<String> roleCodes = sysUserRepository.findRoleCodesByUserId(user.getId());
+        List<String> roles = sysUserRepository.findRoleCodesByUserId(user.getId());
         List<String> permissions = sysUserRepository.findPermissionsByUserId(user.getId());
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", roleCodes);
-        claims.put("permissions", permissions);
+        Map<String, Object> tokenResponse = callOktaTokenEndpoint(request.getUsername(), request.getPassword());
 
-        String token = jwtUtils.generateToken(user.getId(), user.getUsername(), claims);
-        String refreshToken = generateRefreshToken(user.getId());
+        String accessToken = (String) tokenResponse.get("access_token");
+        String refreshToken = (String) tokenResponse.get("refresh_token");
 
-        return LoginResponse.fromEntity(user, roleCodes, permissions, token, refreshToken);
+        return LoginResponse.fromEntity(user, roles, permissions, accessToken, refreshToken);
     }
 
-    public LoginResponse refresh(String oldRefreshToken) {
-        RBucket<Long> bucket = redissonClient.getBucket("refresh:" + oldRefreshToken);
-        Long userId = bucket.get();
-        if (userId == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Refresh token expired or already used");
-        }
+    public LoginResponse refresh(String refreshToken) {
+        Map<String, Object> tokenResponse = callOktaRefreshEndpoint(refreshToken);
 
-        bucket.delete();
+        String accessToken = (String) tokenResponse.get("access_token");
+        String newRefreshToken = (String) tokenResponse.get("refresh_token");
+        String idToken = (String) tokenResponse.get("id_token");
 
-        SysUser user = sysUserRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "User not found"));
-        if (user.getStatus() != null && user.getStatus() == 0) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
-        }
+        RestTemplate restTemplate = new RestTemplate();
+        String userinfoUrl = issuerUri + "/v1/userinfo";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        ResponseEntity<Map> userInfoResp = restTemplate.exchange(
+                userinfoUrl, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
 
-        List<String> roleCodes = sysUserRepository.findRoleCodesByUserId(userId);
-        List<String> permissions = sysUserRepository.findPermissionsByUserId(userId);
+        Map<String, Object> userInfo = userInfoResp.getBody();
+        String username = userInfo != null ? (String) userInfo.getOrDefault("sub", "unknown") : "unknown";
+        Long userId = userInfo != null ? resolveUserId(userInfo) : 0L;
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", roleCodes);
-        claims.put("permissions", permissions);
-
-        String token = jwtUtils.generateToken(userId, user.getUsername(), claims);
-        String newRefreshToken = generateRefreshToken(userId);
-
-        return LoginResponse.forRefresh(token, newRefreshToken, userId, user.getUsername(),
-                roleCodes, permissions);
+        return LoginResponse.forRefresh(accessToken, newRefreshToken != null ? newRefreshToken : refreshToken,
+                userId, username, List.of(), List.of());
     }
 
-    public void logout(String refreshToken) {
-        if (refreshToken != null) {
-            redissonClient.getBucket("refresh:" + refreshToken).delete();
+    private Map<String, Object> callOktaTokenEndpoint(String username, String password) {
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(clientId, clientSecret);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "password");
+        body.add("username", username);
+        body.add("password", password);
+        body.add("scope", "openid profile email groups");
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                issuerUri + "/v1/token",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class);
+
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Okta authentication failed");
         }
+        return response.getBody();
     }
 
-    private String generateRefreshToken(Long userId) {
-        byte[] bytes = new byte[32];
-        RNG.nextBytes(bytes);
-        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    private Map<String, Object> callOktaRefreshEndpoint(String refreshToken) {
+        RestTemplate restTemplate = new RestTemplate();
 
-        RBucket<Long> bucket = redissonClient.getBucket("refresh:" + token);
-        bucket.set(userId, Duration.ofMillis(refreshExpiration));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(clientId, clientSecret);
 
-        return token;
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "refresh_token");
+        body.add("refresh_token", refreshToken);
+        body.add("scope", "openid profile email groups");
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                issuerUri + "/v1/token",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class);
+
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Token refresh failed");
+        }
+        return response.getBody();
+    }
+
+    private Long resolveUserId(Map<String, Object> userInfo) {
+        Object uid = userInfo.get("uid");
+        if (uid instanceof Number n) return n.longValue();
+        if (uid instanceof String s) {
+            try { return Long.valueOf(s); } catch (NumberFormatException ignored) {}
+        }
+        return 0L;
     }
 }

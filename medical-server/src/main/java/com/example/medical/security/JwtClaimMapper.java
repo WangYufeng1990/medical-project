@@ -16,23 +16,37 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
     @Override
     @SuppressWarnings("unchecked")
     public UsernamePasswordAuthenticationToken convert(Jwt jwt) {
-        String username = jwt.getSubject();
-        Long userId = Long.valueOf(jwt.getId());
+        String username = jwt.getClaimAsString("sub");
 
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        List<String> permissions = jwt.getClaimAsStringList("permissions");
-        if (roles == null) roles = List.of();
-        if (permissions == null) permissions = List.of();
+        Long userId = extractUserId(jwt);
+
+        List<String> groups = jwt.getClaimAsStringList("groups");
+        List<String> scopes = jwt.getClaimAsStringList("scp");
+        if (groups == null) groups = List.of();
+        if (scopes == null) scopes = List.of();
 
         List<GrantedAuthority> authorities = new ArrayList<>();
-        for (String role : roles) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+        for (String group : groups) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + group.toUpperCase()));
         }
-        for (String perm : permissions) {
-            authorities.add(new SimpleGrantedAuthority(perm));
+        for (String scope : scopes) {
+            authorities.add(new SimpleGrantedAuthority("SCOPE_" + scope));
         }
 
-        LoginUser loginUser = new LoginUser(userId, username, "", permissions);
+        LoginUser loginUser = new LoginUser(userId, username, "", scopes);
         return new UsernamePasswordAuthenticationToken(loginUser, null, authorities);
+    }
+
+    private Long extractUserId(Jwt jwt) {
+        String uid = jwt.getClaimAsString("uid");
+        if (uid != null) {
+            try {
+                return Long.valueOf(uid);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        String sub = jwt.getSubject();
+        String fallback = sub != null ? sub : "0";
+        return (long) fallback.hashCode();
     }
 }

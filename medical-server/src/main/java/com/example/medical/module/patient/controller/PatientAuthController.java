@@ -7,23 +7,19 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
-import com.example.medical.security.JwtUtils;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RBucket;
-import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
-import java.security.SecureRandom;
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -31,32 +27,32 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PatientAuthController {
 
-    private static final SecureRandom RNG = new SecureRandom();
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final int LOCK_DURATION_MINUTES = 15;
 
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtils jwtUtils;
-    private final RedissonClient redissonClient;
 
-    @Value("${jwt.refresh-expiration:604800000}")
-    private long refreshExpiration;
+    @Value("${okta.client-id:#{null}}")
+    private String clientId;
+
+    @Value("${okta.client-secret:#{null}}")
+    private String clientSecret;
+
+    @Value("${okta.issuer-uri:#{null}}")
+    private String issuerUri;
 
     @PostMapping("/login")
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
         PatientAuth auth = patientAuthRepository.findByUsername(request.getUsername())
-                .orElse(null);
-        if (auth == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
-        }
+                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password"));
         if (auth.getStatus() != null && auth.getStatus() == 0) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }
         if (isLocked(auth)) {
             throw new BusinessException(ResultCode.FORBIDDEN,
-                    "Account is temporarily locked due to too many failed attempts. Try again later.");
+                    "Account is temporarily locked. Try again later.");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
@@ -69,43 +65,71 @@ public class PatientAuthController {
         Patient patient = patientRepository.findById(auth.getPatientId())
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", List.of("PATIENT"));
-        claims.put("patientId", patient.getId());
+        TokenPair tokens = exchangeForTokens(request.getUsername(), request.getPassword());
 
-        String token = jwtUtils.generateToken(patient.getId(), auth.getUsername(), claims);
-        String refreshToken = generateRefreshToken(patient.getId());
-
-        return Result.ok(new PatientLoginResponse(token, refreshToken,
-                patient.getId(), patient.getName(), auth.getUsername()));
+        return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
+                patient.getId(), patient.getName(), request.getUsername()));
     }
 
     @PostMapping("/refresh")
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody PatientRefreshRequest request) {
-        RBucket<Long> bucket = redissonClient.getBucket("refresh:" + request.getRefreshToken());
-        Long patientId = bucket.get();
-        if (patientId == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Refresh token expired or already used");
+        TokenPair tokens = callOktaRefreshEndpoint(request.getRefreshToken());
+
+        return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
+                null, null, null));
+    }
+
+    private TokenPair exchangeForTokens(String username, String password) {
+        if (clientId == null || issuerUri == null) {
+            return new TokenPair("dev-token-" + username, null);
         }
-        bucket.delete();
+        return callOktaPasswordGrant(username, password);
+    }
 
-        Patient patient = patientRepository.findById(patientId)
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient not found"));
-        PatientAuth auth = patientAuthRepository.findByPatientId(patientId)
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient account not found"));
-        if (auth.getStatus() != null && auth.getStatus() == 0) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
+    private TokenPair callOktaPasswordGrant(String username, String password) {
+        RestTemplate rt = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(clientId, clientSecret);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "password");
+        body.add("username", username);
+        body.add("password", password);
+        body.add("scope", "openid profile");
+
+        ResponseEntity<Map> response = rt.exchange(
+                issuerUri + "/v1/token", HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Okta authentication failed");
         }
+        Map<String, Object> res = response.getBody();
+        return new TokenPair(
+                (String) res.get("access_token"),
+                (String) res.get("refresh_token"));
+    }
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", List.of("PATIENT"));
-        claims.put("patientId", patient.getId());
+    private TokenPair callOktaRefreshEndpoint(String refreshToken) {
+        RestTemplate rt = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBasicAuth(clientId, clientSecret);
 
-        String token = jwtUtils.generateToken(patient.getId(), auth.getUsername(), claims);
-        String newRefreshToken = generateRefreshToken(patient.getId());
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "refresh_token");
+        body.add("refresh_token", refreshToken);
 
-        return Result.ok(new PatientLoginResponse(token, newRefreshToken,
-                patient.getId(), patient.getName(), auth.getUsername()));
+        ResponseEntity<Map> response = rt.exchange(
+                issuerUri + "/v1/token", HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Token refresh failed");
+        }
+        Map<String, Object> res = response.getBody();
+        return new TokenPair(
+                (String) res.get("access_token"),
+                (String) res.get("refresh_token"));
     }
 
     private void recordFailedAttempt(PatientAuth auth) {
@@ -128,14 +152,7 @@ public class PatientAuthController {
         return auth.getLockedUntil() != null && auth.getLockedUntil().isAfter(LocalDateTime.now());
     }
 
-    private String generateRefreshToken(Long patientId) {
-        byte[] bytes = new byte[32];
-        RNG.nextBytes(bytes);
-        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        RBucket<Long> bucket = redissonClient.getBucket("refresh:" + token);
-        bucket.set(patientId, Duration.ofMillis(refreshExpiration));
-        return token;
-    }
+    private record TokenPair(String accessToken, String refreshToken) {}
 
     @Data
     static class PatientLoginRequest {

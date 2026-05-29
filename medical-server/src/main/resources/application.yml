@@ -26,14 +26,20 @@ spring:
       hibernate:
         format_sql: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OKTA_ISSUER_URI:https://dev-00000000.okta.com/oauth2/default}
+
+okta:
+  client-id: ${OKTA_CLIENT_ID:your-client-id}
+  client-secret: ${OKTA_CLIENT_SECRET:your-client-secret}
+  issuer-uri: ${OKTA_ISSUER_URI:https://dev-00000000.okta.com/oauth2/default}
+
 knife4j:
   enable: true
 
 app:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
-
-jwt:
-  secret: ${JWT_SECRET:change-me-to-a-256-bit-secret-key-in-production}
-  expiration: 7200000
-  refresh-expiration: 604800000

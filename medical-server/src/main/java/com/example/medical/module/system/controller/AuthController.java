@@ -1,7 +1,5 @@
 package com.example.medical.module.system.controller;
 
-import com.example.medical.common.enums.ResultCode;
-import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.LoginRequest;
 import com.example.medical.module.system.dto.LoginResponse;
@@ -30,10 +28,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Result<Void> logout(@RequestBody(required = false) RefreshRequest request) {
-        if (request != null && request.getRefreshToken() != null) {
-            authService.logout(request.getRefreshToken());
-        }
+    public Result<Void> logout() {
         return Result.ok();
     }
 
