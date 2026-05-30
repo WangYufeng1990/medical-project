@@ -12,8 +12,8 @@ export function createBill(data) {
   return request.post('/bills', data)
 }
 
-export function payBill(id) {
-  return request.put(`/bills/${id}/pay`)
+export function payBill(id, data) {
+  return request.put(`/bills/${id}/pay`, data)
 }
 
 export function deleteBill(id) {

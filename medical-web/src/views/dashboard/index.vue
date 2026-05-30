@@ -30,7 +30,7 @@ onMounted(async () => {
     const [patients, appointments, bills] = await Promise.all([
       getPatientPage({ page: 1, size: 1 }),
       getAppointmentPage({ page: 1, size: 1, status: 0 }),
-      getBillPage({ page: 1, size: 1, status: 0 })
+      getBillPage({ page: 1, size: 1, claimStatus: 'PENDING' })
     ])
     cards.value[0].value = patients.total
     cards.value[1].value = appointments.total
