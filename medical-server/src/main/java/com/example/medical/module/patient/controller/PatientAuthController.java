@@ -79,7 +79,7 @@ public class PatientAuthController {
 
     @PostMapping("/refresh")
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody PatientRefreshRequest request) {
-        if (clientId == null || issuerUri == null) {
+        if (isBlank(clientId) || isBlank(issuerUri)) {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Token refresh not available in dev mode — log in again");
         }
         TokenPair tokens = callOktaRefreshEndpoint(request.getRefreshToken());
@@ -88,7 +88,7 @@ public class PatientAuthController {
     }
 
     private TokenPair exchangeForTokens(String username, String password, Long patientId) {
-        if (clientId == null || issuerUri == null) {
+        if (isBlank(clientId) || isBlank(issuerUri)) {
             return generateDevToken(patientId, username);
         }
         return callOktaPasswordGrant(username, password);
@@ -173,6 +173,10 @@ public class PatientAuthController {
 
     private boolean isLocked(PatientAuth auth) {
         return auth.getLockedUntil() != null && auth.getLockedUntil().isAfter(LocalDateTime.now());
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     private record TokenPair(String accessToken, String refreshToken) {}

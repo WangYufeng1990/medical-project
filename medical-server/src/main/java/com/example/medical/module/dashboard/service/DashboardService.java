@@ -33,7 +33,7 @@ public class DashboardService {
                 "SELECT COUNT(*) FROM appointment WHERE status = 0 AND is_deleted = 0", Long.class);
 
         BigDecimal monthlyRevenue = jdbcTemplate.queryForObject(
-                "SELECT COALESCE(SUM(paid_amount), 0) FROM bill WHERE status = 1 AND pay_time >= ? AND is_deleted = 0",
+                "SELECT COALESCE(SUM(patient_paid_amount), 0) FROM bill WHERE claim_status = 'PAID' AND pay_time >= ? AND is_deleted = 0",
                 BigDecimal.class, LocalDate.now().withDayOfMonth(1).toString());
 
         long monthlyPrescriptions = jdbcTemplate.queryForObject(
@@ -52,7 +52,7 @@ public class DashboardService {
     private List<Map<String, Object>> computeRevenueTrend() {
         LocalDate start = LocalDate.now().minusMonths(5).withDayOfMonth(1);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT pay_time, paid_amount FROM bill WHERE status = 1 AND pay_time >= ? AND is_deleted = 0 ORDER BY pay_time",
+                "SELECT pay_time, patient_paid_amount FROM bill WHERE claim_status = 'PAID' AND pay_time >= ? AND is_deleted = 0 ORDER BY pay_time",
                 start.toString());
 
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM");
@@ -63,7 +63,7 @@ public class DashboardService {
 
         for (Map<String, Object> row : rows) {
             Object payTimeObj = row.get("pay_time");
-            Object amountObj = row.get("paid_amount");
+            Object amountObj = row.get("patient_paid_amount");
             if (payTimeObj != null && amountObj != null) {
                 String month = payTimeObj.toString().substring(0, 7);
                 BigDecimal amount = amountObj instanceof BigDecimal ? (BigDecimal) amountObj : new BigDecimal(amountObj.toString());

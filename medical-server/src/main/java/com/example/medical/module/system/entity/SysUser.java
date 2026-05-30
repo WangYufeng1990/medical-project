@@ -12,7 +12,7 @@ import org.hibernate.annotations.SQLRestriction;
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "sys_user")
-@SQLDelete(sql = "UPDATE sys_user SET is_deleted = 1 WHERE id = ?")
+@SQLDelete(sql = "UPDATE sys_user SET is_deleted = 1 WHERE id = ? AND version = ?")
 @SQLRestriction("is_deleted = 0")
 public class SysUser extends BaseEntity {
 

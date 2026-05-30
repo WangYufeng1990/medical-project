@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.time.Duration;
 
 @Configuration
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = true)
 public class RateLimiterConfig {
 
     @Bean

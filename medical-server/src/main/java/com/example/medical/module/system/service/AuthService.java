@@ -61,7 +61,7 @@ public class AuthService {
     }
 
     public LoginResponse refresh(String refreshToken) {
-        if (clientId == null || issuerUri == null) {
+        if (isBlank(clientId) || isBlank(issuerUri)) {
             throw new BusinessException(ResultCode.UNAUTHORIZED,
                     "Token refresh not available in dev mode — log in again");
         }
@@ -88,7 +88,7 @@ public class AuthService {
 
     private TokenPair exchangeForTokens(Long userId, String username,
                                          String password, List<String> roles) {
-        if (clientId == null || issuerUri == null) {
+        if (isBlank(clientId) || isBlank(issuerUri)) {
             return generateDevToken(userId, username, roles);
         }
         return callOktaTokenEndpoint(username, password);
@@ -171,6 +171,10 @@ public class AuthService {
             }
         }
         return 0L;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     private record TokenPair(String accessToken, String refreshToken) {}

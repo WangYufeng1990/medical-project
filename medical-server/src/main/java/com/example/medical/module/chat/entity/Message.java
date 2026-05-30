@@ -12,7 +12,7 @@ import org.hibernate.annotations.SQLDelete;
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "message")
-@SQLDelete(sql = "UPDATE message SET is_deleted = 1 WHERE id = ?")
+@SQLDelete(sql = "UPDATE message SET is_deleted = 1 WHERE id = ? AND version = ?")
 @SQLRestriction("is_deleted = 0")
 public class Message extends BaseEntity {
 

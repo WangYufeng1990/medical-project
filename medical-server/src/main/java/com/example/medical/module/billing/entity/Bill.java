@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "bill")
-@SQLDelete(sql = "UPDATE bill SET is_deleted = 1 WHERE id = ?")
+@SQLDelete(sql = "UPDATE bill SET is_deleted = 1 WHERE id = ? AND version = ?")
 @SQLRestriction("is_deleted = 0")
 public class Bill extends BaseEntity {
 

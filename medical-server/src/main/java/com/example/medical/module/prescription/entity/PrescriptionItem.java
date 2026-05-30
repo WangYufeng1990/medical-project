@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "prescription_item")
-@SQLDelete(sql = "UPDATE prescription_item SET is_deleted = 1 WHERE id = ?")
+@SQLDelete(sql = "UPDATE prescription_item SET is_deleted = 1 WHERE id = ? AND version = ?")
 @SQLRestriction("is_deleted = 0")
 public class PrescriptionItem extends BaseEntity {
 

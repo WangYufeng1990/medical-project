@@ -12,10 +12,10 @@ USE medical_dev;
 
 CREATE TABLE sys_user (
     id BIGINT NOT NULL,
-    username VARCHAR(50) NOT NULL,
+    username VARCHAR(200) NOT NULL,
     password VARCHAR(255) NOT NULL,
     real_name VARCHAR(50) DEFAULT NULL,
-    phone VARCHAR(20) DEFAULT NULL,
+    phone VARCHAR(200) DEFAULT NULL,
     email VARCHAR(100) DEFAULT NULL,
     gender TINYINT DEFAULT 0, -- 0: unknown, 1: male, 2: female
     status TINYINT DEFAULT 1,  -- 0: disabled, 1: enabled
@@ -38,7 +38,7 @@ CREATE TABLE sys_user (
 
 CREATE TABLE sys_role (
     id BIGINT NOT NULL,
-    role_name VARCHAR(50) NOT NULL,
+    role_name VARCHAR(200) NOT NULL,
     role_code VARCHAR(50) NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
     status TINYINT DEFAULT 1,
@@ -53,7 +53,7 @@ CREATE TABLE sys_role (
 CREATE TABLE sys_menu (
     id BIGINT NOT NULL,
     parent_id BIGINT NOT NULL DEFAULT 0,
-    menu_name VARCHAR(50) NOT NULL,
+    menu_name VARCHAR(200) NOT NULL,
     path VARCHAR(200) DEFAULT NULL,
     component VARCHAR(200) DEFAULT NULL,
     icon VARCHAR(50) DEFAULT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE patient (
     id BIGINT NOT NULL,
     mrn VARCHAR(50) DEFAULT NULL,
     ssn VARCHAR(200) DEFAULT NULL,      -- AES encrypted
-    name VARCHAR(50) NOT NULL,
+    name VARCHAR(200) NOT NULL,
     date_of_birth DATE DEFAULT NULL,
     sex_at_birth CHAR(1) DEFAULT NULL,
     gender_identity VARCHAR(50) DEFAULT NULL,
@@ -108,7 +108,7 @@ CREATE TABLE patient (
     state CHAR(2) DEFAULT NULL,
     zip_code VARCHAR(10) DEFAULT NULL,
     emergency_contact_name VARCHAR(100) DEFAULT NULL,
-    emergency_contact_phone VARCHAR(20) DEFAULT NULL,
+    emergency_contact_phone VARCHAR(200) DEFAULT NULL,
     emergency_contact_relation VARCHAR(50) DEFAULT NULL,
     insurance_payer VARCHAR(100) DEFAULT NULL,
     insurance_member_id VARCHAR(200) DEFAULT NULL, -- AES encrypted
@@ -143,8 +143,8 @@ CREATE TABLE appointment (
     is_deleted TINYINT NOT NULL DEFAULT 0,
     version INT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    INDEX idx_patient_id (patient_id),
-    INDEX idx_doctor_id (doctor_id),
+    INDEX idx_appointment_patient_id (patient_id),
+    INDEX idx_appointment_doctor_id (doctor_id),
     INDEX idx_appointment_time (appointment_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -161,14 +161,14 @@ CREATE TABLE prescription (
     dea_number VARCHAR(200) DEFAULT NULL,   -- AES encrypted
     controlled_schedule VARCHAR(5) DEFAULT NULL,
     pharmacy_name VARCHAR(100) DEFAULT NULL,
-    pharmacy_phone VARCHAR(20) DEFAULT NULL,
+    pharmacy_phone VARCHAR(200) DEFAULT NULL,
     pharmacy_npi VARCHAR(10) DEFAULT NULL,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     is_deleted TINYINT NOT NULL DEFAULT 0,
     version INT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    INDEX idx_patient_id (patient_id)
+    INDEX idx_prescription_patient_id (patient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE prescription_item (
@@ -228,13 +228,13 @@ CREATE TABLE bill (
     is_deleted TINYINT NOT NULL DEFAULT 0,
     version INT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    INDEX idx_patient_id (patient_id)
+    INDEX idx_bill_patient_id (patient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE patient_auth (
     id BIGINT NOT NULL,
     patient_id BIGINT NOT NULL,
-    username VARCHAR(50) NOT NULL,
+    username VARCHAR(200) NOT NULL,
     password VARCHAR(255) NOT NULL,
     status TINYINT DEFAULT 1,
     last_login_time DATETIME DEFAULT NULL,

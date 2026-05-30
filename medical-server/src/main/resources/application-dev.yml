@@ -1,6 +1,15 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/medical_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Chicago
+    url: jdbc:mysql://127.0.0.1:3306/medical_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Los_Angeles&useSSL=false&allowPublicKeyRetrieval=true
+    username: medical
+    password: medical123
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  cache:
+    type: none
 
 server:
   port: 8080
@@ -8,3 +17,12 @@ server:
 logging:
   level:
     com.example.medical: debug
+
+okta:
+  client-id:
+  client-secret:
+  issuer-uri:
+
+app:
+  rate-limit:
+    enabled: false
