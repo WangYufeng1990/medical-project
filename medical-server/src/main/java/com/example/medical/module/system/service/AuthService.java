@@ -19,12 +19,16 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final int LOCK_DURATION_MINUTES = 15;
 
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,12 +47,20 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         SysUser user = sysUserRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password"));
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
-        }
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }
+        if (isLocked(user)) {
+            throw new BusinessException(ResultCode.FORBIDDEN,
+                    "Account is temporarily locked. Try again later.");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            recordFailedAttempt(user);
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+        }
+
+        resetFailedAttempts(user);
 
         List<String> roles = sysUserRepository.findRoleCodesByUserId(user.getId());
         List<String> permissions = sysUserRepository.findPermissionsByUserId(user.getId());
@@ -171,6 +183,25 @@ public class AuthService {
             }
         }
         return 0L;
+    }
+
+    private void recordFailedAttempt(SysUser user) {
+        int attempts = user.getFailedAttempts() != null ? user.getFailedAttempts() + 1 : 1;
+        user.setFailedAttempts(attempts);
+        if (attempts >= MAX_FAILED_ATTEMPTS) {
+            user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
+        }
+        sysUserRepository.save(user);
+    }
+
+    private void resetFailedAttempts(SysUser user) {
+        user.setFailedAttempts(0);
+        user.setLockedUntil(null);
+        sysUserRepository.save(user);
+    }
+
+    private boolean isLocked(SysUser user) {
+        return user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
     }
 
     private static boolean isBlank(String s) {

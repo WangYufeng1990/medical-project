@@ -44,21 +44,25 @@ public class DataInitializer implements CommandLineRunner {
     private void seedUsers() {
         jdbcTemplate.update(
                 "INSERT INTO sys_user (id, username, password, real_name, phone, email, gender, status, npi, " +
-                "state_license_number, license_state, dea_number, taxonomy_code, credentials, specialty, create_time, update_time) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "state_license_number, license_state, dea_number, taxonomy_code, credentials, specialty, " +
+                "failed_attempts, locked_until, create_time, update_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 1L, "admin", passwordEncoder.encode("admin123"), "Administrator",
                 AesCryptoUtil.encrypt("312-555-0001"), "admin@medical.com", 1, 1, null, null, null, null, null, null, null,
+                0, null,
                 LocalDateTime.now(), LocalDateTime.now()
         );
 
         jdbcTemplate.update(
                 "INSERT INTO sys_user (id, username, password, real_name, phone, email, gender, status, npi, " +
-                "state_license_number, license_state, dea_number, taxonomy_code, credentials, specialty, create_time, update_time) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "state_license_number, license_state, dea_number, taxonomy_code, credentials, specialty, " +
+                "failed_attempts, locked_until, create_time, update_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 2L, "doctor1", passwordEncoder.encode("doctor123"), "Dr. Sarah Mitchell",
                 AesCryptoUtil.encrypt("312-555-0002"), "sarah.mitchell@medical.com", 0, 1,
                 "1234567890", AesCryptoUtil.encrypt("036.140000"), "IL", AesCryptoUtil.encrypt("SM1234567"),
                 "207Q00000X", "MD", "Family Medicine",
+                0, null,
                 LocalDateTime.now(), LocalDateTime.now()
         );
     }

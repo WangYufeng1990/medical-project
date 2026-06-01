@@ -8,6 +8,8 @@ import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
+import java.time.LocalDateTime;
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -63,4 +65,10 @@ public class SysUser extends BaseEntity {
 
     @Column(name = "specialty", length = 100)
     private String specialty;
+
+    @Column(name = "failed_attempts")
+    private Integer failedAttempts;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
 }
