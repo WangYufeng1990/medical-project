@@ -16,6 +16,7 @@ import com.example.medical.module.prescription.repository.PrescriptionRepository
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PrescriptionService {
@@ -32,6 +34,7 @@ public class PrescriptionService {
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
+    private final CdsService cdsService;
 
     public Page<PrescriptionVO> page(long page, long size) {
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
@@ -71,6 +74,15 @@ public class PrescriptionService {
                 item.setPrescriptionId(p.getId());
                 prescriptionItemRepository.save(item);
             });
+        }
+
+        List<PrescriptionItem> items = prescriptionItemRepository.findByPrescriptionId(p.getId());
+        List<com.example.medical.module.prescription.dto.CdsWarning> warnings
+                = new java.util.ArrayList<>();
+        warnings.addAll(cdsService.checkDrugInteractions(items));
+        warnings.addAll(cdsService.checkAllergyContraindications(p.getPatientId(), items));
+        if (!warnings.isEmpty()) {
+            log.warn("CDS warnings for prescription {}: {} warning(s)", p.getId(), warnings.size());
         }
     }
 

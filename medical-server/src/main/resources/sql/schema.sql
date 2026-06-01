@@ -319,3 +319,37 @@ CREATE TABLE IF NOT EXISTS key_audit (
     PRIMARY KEY (id),
     INDEX idx_key_audit_time (event_time)
 );
+
+CREATE TABLE IF NOT EXISTS drug_interaction (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    drug_a_rxnorm VARCHAR(20) NOT NULL,
+    drug_b_rxnorm VARCHAR(20) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    mechanism VARCHAR(200) DEFAULT NULL,
+    recommendation VARCHAR(500) DEFAULT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drug_pair (drug_a_rxnorm, drug_b_rxnorm)
+);
+
+CREATE TABLE IF NOT EXISTS drug_allergy_class (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    drug_rxnorm_code VARCHAR(20) NOT NULL,
+    allergy_class VARCHAR(100) NOT NULL,
+    cross_reactive_codes VARCHAR(500) DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_drug_allergy_code (drug_rxnorm_code)
+);
+
+CREATE TABLE IF NOT EXISTS cds_override (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    prescription_id BIGINT NOT NULL,
+    warning_type VARCHAR(30) NOT NULL,
+    severity VARCHAR(20) DEFAULT NULL,
+    drugs_involved VARCHAR(200) DEFAULT NULL,
+    override_reason VARCHAR(500) NOT NULL,
+    overridden_by BIGINT NOT NULL,
+    overridden_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_override_prescription (prescription_id)
+);

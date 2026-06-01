@@ -37,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
         seedPrescriptions();
         seedBills();
         seedMessages();
+        seedCds();
 
         log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
     }
@@ -314,5 +315,55 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Dr. Mitchell, my allergy symptoms have gotten much better after using the inhaler you prescribed."), 1, now, now);
         jdbcTemplate.update(sql, 607L, 2L, 101L,
                 AesCryptoUtil.encrypt("That's good to hear, Maria. Keep using it as prescribed. Let me know if symptoms return."), 0, now, now);
+    }
+
+    private void seedCds() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM drug_interaction", Integer.class);
+        if (count != null && count > 0) return;
+
+        String diSql = "INSERT INTO drug_interaction (drug_a_rxnorm, drug_b_rxnorm, severity, " +
+                "description, mechanism, recommendation) VALUES (?,?,?,?,?,?)";
+
+        jdbcTemplate.update(diSql, "6809", "5640", "moderate",
+                "NSAIDs may reduce antihyperglycemic effect and increase risk of lactic acidosis with Metformin",
+                "NSAIDs inhibit organic cation transporters, reducing renal clearance of Metformin",
+                "Monitor blood glucose closely. Consider acetaminophen as alternative analgesic.");
+
+        jdbcTemplate.update(diSql, "308191", "5640", "minor",
+                "No clinically significant interaction expected between Amoxicillin and Ibuprofen",
+                null, "No intervention required.");
+
+        jdbcTemplate.update(diSql, "6809", "308191", "minor",
+                "No clinically significant interaction expected between Metformin and Amoxicillin",
+                null, "No intervention required.");
+
+        jdbcTemplate.update(diSql, "435", "6809", "minor",
+                "Albuterol may cause mild hyperglycemia; monitor blood glucose in diabetic patients",
+                "Beta-2 agonists stimulate hepatic glycogenolysis",
+                "Monitor blood glucose. Interaction is generally not clinically significant.");
+
+        jdbcTemplate.update(diSql, "6809", "23642", "minor",
+                "No clinically significant interaction expected between Metformin and Cetirizine",
+                null, "No intervention required.");
+
+        jdbcTemplate.update(diSql, "5640", "435", "minor",
+                "NSAIDs may slightly reduce bronchodilator response to beta-agonists",
+                "Prostaglandin inhibition may reduce beta-receptor sensitivity",
+                "Monitor for reduced bronchodilator efficacy. Interaction is generally mild.");
+
+        jdbcTemplate.update(diSql, "6809", "64479", "minor",
+                "No clinically significant interaction expected between Metformin and Montelukast",
+                null, "No intervention required.");
+
+        String acSql = "INSERT INTO drug_allergy_class (drug_rxnorm_code, allergy_class, " +
+                "cross_reactive_codes) VALUES (?,?,?)";
+
+        jdbcTemplate.update(acSql, "308191", "Penicillin", "308191,308189,308192");
+        jdbcTemplate.update(acSql, "5640", "NSAIDs", "5640,5636,5641");
+        jdbcTemplate.update(acSql, "23642", "Antihistamines", null);
+        jdbcTemplate.update(acSql, "435", "Beta-Agonists", null);
+        jdbcTemplate.update(acSql, "6809", "Biguanides", null);
+        jdbcTemplate.update(acSql, "64479", "Leukotriene Modifiers", null);
     }
 }
