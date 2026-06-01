@@ -22,6 +22,9 @@ public class FhirConfig {
     @RestController
     public static class CapabilityStatementController {
 
+        private static final String SMART_ON_FHIR = "http://hl7.org/fhir/smart-app-launch";
+        private static final String OAUTH_URIS_EXT = "http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris";
+
         private final FhirContext fhirContext;
 
         public CapabilityStatementController(FhirContext fhirContext) {
@@ -43,6 +46,21 @@ public class FhirConfig {
             CapabilityStatement.CapabilityStatementRestComponent rest =
                     cs.addRest();
             rest.setMode(CapabilityStatement.RestfulCapabilityMode.SERVER);
+
+            CapabilityStatement.CapabilityStatementRestSecurityComponent security =
+                    rest.getSecurity();
+            security.addService().addCoding()
+                    .setSystem("http://terminology.hl7.org/CodeSystem/restful-security-service")
+                    .setCode("SMART-on-FHIR")
+                    .setDisplay("SMART on FHIR");
+            security.addExtension()
+                    .setUrl(OAUTH_URIS_EXT)
+                    .addExtension().setUrl("token").setValue(new org.hl7.fhir.r4.model.UriType(
+                            "/api/v1/auth/login"));
+            security.addExtension()
+                    .setUrl(OAUTH_URIS_EXT)
+                    .addExtension().setUrl("authorize").setValue(new org.hl7.fhir.r4.model.UriType(
+                            "/api/v1/auth/login"));
 
             CapabilityStatement.CapabilityStatementRestResourceComponent patientResource =
                     rest.addResource();

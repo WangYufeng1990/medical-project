@@ -106,7 +106,7 @@ public class PatientAuthController {
                 .expiresAt(now.plusSeconds(accessTokenExpirySeconds))
                 .claim("uid", patientId.toString())
                 .claim("roles", List.of("PATIENT"))
-                .claim("scp", List.of("openid", "profile"))
+                .claim("scp", List.of("openid", "profile", "patient/Patient.read", "patient/Observation.read"))
                 .build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
         return new TokenPair(token, null);

@@ -118,7 +118,7 @@ public class AuthService {
                 .expiresAt(now.plusSeconds(accessTokenExpirySeconds))
                 .claim("uid", userId.toString())
                 .claim("roles", roles)
-                .claim("scp", List.of("openid", "profile", "email"))
+                .claim("scp", buildFhirScopes(roles))
                 .build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
         return new TokenPair(token, null);
@@ -205,6 +205,23 @@ public class AuthService {
 
     private boolean isLocked(SysUser user) {
         return user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
+    }
+
+    private static List<String> buildFhirScopes(List<String> roles) {
+        List<String> scopes = new java.util.ArrayList<>(List.of("openid", "profile", "email"));
+        if (roles != null) {
+            if (roles.contains("ADMIN") || roles.contains("DOCTOR")) {
+                scopes.add("patient/*.read");
+                scopes.add("patient/*.write");
+                scopes.add("user/*.read");
+                scopes.add("system/*.read");
+            }
+            if (roles.contains("PATIENT")) {
+                scopes.add("patient/Patient.read");
+                scopes.add("patient/Observation.read");
+            }
+        }
+        return scopes;
     }
 
     private static boolean isBlank(String s) {

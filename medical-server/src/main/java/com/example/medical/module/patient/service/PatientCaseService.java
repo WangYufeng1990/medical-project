@@ -21,6 +21,7 @@ import org.hl7.fhir.r4.model.ContactPoint;
 import org.hl7.fhir.r4.model.Duration;
 import org.hl7.fhir.r4.model.Encounter;
 import org.hl7.fhir.r4.model.Enumerations;
+import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.MedicationRequest;
 import org.hl7.fhir.r4.model.StringType;
@@ -43,6 +44,7 @@ public class PatientCaseService {
     private static final String RACE_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race";
     private static final String ETHNICITY_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity";
     private static final String LANGUAGE_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex";
+    private static final String OMB_CATEGORY_SYSTEM = "urn:oid:2.16.840.1.113883.6.238";
 
     private final PatientRepository patientRepository;
     private final AppointmentRepository appointmentRepository;
@@ -178,14 +180,28 @@ public class PatientCaseService {
         }
 
         if (p.getRace() != null && !p.getRace().isBlank()) {
-            fp.addExtension()
-                    .setUrl(RACE_EXT_URL)
+            Extension raceExt = new Extension().setUrl(RACE_EXT_URL);
+            String ombCode = raceToOmbCode(p.getRace());
+            if (ombCode != null) {
+                raceExt.addExtension().setUrl("ombCategory")
+                        .setValue(new Coding().setSystem(OMB_CATEGORY_SYSTEM)
+                                .setCode(ombCode).setDisplay(p.getRace()));
+            }
+            raceExt.addExtension().setUrl("text")
                     .setValue(new StringType(p.getRace()));
+            fp.addExtension(raceExt);
         }
         if (p.getEthnicity() != null && !p.getEthnicity().isBlank()) {
-            fp.addExtension()
-                    .setUrl(ETHNICITY_EXT_URL)
+            Extension ethnicityExt = new Extension().setUrl(ETHNICITY_EXT_URL);
+            String ombCode = ethnicityToOmbCode(p.getEthnicity());
+            if (ombCode != null) {
+                ethnicityExt.addExtension().setUrl("ombCategory")
+                        .setValue(new Coding().setSystem(OMB_CATEGORY_SYSTEM)
+                                .setCode(ombCode).setDisplay(p.getEthnicity()));
+            }
+            ethnicityExt.addExtension().setUrl("text")
                     .setValue(new StringType(p.getEthnicity()));
+            fp.addExtension(ethnicityExt);
         }
         if (p.getPreferredLanguage() != null && !p.getPreferredLanguage().isBlank()) {
             fp.addExtension()
@@ -201,6 +217,26 @@ public class PatientCaseService {
         String digits = ssn.replaceAll("[^0-9]", "");
         if (digits.length() <= 4) return "***-**-" + digits;
         return "***-**-" + digits.substring(digits.length() - 4);
+    }
+
+    private static String raceToOmbCode(String race) {
+        if (race == null) return null;
+        return switch (race.toLowerCase()) {
+            case "white" -> "2106-3";
+            case "black or african american", "black" -> "2054-5";
+            case "asian" -> "2028-9";
+            case "american indian or alaska native" -> "1002-5";
+            case "native hawaiian or other pacific islander" -> "2076-8";
+            default -> null;
+        };
+    }
+
+    private static String ethnicityToOmbCode(String ethnicity) {
+        if (ethnicity == null) return null;
+        String lower = ethnicity.toLowerCase();
+        if (lower.contains("hispanic") || lower.contains("latino")) return "2135-2";
+        if (lower.contains("not hispanic") || lower.contains("not")) return "2186-5";
+        return null;
     }
 
     private Condition buildCondition(Patient p) {
