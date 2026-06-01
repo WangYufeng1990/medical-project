@@ -1,5 +1,6 @@
 package com.example.medical.module.system.dto;
 
+import com.example.medical.common.annotation.PhiField;
 import com.example.medical.module.system.entity.SysUser;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -15,14 +16,17 @@ public class SysUserVO {
     private Long id;
     private String username;
     private String realName;
+    @PhiField
     private String phone;
     private String email;
     private Integer gender;
     private Integer status;
     private String avatar;
     private String npi;
+    @PhiField
     private String stateLicenseNumber;
     private String licenseState;
+    @PhiField
     private String deaNumberLast4;
     private String taxonomyCode;
     private String credentials;

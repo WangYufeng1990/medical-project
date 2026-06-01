@@ -33,6 +33,9 @@ public class AuditLogAspect {
     private static final String[] TARGET_PARAM_NAMES = {
             "id", "patientId", "prescriptionId", "appointmentId"
     };
+    private static final String[] PATIENT_ID_PARAM_NAMES = {
+            "patientId"
+    };
 
     private final HttpServletRequest request;
     private final AuditLogWriter auditLogWriter;
@@ -44,7 +47,7 @@ public class AuditLogAspect {
         try {
             String username = null;
             Long userId = null;
-            Long patientId = null;
+            Long patientId = resolvePatientId(joinPoint, auditable.module());
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof LoginUser lu) {
                 userId = lu.getUserId();
@@ -78,6 +81,27 @@ public class AuditLogAspect {
             for (int i = 0; i < paramNames.length; i++) {
                 if (target.equals(paramNames[i]) && args[i] != null) {
                     return args[i].toString();
+                }
+            }
+        }
+        return null;
+    }
+
+    private Long resolvePatientId(ProceedingJoinPoint joinPoint, String module) {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String[] paramNames = signature.getParameterNames();
+        Object[] args = joinPoint.getArgs();
+        // 1. Direct "patientId" parameter
+        for (int i = 0; i < paramNames.length; i++) {
+            if ("patientId".equals(paramNames[i]) && args[i] instanceof Number n) {
+                return n.longValue();
+            }
+        }
+        // 2. In patient module, "id" IS the patient ID
+        if ("patient".equals(module)) {
+            for (int i = 0; i < paramNames.length; i++) {
+                if ("id".equals(paramNames[i]) && args[i] instanceof Number n) {
+                    return n.longValue();
                 }
             }
         }

@@ -22,21 +22,27 @@ public class AesCryptoUtil {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
     private static final SecureRandom RNG = new SecureRandom();
+    private static final byte VERSION_CURRENT = 0x01;
 
     @Value("${app.aes.key}")
     private String configuredKey;
 
-    private static SecretKey AES_KEY;
+    @Value("${app.aes.key.previous:}")
+    private String configuredPreviousKey;
 
-    /**
-     * For unit tests only — initializes the static key without a Spring context.
-     * Call from {@code @BeforeAll} before any encrypt/decrypt operations.
-     */
+    private static SecretKey CURRENT_KEY;
+    private static SecretKey PREVIOUS_KEY;
+    private static boolean rotationActive;
+
     static void initializeForTest(String key) {
+        initializeForTest(key, null);
+    }
+
+    static void initializeForTest(String key, String previousKey) {
         try {
-            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            byte[] keyBytes = sha256.digest(key.getBytes(StandardCharsets.UTF_8));
-            AES_KEY = new SecretKeySpec(keyBytes, "AES");
+            CURRENT_KEY = deriveKey(key);
+            PREVIOUS_KEY = previousKey != null ? deriveKey(previousKey) : null;
+            rotationActive = PREVIOUS_KEY != null;
         } catch (Exception e) {
             throw new RuntimeException("Test key initialization failed", e);
         }
@@ -50,15 +56,25 @@ public class AesCryptoUtil {
                     "Generate with: openssl rand -base64 32");
         }
         try {
-            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            byte[] keyBytes = sha256.digest(configuredKey.getBytes(StandardCharsets.UTF_8));
-            AES_KEY = new SecretKeySpec(keyBytes, "AES");
-            log.info("AES-GCM encryption key initialized successfully");
+            CURRENT_KEY = deriveKey(configuredKey);
+            if (configuredPreviousKey != null && !configuredPreviousKey.isBlank()) {
+                PREVIOUS_KEY = deriveKey(configuredPreviousKey);
+                rotationActive = true;
+                log.info("AES key rotation active: current=v1, previous=v0");
+            } else {
+                PREVIOUS_KEY = null;
+                rotationActive = false;
+                log.info("AES-GCM encryption key initialized (single-key mode)");
+            }
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize AES encryption key", e);
         }
     }
 
+    /**
+     * Encrypt with the current key. Output is hex-encoded with a version byte prefix.
+     * Format: [version:1B][IV:12B][ciphertext+tag:N B] → hex
+     */
     public static String encrypt(String plaintext) {
         if (plaintext == null) return null;
         try {
@@ -67,11 +83,12 @@ public class AesCryptoUtil {
 
             Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
             GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-            cipher.init(Cipher.ENCRYPT_MODE, AES_KEY, spec);
+            cipher.init(Cipher.ENCRYPT_MODE, CURRENT_KEY, spec);
 
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
-            ByteBuffer buffer = ByteBuffer.allocate(GCM_IV_LENGTH + ciphertext.length);
+            ByteBuffer buffer = ByteBuffer.allocate(1 + GCM_IV_LENGTH + ciphertext.length);
+            buffer.put(VERSION_CURRENT);
             buffer.put(iv);
             buffer.put(ciphertext);
             return bytesToHex(buffer.array());
@@ -81,27 +98,71 @@ public class AesCryptoUtil {
         }
     }
 
+    /**
+     * Decrypt data that may be either versioned (v1 prefix) or unversioned (legacy).
+     * Unversioned data is tried against PREVIOUS_KEY first (if rotation is active),
+     * then CURRENT_KEY as fallback.
+     */
     public static String decrypt(String cipherHex) {
         if (cipherHex == null) return null;
         try {
             byte[] combined = hexToBytes(cipherHex);
+            if (combined.length < GCM_IV_LENGTH + 1) {
+                log.error("Ciphertext too short ({} bytes) — returning placeholder", combined.length);
+                return "[DECRYPT_FAILED]";
+            }
 
-            ByteBuffer buffer = ByteBuffer.wrap(combined);
-            byte[] iv = new byte[GCM_IV_LENGTH];
-            buffer.get(iv);
-            byte[] ciphertext = new byte[buffer.remaining()];
-            buffer.get(ciphertext);
+            byte version = combined[0];
+            if (version == VERSION_CURRENT) {
+                return decryptWithKey(combined, 1, CURRENT_KEY);
+            }
 
-            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
-            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-            cipher.init(Cipher.DECRYPT_MODE, AES_KEY, spec);
-
-            return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
+            // Legacy unversioned data — first byte is part of the IV
+            if (rotationActive) {
+                try {
+                    return decryptWithKey(combined, 0, PREVIOUS_KEY);
+                } catch (Exception e) {
+                    log.warn("Decryption with previous key failed, trying current key as fallback");
+                }
+            }
+            return decryptWithKey(combined, 0, CURRENT_KEY);
         } catch (Exception e) {
             log.error("AES-GCM decryption failed — returning placeholder. "
                     + "This may indicate key rotation or data corruption.", e);
             return "[DECRYPT_FAILED]";
         }
+    }
+
+    private static String decryptWithKey(byte[] combined, int ivOffset, SecretKey key) throws Exception {
+        ByteBuffer buffer = ByteBuffer.wrap(combined, ivOffset, combined.length - ivOffset);
+        byte[] iv = new byte[GCM_IV_LENGTH];
+        buffer.get(iv);
+        byte[] ciphertext = new byte[buffer.remaining()];
+        buffer.get(ciphertext);
+
+        Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        cipher.init(Cipher.DECRYPT_MODE, key, spec);
+
+        return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
+    }
+
+    private static SecretKey deriveKey(String raw) {
+        try {
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = sha256.digest(raw.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            throw new RuntimeException("Key derivation failed", e);
+        }
+    }
+
+    /**
+     * Returns true if key rotation is active (a previous key is configured).
+     * Useful for admin health checks.
+     */
+    public static boolean isRotationActive() {
+        return rotationActive;
     }
 
     private static String bytesToHex(byte[] bytes) {

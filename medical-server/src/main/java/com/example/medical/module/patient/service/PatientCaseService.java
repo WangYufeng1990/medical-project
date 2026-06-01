@@ -119,7 +119,7 @@ public class PatientCaseService {
         if (p.getSsn() != null) {
             fp.addIdentifier()
                     .setSystem(SSN_SYSTEM)
-                    .setValue(p.getSsn());
+                    .setValue(maskSsn(p.getSsn()));
         }
 
         fp.addName()
@@ -194,6 +194,13 @@ public class PatientCaseService {
         }
 
         return fp;
+    }
+
+    private static String maskSsn(String ssn) {
+        if (ssn == null || ssn.isBlank()) return ssn;
+        String digits = ssn.replaceAll("[^0-9]", "");
+        if (digits.length() <= 4) return "***-**-" + digits;
+        return "***-**-" + digits.substring(digits.length() - 4);
     }
 
     private Condition buildCondition(Patient p) {

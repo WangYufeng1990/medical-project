@@ -1,5 +1,6 @@
 package com.example.medical.module.patient.dto;
 
+import com.example.medical.common.annotation.PhiField;
 import com.example.medical.module.patient.entity.Patient;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -15,6 +16,7 @@ public class PatientVO {
     private Long id;
     private String mrn;
     private String ssnLast4;
+    @PhiField
     private String name;
     private LocalDate dateOfBirth;
     private String sexAtBirth;
@@ -25,9 +27,13 @@ public class PatientVO {
     private String maritalStatus;
     private String patientStatus;
     private String primaryCareProvider;
+    @PhiField
     private String phoneMobile;
+    @PhiField
     private String phoneHome;
+    @PhiField
     private String phoneWork;
+    @PhiField
     private String email;
     private String addressLine1;
     private String addressLine2;

@@ -50,8 +50,8 @@ public class ExportController {
                     p.getRace() != null ? p.getRace() : "",
                     p.getEthnicity() != null ? p.getEthnicity() : "",
                     p.getPreferredLanguage() != null ? p.getPreferredLanguage() : "",
-                    p.getPhoneMobile() != null ? p.getPhoneMobile() : "",
-                    p.getEmail() != null ? p.getEmail() : "",
+                    p.getPhoneMobile() != null ? maskLast4(p.getPhoneMobile()) : "",
+                    p.getEmail() != null ? maskEmail(p.getEmail()) : "",
                     p.getAddressLine1() != null ? p.getAddressLine1() : "",
                     p.getCity() != null ? p.getCity() : "",
                     p.getState() != null ? p.getState() : "",
@@ -110,6 +110,19 @@ public class ExportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bills.csv")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(CsvUtil.toCsv(headers, rows));
+    }
+
+    private static String maskLast4(String value) {
+        if (value == null || value.isBlank()) return "";
+        if (value.length() <= 4) return "****";
+        return "****" + value.substring(value.length() - 4);
+    }
+
+    private static String maskEmail(String email) {
+        if (email == null || email.isBlank()) return "";
+        int at = email.indexOf('@');
+        if (at <= 0) return "****";
+        return email.charAt(0) + "***" + email.substring(at);
     }
 
 }

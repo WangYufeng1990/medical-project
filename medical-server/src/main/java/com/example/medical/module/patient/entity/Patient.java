@@ -64,10 +64,12 @@ public class Patient extends BaseEntity {
     @Column(name = "phone_home")
     private String phoneHome;
 
-    @Column(name = "phone_work", length = 20)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "phone_work")
     private String phoneWork;
 
-    @Column(name = "email", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "email")
     private String email;
 
     @Column(name = "address_line1", length = 100)
@@ -88,7 +90,8 @@ public class Patient extends BaseEntity {
     @Column(name = "emergency_contact_name", length = 100)
     private String emergencyContactName;
 
-    @Column(name = "emergency_contact_phone", length = 20)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "emergency_contact_phone")
     private String emergencyContactPhone;
 
     @Column(name = "emergency_contact_relation", length = 50)
