@@ -49,6 +49,9 @@ public class PatientAuthController {
     @Value("${okta.issuer-uri:#{null}}")
     private String issuerUri;
 
+    @Value("${app.security.access-token-expiry-seconds:7200}")
+    private long accessTokenExpirySeconds;
+
     @PostMapping("/login")
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
         PatientAuth auth = patientAuthRepository.findByUsername(request.getUsername())
@@ -100,7 +103,7 @@ public class PatientAuthController {
                 .subject(username)
                 .id(patientId.toString())
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(7200))
+                .expiresAt(now.plusSeconds(accessTokenExpirySeconds))
                 .claim("uid", patientId.toString())
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile"))

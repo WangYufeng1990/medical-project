@@ -41,6 +41,9 @@ knife4j:
   enable: true
 
 app:
+  security:
+    access-token-expiry-seconds: 7200
+    refresh-token-expiry-seconds: 2592000
   aes:
     key: ${AES_KEY:change-me-in-production-must-be-32-bytes}
   cors:

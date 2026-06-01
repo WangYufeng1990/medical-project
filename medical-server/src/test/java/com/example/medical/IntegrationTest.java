@@ -194,7 +194,7 @@ class IntegrationTest {
     void createUser_shouldSucceed() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "username", "doctor2",
-                "password", "doctor123",
+                "password", "Doctor@123",
                 "realName", "Dr. Test User",
                 "phone", "312-555-0099",
                 "email", "test.doctor@medical.com",
@@ -212,7 +212,7 @@ class IntegrationTest {
     void createUser_duplicateUsername_shouldReturn409() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "username", "admin",
-                "password", "admin123",
+                "password", "Admin@123",
                 "realName", "Duplicate",
                 "status", 1
         ));
@@ -227,7 +227,7 @@ class IntegrationTest {
     void updateUser_sameUsername_shouldSucceed() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "username", "doctor2",
-                "password", "newpass123",
+                "password", "NewPass@123",
                 "realName", "Dr. Updated Name",
                 "phone", "312-555-0088",
                 "email", "updated@medical.com",
@@ -1173,7 +1173,7 @@ class IntegrationTest {
     void changePassword_shouldSucceed() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "oldPassword", "admin123",
-                "newPassword", "admin456"
+                "newPassword", "Admin@456"
         ));
         mockMvc.perform(put("/api/v1/users/me/password")
                         .contentType(MediaType.APPLICATION_JSON).content(body)
@@ -1182,8 +1182,8 @@ class IntegrationTest {
 
         // Change back for other tests
         String revertBody = objectMapper.writeValueAsString(Map.of(
-                "oldPassword", "admin456",
-                "newPassword", "admin123"
+                "oldPassword", "Admin@456",
+                "newPassword", "Admin@123"
         ));
         mockMvc.perform(put("/api/v1/users/me/password")
                         .contentType(MediaType.APPLICATION_JSON).content(revertBody)
@@ -1196,7 +1196,7 @@ class IntegrationTest {
     void changePassword_wrongOldPassword_shouldReturn400() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "oldPassword", "wrongpassword",
-                "newPassword", "newpass123"
+                "newPassword", "NewPass@123"
         ));
         mockMvc.perform(put("/api/v1/users/me/password")
                         .contentType(MediaType.APPLICATION_JSON).content(body)

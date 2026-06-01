@@ -37,4 +37,7 @@ public class PatientAuth extends BaseEntity {
 
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
+
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
 }

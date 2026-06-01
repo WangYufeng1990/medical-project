@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     specialty VARCHAR(100) DEFAULT NULL,
     failed_attempts INT DEFAULT 0,
     locked_until TIMESTAMP NULL DEFAULT NULL,
+    password_changed_at TIMESTAMP NULL DEFAULT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted TINYINT NOT NULL DEFAULT 0,
@@ -256,6 +257,7 @@ CREATE TABLE IF NOT EXISTS patient_auth (
     last_login_time TIMESTAMP DEFAULT NULL,
     failed_attempts INT DEFAULT 0,
     locked_until TIMESTAMP DEFAULT NULL,
+    password_changed_at TIMESTAMP NULL DEFAULT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted TINYINT NOT NULL DEFAULT 0,
@@ -263,4 +265,14 @@ CREATE TABLE IF NOT EXISTS patient_auth (
     PRIMARY KEY (id),
     UNIQUE KEY uk_patient_auth_username (username),
     UNIQUE KEY uk_patient_auth_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS password_history (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_type VARCHAR(10) NOT NULL,
+    user_id BIGINT NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    changed_at TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_user_type_id (user_type, user_id)
 );

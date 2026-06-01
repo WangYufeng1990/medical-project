@@ -1,5 +1,6 @@
 package com.example.medical.module.system.dto;
 
+import com.example.medical.common.validation.ValidPassword;
 import com.example.medical.module.system.entity.SysUser;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -11,6 +12,7 @@ public class SysUserFormDTO {
     private String username;
 
     @NotBlank(message = "Password is required")
+    @ValidPassword
     private String password;
 
     private String realName;

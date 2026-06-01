@@ -43,6 +43,9 @@ public class AuthService {
     @Value("${okta.issuer-uri:#{null}}")
     private String issuerUri;
 
+    @Value("${app.security.access-token-expiry-seconds:7200}")
+    private long accessTokenExpirySeconds;
+
     @SuppressWarnings("unchecked")
     public LoginResponse login(LoginRequest request) {
         SysUser user = sysUserRepository.findByUsername(request.getUsername())
@@ -112,7 +115,7 @@ public class AuthService {
                 .subject(username)
                 .id(userId.toString())
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(7200))
+                .expiresAt(now.plusSeconds(accessTokenExpirySeconds))
                 .claim("uid", userId.toString())
                 .claim("roles", roles)
                 .claim("scp", List.of("openid", "profile", "email"))
