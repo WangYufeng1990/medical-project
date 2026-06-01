@@ -44,6 +44,10 @@ app:
   security:
     access-token-expiry-seconds: 7200
     refresh-token-expiry-seconds: 2592000
+  retention:
+    audit-log-days: 2190
+    soft-delete-days: 365
+    cron: "0 0 3 * * ?"
   aes:
     key: ${AES_KEY:change-me-in-production-must-be-32-bytes}
   cors:

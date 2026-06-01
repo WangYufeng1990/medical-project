@@ -1,5 +1,7 @@
 package com.example.medical.common.config;
 
+import com.example.medical.common.audit.KeyAudit;
+import com.example.medical.common.audit.KeyAuditRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +35,11 @@ public class AesCryptoUtil {
     private static SecretKey CURRENT_KEY;
     private static SecretKey PREVIOUS_KEY;
     private static boolean rotationActive;
+    private static KeyAuditRepository keyAuditRepo;
+
+    static void setKeyAuditRepository(KeyAuditRepository repo) {
+        keyAuditRepo = repo;
+    }
 
     static void initializeForTest(String key) {
         initializeForTest(key, null);
@@ -57,14 +64,23 @@ public class AesCryptoUtil {
         }
         try {
             CURRENT_KEY = deriveKey(configuredKey);
+            boolean wasRotated = false;
             if (configuredPreviousKey != null && !configuredPreviousKey.isBlank()) {
                 PREVIOUS_KEY = deriveKey(configuredPreviousKey);
                 rotationActive = true;
+                wasRotated = true;
                 log.info("AES key rotation active: current=v1, previous=v0");
             } else {
                 PREVIOUS_KEY = null;
                 rotationActive = false;
                 log.info("AES-GCM encryption key initialized (single-key mode)");
+            }
+            if (keyAuditRepo != null) {
+                KeyAudit audit = new KeyAudit();
+                audit.setEventType(wasRotated ? "KEY_ROTATION" : "KEY_INIT");
+                audit.setKeyVersion(wasRotated ? "v1+v0" : "v1");
+                audit.setDetail(wasRotated ? "Key rotation detected on startup" : "Single key initialized on startup");
+                keyAuditRepo.save(audit);
             }
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize AES encryption key", e);

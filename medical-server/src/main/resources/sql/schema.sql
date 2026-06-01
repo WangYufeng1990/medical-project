@@ -276,3 +276,46 @@ CREATE TABLE IF NOT EXISTS password_history (
     PRIMARY KEY (id),
     INDEX idx_user_type_id (user_type, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS consent (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    consent_type VARCHAR(30) NOT NULL,
+    scope VARCHAR(100) DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    policy_uri VARCHAR(255) DEFAULT NULL,
+    provision_period_start DATE DEFAULT NULL,
+    provision_period_end DATE DEFAULT NULL,
+    granted_by BIGINT DEFAULT NULL,
+    consent_date DATE NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    INDEX idx_consent_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS emergency_access (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    patient_id BIGINT NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    accessed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL DEFAULT NULL,
+    audited TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    INDEX idx_emergency_user_id (user_id),
+    INDEX idx_emergency_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS key_audit (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    event_type VARCHAR(20) NOT NULL,
+    key_version VARCHAR(10) DEFAULT NULL,
+    changed_by VARCHAR(50) DEFAULT NULL,
+    detail VARCHAR(500) DEFAULT NULL,
+    event_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_key_audit_time (event_time)
+);
