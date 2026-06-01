@@ -395,7 +395,7 @@ CREATE TABLE IF NOT EXISTS observation (
     patient_id BIGINT NOT NULL,
     loinc_code VARCHAR(20) NOT NULL,
     loinc_display VARCHAR(200) DEFAULT NULL,
-    value VARCHAR(50) DEFAULT NULL,
+    obs_value VARCHAR(50) DEFAULT NULL,
     unit VARCHAR(20) DEFAULT NULL,
     reference_range VARCHAR(50) DEFAULT NULL,
     abnormal_flag CHAR(1) DEFAULT NULL,

@@ -326,7 +326,7 @@ public class DataInitializer implements CommandLineRunner {
                 "SELECT COUNT(*) FROM observation", Integer.class);
         if (count != null && count > 0) return;
 
-        String sql = "INSERT INTO observation (patient_id, loinc_code, loinc_display, value, unit, " +
+        String sql = "INSERT INTO observation (patient_id, loinc_code, loinc_display, obs_value, unit, " +
                 "reference_range, abnormal_flag, status, effective_date, create_time) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?)";
         LocalDateTime now = LocalDateTime.now();

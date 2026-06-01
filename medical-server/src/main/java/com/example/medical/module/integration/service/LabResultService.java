@@ -45,7 +45,7 @@ public class LabResultService {
             obs.setPatientId(patient.getId());
             obs.setLoincCode(item.getLoincCode());
             obs.setLoincDisplay(item.getDisplay());
-            obs.setValue(item.getValue());
+            obs.setObsValue(item.getValue());
             obs.setUnit(item.getUnit());
             obs.setReferenceRange(item.getReferenceRange());
             obs.setAbnormalFlag(item.getAbnormalFlag());

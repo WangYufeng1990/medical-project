@@ -23,8 +23,8 @@ public class Observation {
     @Column(name = "loinc_display", length = 200)
     private String loincDisplay;
 
-    @Column(name = "value", length = 50)
-    private String value;
+    @Column(name = "obs_value", length = 50)
+    private String obsValue;
 
     @Column(name = "unit", length = 20)
     private String unit;

@@ -75,13 +75,13 @@ public class FhirObservationController {
                 .setCode(o.getLoincCode())
                 .setDisplay(o.getLoincDisplay());
 
-        if (o.getValue() != null) {
+        if (o.getObsValue() != null) {
             try {
                 fhirObs.setValue(new Quantity()
-                        .setValue(new java.math.BigDecimal(o.getValue()))
+                        .setValue(new java.math.BigDecimal(o.getObsValue()))
                         .setUnit(o.getUnit()));
             } catch (NumberFormatException e) {
-                fhirObs.setValue(new StringType(o.getValue()));
+                fhirObs.setValue(new StringType(o.getObsValue()));
             }
         }
 
