@@ -38,6 +38,7 @@ public class DataInitializer implements CommandLineRunner {
         seedBills();
         seedMessages();
         seedObservations();
+        seedLoincCatalog();
         seedCds();
 
         log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
@@ -345,6 +346,59 @@ public class DataInitializer implements CommandLineRunner {
                 "<5.7", "H", "final", collectionDate, now);
 
         log.info("Observation seed data: 7 CBC+metabolic results for patient 100");
+    }
+
+    private void seedLoincCatalog() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM loinc_catalog", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO loinc_catalog (loinc_code, display, unit, ref_range_low, " +
+                "ref_range_high, panel_parent_code) VALUES (?,?,?,?,?,?)";
+
+        // CBC (Complete Blood Count) panel — 8 codes
+        jdbcTemplate.update(sql, "6690-2", "WBC", "10*3/uL", "4.0", "11.0", "CBC");
+        jdbcTemplate.update(sql, "789-8", "RBC", "10*6/uL", "4.5", "5.9", "CBC");
+        jdbcTemplate.update(sql, "718-7", "HGB", "g/dL", "13.5", "17.5", "CBC");
+        jdbcTemplate.update(sql, "4544-3", "HCT", "%", "38.0", "50.0", "CBC");
+        jdbcTemplate.update(sql, "787-2", "MCV", "fL", "80", "100", "CBC");
+        jdbcTemplate.update(sql, "785-6", "MCH", "pg", "27", "33", "CBC");
+        jdbcTemplate.update(sql, "786-4", "MCHC", "g/dL", "32", "36", "CBC");
+        jdbcTemplate.update(sql, "777-3", "PLT", "10*3/uL", "150", "400", "CBC");
+
+        // BMP (Basic Metabolic Panel) — 8 codes
+        jdbcTemplate.update(sql, "2345-7", "Glucose", "mg/dL", "70", "99", "BMP");
+        jdbcTemplate.update(sql, "3094-0", "BUN", "mg/dL", "7", "20", "BMP");
+        jdbcTemplate.update(sql, "2160-0", "Creatinine", "mg/dL", "0.6", "1.2", "BMP");
+        jdbcTemplate.update(sql, "2951-2", "Sodium", "mmol/L", "135", "145", "BMP");
+        jdbcTemplate.update(sql, "2823-3", "Potassium", "mmol/L", "3.5", "5.1", "BMP");
+        jdbcTemplate.update(sql, "2075-0", "Chloride", "mmol/L", "98", "107", "BMP");
+        jdbcTemplate.update(sql, "2028-9", "CO2", "mmol/L", "22", "29", "BMP");
+        jdbcTemplate.update(sql, "17861-6", "Calcium", "mg/dL", "8.5", "10.5", "BMP");
+
+        // Lipid Panel — 4 codes
+        jdbcTemplate.update(sql, "2093-3", "Cholesterol Total", "mg/dL", null, "200", "LIPID");
+        jdbcTemplate.update(sql, "2085-9", "HDL Cholesterol", "mg/dL", "40", null, "LIPID");
+        jdbcTemplate.update(sql, "2089-1", "LDL Cholesterol", "mg/dL", null, "130", "LIPID");
+        jdbcTemplate.update(sql, "2571-8", "Triglycerides", "mg/dL", null, "150", "LIPID");
+
+        // Diabetes monitoring
+        jdbcTemplate.update(sql, "4548-4", "HbA1c", "%", null, "5.7", "DIABETES");
+
+        // Thyroid
+        jdbcTemplate.update(sql, "3016-3", "TSH", "mIU/L", "0.4", "4.0", "THYROID");
+
+        // Urinalysis dipstick — 8 codes
+        jdbcTemplate.update(sql, "25428-4", "Glucose (Urine)", null, null, null, "UA");
+        jdbcTemplate.update(sql, "5770-3", "Bilirubin (Urine)", null, null, null, "UA");
+        jdbcTemplate.update(sql, "5797-6", "Ketones (Urine)", null, null, null, "UA");
+        jdbcTemplate.update(sql, "5811-5", "Specific Gravity (Urine)", null, "1.005", "1.030", "UA");
+        jdbcTemplate.update(sql, "5794-3", "Blood (Urine)", null, null, null, "UA");
+        jdbcTemplate.update(sql, "5803-4", "pH (Urine)", null, "5.0", "8.0", "UA");
+        jdbcTemplate.update(sql, "5804-2", "Protein (Urine)", null, null, null, "UA");
+        jdbcTemplate.update(sql, "5802-6", "Nitrite (Urine)", null, null, null, "UA");
+
+        log.info("LOINC catalog seed data: 29 common lab codes (CBC/BMP/LIPID/DIABETES/THYROID/UA)");
     }
 
     private void seedCds() {

@@ -354,6 +354,17 @@ CREATE TABLE IF NOT EXISTS cds_override (
     INDEX idx_override_prescription (prescription_id)
 );
 
+CREATE TABLE IF NOT EXISTS loinc_catalog (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    loinc_code VARCHAR(20) UNIQUE NOT NULL,
+    display VARCHAR(200) NOT NULL,
+    unit VARCHAR(20) DEFAULT NULL,
+    ref_range_low VARCHAR(20) DEFAULT NULL,
+    ref_range_high VARCHAR(20) DEFAULT NULL,
+    panel_parent_code VARCHAR(20) DEFAULT NULL,
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS observation (
     id BIGINT NOT NULL AUTO_INCREMENT,
     patient_id BIGINT NOT NULL,
