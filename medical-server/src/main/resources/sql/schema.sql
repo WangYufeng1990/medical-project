@@ -354,6 +354,18 @@ CREATE TABLE IF NOT EXISTS cds_override (
     INDEX idx_override_prescription (prescription_id)
 );
 
+CREATE TABLE IF NOT EXISTS quality_measure (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    cms_id VARCHAR(20) UNIQUE NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description VARCHAR(500) DEFAULT NULL,
+    denominator_query VARCHAR(1000) DEFAULT NULL,
+    numerator_query VARCHAR(1000) DEFAULT NULL,
+    exclusion_query VARCHAR(1000) DEFAULT NULL,
+    report_period_months INT DEFAULT 12,
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS pharmacy_directory (
     id BIGINT NOT NULL AUTO_INCREMENT,
     npi VARCHAR(10) UNIQUE NOT NULL,

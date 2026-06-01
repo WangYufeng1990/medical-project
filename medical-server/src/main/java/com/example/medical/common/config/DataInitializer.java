@@ -40,6 +40,7 @@ public class DataInitializer implements CommandLineRunner {
         seedObservations();
         seedLoincCatalog();
         seedPharmacies();
+        seedQualityMeasures();
         seedCds();
 
         log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
@@ -422,6 +423,50 @@ public class DataInitializer implements CommandLineRunner {
                 "1653 W Congress Pkwy", "Chicago", "IL", "60612", "312-555-0800", 1);
 
         log.info("Pharmacy directory seed data: 5 Chicago pharmacies (3 EPCS-capable)");
+    }
+
+    private void seedQualityMeasures() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM quality_measure", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO quality_measure (cms_id, title, description, " +
+                "denominator_query, numerator_query, exclusion_query, report_period_months) " +
+                "VALUES (?,?,?,?,?,?,?)";
+
+        jdbcTemplate.update(sql, "CMS122v11", "HbA1c Poor Control (>9%)",
+                "Percentage of diabetic patients 18-75 whose most recent HbA1c > 9.0%",
+                "SELECT COUNT(DISTINCT p.id) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND (p.medical_history LIKE '%diabetes%' OR p.medical_history LIKE '%Type 2%')",
+                "SELECT COUNT(DISTINCT p.id) FROM patient p " +
+                "JOIN observation o ON o.patient_id = p.id AND o.loinc_code = '4548-4' " +
+                "WHERE p.is_deleted = 0 AND (p.medical_history LIKE '%diabetes%' OR p.medical_history LIKE '%Type 2%') " +
+                "AND CAST(o.value AS DOUBLE) <= 9.0",
+                null, 12);
+
+        jdbcTemplate.update(sql, "CMS125v11", "Breast Cancer Screening",
+                "Percentage of women 50-74 who had a mammogram in the last 27 months",
+                "SELECT COUNT(*) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND p.sex_at_birth = 'F' " +
+                "AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURRENT_DATE) BETWEEN 50 AND 74",
+                "SELECT COUNT(*) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND p.sex_at_birth = 'F' " +
+                "AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURRENT_DATE) BETWEEN 50 AND 74",
+                "SELECT COUNT(*) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND p.sex_at_birth = 'F' " +
+                "AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURRENT_DATE) BETWEEN 50 AND 74 " +
+                "AND p.patient_status = 'deceased'",
+                12);
+
+        jdbcTemplate.update(sql, "CMS165v11", "Controlling High Blood Pressure",
+                "Percentage of hypertensive patients 18-85 whose most recent BP < 140/90",
+                "SELECT COUNT(DISTINCT p.id) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND p.medical_history LIKE '%hypertension%'",
+                "SELECT COUNT(DISTINCT p.id) FROM patient p " +
+                "WHERE p.is_deleted = 0 AND p.medical_history LIKE '%hypertension%'",
+                null, 12);
+
+        log.info("Quality measure seed data: 3 CMS eCQM definitions (122/125/165)");
     }
 
     private void seedCds() {
