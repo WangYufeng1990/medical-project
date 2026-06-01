@@ -138,6 +138,9 @@ All require `PATIENT` role.
 | GET | `/appointments` | `?page=1&size=10` | My appointments |
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
+| GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
+| GET | `/consent` | — | My consent records |
+| PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
 
 ### Appointments — `/api/v1/appointments`
 
@@ -201,8 +204,51 @@ Requires `ADMIN` or `DOCTOR`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/patients` | CSV download of all patients |
-| GET | `/bills` | CSV download of all bills |
+| GET | `/patients` | CSV download of all patients (PHI masked: phone→last4, email→j***@domain) |
+| GET | `/bills` | CSV download of all bills (claim numbers masked) |
+
+### Audit Logs — `/api/v1/audit-logs`
+
+Requires `ADMIN`. HIPAA §164.312(b) compliance.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=20&userId=&patientId=&module=&action=&fromDate=&toDate=` | Search/filter audit logs |
+
+### FHIR — `/api/v1/fhir`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/metadata` | public | CapabilityStatement (FHIR 4.0.1 + SMART on FHIR security) |
+| GET | `/Patient/{id}` | ADMIN,DOCTOR | FHIR Patient resource (SSN masked to last-4) |
+| GET | `/Patient` | ADMIN,DOCTOR | FHIR search (`?_id=100`) returning Bundle |
+
+### Consent — `/api/v1/consent`
+
+Requires `ADMIN`.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?patientId=` | List consent records for a patient |
+| POST | `/` | body: {patientId, consentType, scope} | Create consent record |
+| PUT | `/{id}/revoke` | path | Revoke a consent |
+
+### Emergency Access — `/api/v1/emergency`
+
+Requires `ADMIN` or `DOCTOR`. Break-glass access with mandatory audit.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| POST | `/access/{patientId}` | body: {reason} | Emergency patient data access (30min expiry, synchronously audited) |
+| GET | `/history` | `?patientId=` | View emergency access history (ADMIN only) |
+
+### Key Management — `/api/v1/admin/keys`
+
+Requires `ADMIN`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/history` | Key lifecycle audit trail (KEY_INIT / KEY_ROTATION events) |
 
 ---
 
@@ -224,9 +270,20 @@ Requires `ADMIN` or `DOCTOR`.
 | PATIENT | Patient portal (`/api/v1/patient/me/*`), patient chat (`/api/v1/patient/me/messages/*`) |
 
 ### Data Encryption
-- **Passwords**: BCrypt hashed
-- **PHI fields** (idCard, phone on Patient): AES-CBC via `@Convert(converter = AesAttributeConverter.class)`, key from `AES_KEY` env var
+- **Passwords**: BCrypt hashed + complexity policy (8+ chars, upper/lower/digit/special) + history enforcement (last 3 cannot be reused)
+- **PHI fields**: AES-256-GCM via `@Convert(converter = AesAttributeConverter.class)`, versioned key format supporting rotation (`app.aes.key` / `app.aes.key.previous`)
+- **Redis cache safety**: `PhiMaskingRedisSerializer` automatically redacts `@PhiField`-annotated DTO fields to `[PHI-REDACTED]`
 - **Token validation**: External IdP JWKS; no local secret management needed
+
+### Account Security
+- System users: 5 failed logins → 15-minute lockout (matching patient lockout)
+- Patients: 5 failed logins → 15-minute lockout
+- Token expiry: configurable via `app.security.access-token-expiry-seconds` (default 7200s)
+- Security headers: HSTS (1yr), X-Content-Type-Options, X-Frame-Options DENY, XSS Protection, Cache-Control
+
+### Data Retention
+- Audit logs: nightly purge of records older than `app.retention.audit-log-days` (default 2190 = 6 years)
+- Soft-deleted records: retained for `app.retention.soft-delete-days` (default 365 days) before permanent removal
 
 ## Infrastructure
 

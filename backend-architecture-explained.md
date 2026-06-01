@@ -267,6 +267,12 @@ RBAC 模型：用户 → 角色 → 菜单/权限 → 接口访问控制。四�
 
 ```java
 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+.headers(headers -> headers
+    .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
+    .contentTypeOptions(cfg -> {})
+    .frameOptions(frame -> frame.deny())
+    .xssProtection(xss -> {})
+    .cacheControl(cache -> {}))
 .authorizeHttpRequests(auth -> auth
     .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
                      "/api/v1/patient/login", "/api/v1/patient/refresh",
@@ -277,9 +283,23 @@ RBAC 模型：用户 → 角色 → 菜单/权限 → 接口访问控制。四�
     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtClaimMapper)));
 ```
 
+**安全响应头：** HSTS (1年+subDomains)、X-Content-Type-Options: nosniff、X-Frame-Options: DENY、X-XSS-Protection、Cache-Control。
+
 **CORS：** 限制为 `app.cors.allowed-origins` 配置的特定域名（默认 `localhost:5173`），不再使用通配符 `*`。
 
 **数据库连接：** `useSSL=true&requireSSL=true&verifyServerCertificate=true` — 数据库传输加密。
+
+### 5.6 账户锁定与密码策略
+
+**系统用户（AuthService）：** 5 次登录失败 → 锁定 15 分钟。成功后重置计数。
+
+**患者（PatientAuthController）：** 同样的 5次/15分钟锁定策略。
+
+**密码复杂度（@ValidPassword）：** 最少 8 位 + 大写字母 + 小写字母 + 数字 + 特殊字符。
+
+**密码历史：** `password_history` 表存储最近 3 次密码 BCrypt 哈希，新密码不可与历史重复。
+
+**Token 配置外置：** JWT 过期时间由 `app.security.access-token-expiry-seconds` 控制（默认 7200 秒），不再硬编码。
 
 ---
 
@@ -318,6 +338,29 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 ### 6.3 加密算法
 
 **AES-256-GCM / NoPadding** — GCM 模式提供认证加密（同时保证机密性和完整性），每次加密生成随机 12 字节 IV，128-bit 认证标签防止篡改。
+
+### 6.4 密钥版本化与轮换
+
+密文格式从 `[IV:12B][ciphertext+tag]` 升级为 `[version:1B][IV:12B][ciphertext+tag]`，支持密钥轮换：
+
+| 版本字节 | 密钥 | 说明 |
+|---------|------|------|
+| `0x01` | `app.aes.key` (当前) | 所有新加密操作使用此版本 |
+| 无前缀 | `app.aes.key.previous` → 回退 `app.aes.key` | 旧数据兼容解密 |
+
+**轮换流程：** 更新 `app.aes.key` → 旧密钥设为 `app.aes.key.previous` → 旧数据随业务写入重新加密 → 确认无旧数据后移除 `previous`。
+
+**密钥审计：** `AesCryptoUtil.init()` 自动向 `key_audit` 表写入 `KEY_INIT` / `KEY_ROTATION` 事件。ADMIN 可通过 `GET /api/v1/admin/keys/history` 查看密钥生命周期。
+
+### 6.5 加密字段清单（完整）
+
+| 实体 | 加密字段 | 新增于 |
+|------|---------|--------|
+| Patient | `name`, `ssn`, `phoneMobile`, `phoneHome`, `phoneWork`, `email`, `emergencyContactPhone`, `insuranceMemberId` | Round 0 补全 phoneWork/email/emergencyContactPhone |
+| SysUser | `phone`, `stateLicenseNumber`, `deaNumber` | — |
+| Message | `content`（聊天记录） | — |
+| Bill | `insuranceClaimNumber` | — |
+| Prescription | `deaNumber` | — |
 
 ---
 
@@ -360,6 +403,23 @@ public Executor auditExecutor() {
 }
 ```
 
+### 7.4 审计日志查询 API
+
+`GET /api/v1/audit-logs` (ADMIN only) — 多条件动态查询 + 分页：
+
+| 参数 | 说明 |
+|------|------|
+| `userId` / `patientId` | 按用户/患者过滤 |
+| `module` / `action` | 按业务模块/操作类型过滤 |
+| `fromDate` / `toDate` | 日期范围过滤 |
+| `page` / `size` | 分页（默认 1/20） |
+
+底层使用 `JpaSpecificationExecutor` + 动态 `Predicate` 组合，替代了原文中始终为 null 的 `patientId` 缺陷。
+
+### 7.5 审计覆盖范围
+
+`@Auditable` 注解覆盖：PatientService (CRUD)、AppointmentService (CRUD)、PrescriptionService (CRUD)、BillService (lifecycle)、SysUserService (CRUD)、ExportController (CSV exports)、PatientPortalController (self-service export)。
+
 ---
 
 ## 第八层：患者认证分离 — PatientAuth
@@ -401,19 +461,45 @@ Before:                          After:
 
 | 端点 | 说明 |
 |------|------|
-| `GET /api/v1/fhir/metadata` | **CapabilityStatement** — 声明支持的 FHIR 版本(4.0.1)和资源 |
+| `GET /api/v1/fhir/metadata` | **CapabilityStatement** — FHIR 4.0.1 + SMART on FHIR security + OAuth2 URIs |
+| `GET /api/v1/fhir/Patient/{id}` | 单个 FHIR Patient 资源（SSN 掩码为末4位） |
+| `GET /api/v1/fhir/Patient?_id={id}` | FHIR 搜索返回 Bundle |
 | `GET /api/v1/patients/{id}/case` | 患者完整病历 **Bundle** — Patient + Condition + AllergyIntolerance + Encounter[] + MedicationRequest[] |
 
-### 9.3 FHIR 编码
+### 9.3 SMART on FHIR
+
+CapabilityStatement 声明 `SMART-on-FHIR` 安全服务。JWT `scp` 声明按角色包含 FHIR 作用域：
+
+| 角色 | FHIR 作用域 |
+|------|-----------|
+| ADMIN / DOCTOR | `patient/*.read`, `patient/*.write`, `user/*.read`, `system/*.read` |
+| PATIENT | `patient/Patient.read`, `patient/Observation.read` |
+
+### 9.4 US Core Profile 修正
+
+种族/民族扩展从简单 `StringType` 修正为 US Core 结构化格式：
+
+```
+Extension (us-core-race)
+  ├── extension[ombCategory]: Coding (urn:oid:2.16.840.1.113883.6.238)
+  │     └── code: "2106-3" (White) / "2028-9" (Asian) / "2054-5" (Black) / ...
+  └── extension[text]: String
+```
+
+OMB 编码映射：White→2106-3, Black→2054-5, Asian→2028-9, American Indian→1002-5, Hawaiian/PI→2076-8，Hispanic→2135-2, Not Hispanic→2186-5。
+
+### 9.5 FHIR 编码
 
 | 编码系统 | 用途 |
 |---------|------|
-| `http://hl7.org/fhir/sid/us-ssn` | SSN 标识符 |
+| `http://hl7.org/fhir/sid/us-ssn` | SSN 标识符（掩码末4位） |
 | `http://hl7.org/fhir/sid/us-mrn` | MRN 标识符 |
 | `http://hl7.org/fhir/sid/ndc` | FDA National Drug Code |
 | `http://www.nlm.nih.gov/research/umls/rxnorm` | RxNorm 概念编码 |
-| `http://hl7.org/fhir/us/core/StructureDefinition/us-core-race` | US Core Race 扩展 |
+| `http://hl7.org/fhir/us/core/StructureDefinition/us-core-race` | US Core Race 扩展（ombCategory + text） |
 | `http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity` | US Core Ethnicity 扩展 |
+| `http://terminology.hl7.org/CodeSystem/restful-security-service` | SMART on FHIR 安全服务 |
+| `urn:oid:2.16.840.1.113883.6.238` | OMB 种族/民族分类编码系统 |
 
 ---
 
@@ -530,6 +616,22 @@ Result.fail(404, "Patient not found")
 - Dashboard 统计数据（`@Cacheable("dashboard")`）
 - SysUser 基本信息（角色/菜单）
 
+**Redis PHI 保护：** `PhiMaskingRedisSerializer` 序列化时自动检测 `@PhiField` 注解，将标记字段替换为 `[PHI-REDACTED]`，防御纵深确保即使误缓存了含 PHI 的对象也不会泄露明文。
+
+### 11.5 数据留存
+
+`DataRetentionJob`（`@Scheduled cron="0 0 3 * * ?"`）每日凌晨 3 点清除过期审计日志：
+- `app.retention.audit-log-days=2190`（6 年 HIPAA 要求）
+- 软删除记录留存 `app.retention.soft-delete-days=365` 天
+
+### 11.6 知情同意管理
+
+`POST /api/v1/consent` (ADMIN) + `GET /api/v1/patient/me/consent` (PATIENT)。支持 consent_type（OPT_IN/OPT_OUT/TREATMENT/RESEARCH）+ scope + revoke。支撑 HIPAA §164.508。
+
+### 11.7 紧急访问 (Break-Glass)
+
+`POST /api/v1/emergency/access/{patientId}?reason=...` — 医生可突破常规权限查看任何患者数据，30 分钟自动过期。同步审计（`EmergencyAccess.audited=1`）+ WARN 级别日志。ADMIN 可查看历史 `GET /api/v1/emergency/history`。
+
 ### 11.5 结构化日志
 
 `logback-spring.xml`：
@@ -593,14 +695,17 @@ Result.fail(404, "Patient not found")
 
 | 亮点 | 实现 |
 |------|------|
-| **HIPAA 加密** | AES-256-GCM + JPA @Convert 透明加解密 + 损毁降级 |
-| **HIPAA 审计** | 异步 AOP (REQUIRES_NEW tx) + PHI 掩码 + 专用线程池 |
-| **Okta OAuth2** | 生产 JWKS 验证 + 开发本地回退 + Token 刷新轮换 |
-| **FHIR 标准** | HAPI FHIR 原生类型 + CapabilityStatement + USCDI 扩展 |
+| **HIPAA 加密** | AES-256-GCM + JPA @Convert 透明加解密 + 版本化密钥轮换 + 损毁降级 |
+| **HIPAA 审计** | 异步 AOP (REQUIRES_NEW tx) + PHI 掩码 + 专用线程池 + ADMIN 查询 API |
+| **Okta OAuth2** | 生产 JWKS 验证 + 开发本地回退 + Token 刷新轮换 + SMART 作用域 |
+| **FHIR 标准** | HAPI FHIR 原生类型 + CapabilityStatement + SMART on FHIR + US Core 结构化扩展 + FHIR Patient 端点 |
 | **US 医疗合规** | 5 模块美式字段(NPI/NDC/CPT/ICD-10/POS/USCDI demographics) |
-| **软删除** | @SQLDelete + @SQLRestriction |
+| **软删除** | @SQLDelete + @SQLRestriction + 定时留存清除 |
 | **乐观锁** | @Version on BaseEntity |
-| **账户安全** | BCrypt + 登录限流 + PatientAuth 5次锁定 + 导出限流 |
-| **数据最小化** | VO SSN 末4位 + 审计 PHI 掩码 + 缓存排除 ePHI |
+| **账户安全** | BCrypt + 登录限流 + 双端锁定(系统用户+患者) + 密码复杂度+历史策略 + HSTS/Clickjack/XSS 安全头 |
+| **数据最小化** | VO SSN 末4位 + FHIR SSN 掩码 + CSV PHI 掩码 + 审计 PHI 掩码 + Redis @PhiField 自动脱敏 |
+| **Break-Glass** | 紧急访问 + 同步审计 + 30分钟自动过期 |
+| **知情同意** | Consent 实体 + 患者自服务查看 + revoke 支持 |
+| **密钥安全** | 版本化密文 + 密钥轮换支持 + key_audit 审计表 + ADMIN 历史查询 |
 | **分层解耦** | Entity/DTO 分离 + static bridge 解决 JPA/Spring DI 冲突 |
 | **开箱即用** | DataInitializer JPA 写入 + US 合成种子数据 |

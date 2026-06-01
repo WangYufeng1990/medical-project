@@ -44,10 +44,16 @@ src/
     ├── java/com/example/medical/
     │   ├── MedicalApplication.java          # entry point
     │   ├── common/                          # shared infrastructure
+    │   │   ├── annotation/                  # @PhiField (Redis cache PHI redaction)
+    │   │   ├── audit/                       # @Auditable, AuditLogAspect, AuditLogWriter,
+    │   │   │                                # AuditLog, AuditLogVO, AuditLogService,
+    │   │   │                                # AuditLogController, KeyAudit, KeyAuditController
     │   │   ├── config/                      # @Configuration classes
     │   │   ├── exception/                   # GlobalExceptionHandler + custom exceptions
+    │   │   ├── job/                         # DataRetentionJob (scheduled purge)
     │   │   ├── result/                      # unified Result<T> response wrapper
     │   │   ├── base/                        # BaseEntity, BaseController (shared fields/methods)
+    │   │   ├── validation/                  # @ValidPassword, PasswordPolicyValidator
     │   │   └── enums/                       # shared enums (ResultCode, etc.)
     │   ├── module/                          # ---- business modules ----
     │   │   ├── system/                      #   system management (users, roles, menus)
