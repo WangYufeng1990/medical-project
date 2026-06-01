@@ -353,3 +353,21 @@ CREATE TABLE IF NOT EXISTS cds_override (
     PRIMARY KEY (id),
     INDEX idx_override_prescription (prescription_id)
 );
+
+CREATE TABLE IF NOT EXISTS observation (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    loinc_code VARCHAR(20) NOT NULL,
+    loinc_display VARCHAR(200) DEFAULT NULL,
+    value VARCHAR(50) DEFAULT NULL,
+    unit VARCHAR(20) DEFAULT NULL,
+    reference_range VARCHAR(50) DEFAULT NULL,
+    abnormal_flag CHAR(1) DEFAULT NULL,
+    status VARCHAR(20) DEFAULT 'final',
+    source_message_id VARCHAR(100) DEFAULT NULL,
+    effective_date TIMESTAMP NULL DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_obs_patient_loinc (patient_id, loinc_code),
+    UNIQUE KEY uk_source_message (source_message_id)
+);

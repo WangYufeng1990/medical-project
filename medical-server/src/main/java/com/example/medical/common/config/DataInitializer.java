@@ -37,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
         seedPrescriptions();
         seedBills();
         seedMessages();
+        seedObservations();
         seedCds();
 
         log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
@@ -315,6 +316,35 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Dr. Mitchell, my allergy symptoms have gotten much better after using the inhaler you prescribed."), 1, now, now);
         jdbcTemplate.update(sql, 607L, 2L, 101L,
                 AesCryptoUtil.encrypt("That's good to hear, Maria. Keep using it as prescribed. Let me know if symptoms return."), 0, now, now);
+    }
+
+    private void seedObservations() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM observation", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO observation (patient_id, loinc_code, loinc_display, value, unit, " +
+                "reference_range, abnormal_flag, status, effective_date, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime collectionDate = LocalDateTime.of(2026, 5, 28, 8, 30);
+
+        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "7.2", "10*3/uL",
+                "4.0-11.0", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.8", "10*6/uL",
+                "4.5-5.9", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "14.1", "g/dL",
+                "13.5-17.5", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "4544-3", "HCT", "42.5", "%",
+                "38.0-50.0", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "777-3", "PLT", "245", "10*3/uL",
+                "150-400", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "135", "mg/dL",
+                "70-99", "H", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "7.8", "%",
+                "<5.7", "H", "final", collectionDate, now);
+
+        log.info("Observation seed data: 7 CBC+metabolic results for patient 100");
     }
 
     private void seedCds() {
