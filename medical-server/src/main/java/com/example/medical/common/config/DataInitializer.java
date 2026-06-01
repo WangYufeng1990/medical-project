@@ -39,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
         seedMessages();
         seedObservations();
         seedLoincCatalog();
+        seedPharmacies();
         seedCds();
 
         log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
@@ -399,6 +400,28 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, "5802-6", "Nitrite (Urine)", null, null, null, "UA");
 
         log.info("LOINC catalog seed data: 29 common lab codes (CBC/BMP/LIPID/DIABETES/THYROID/UA)");
+    }
+
+    private void seedPharmacies() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pharmacy_directory", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO pharmacy_directory (npi, name, address_line1, city, state, " +
+                "zip_code, phone, supports_epcs) VALUES (?,?,?,?,?,?,?,?)";
+
+        jdbcTemplate.update(sql, "9876543210", "Walgreens #1234",
+                "1200 N Clark St", "Chicago", "IL", "60610", "312-555-0400", 1);
+        jdbcTemplate.update(sql, "9876543211", "CVS Pharmacy #5678",
+                "233 S Wacker Dr", "Chicago", "IL", "60606", "312-555-0500", 1);
+        jdbcTemplate.update(sql, "9876543212", "Walmart Pharmacy #9012",
+                "4626 W Diversey Ave", "Chicago", "IL", "60639", "773-555-0600", 0);
+        jdbcTemplate.update(sql, "9876543213", "Jewel-Osco Pharmacy",
+                "1340 S Canal St", "Chicago", "IL", "60607", "312-555-0700", 0);
+        jdbcTemplate.update(sql, "9876543214", "Rush University Pharmacy",
+                "1653 W Congress Pkwy", "Chicago", "IL", "60612", "312-555-0800", 1);
+
+        log.info("Pharmacy directory seed data: 5 Chicago pharmacies (3 EPCS-capable)");
     }
 
     private void seedCds() {

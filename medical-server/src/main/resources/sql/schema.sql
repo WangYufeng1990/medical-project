@@ -354,6 +354,19 @@ CREATE TABLE IF NOT EXISTS cds_override (
     INDEX idx_override_prescription (prescription_id)
 );
 
+CREATE TABLE IF NOT EXISTS pharmacy_directory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    npi VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    address_line1 VARCHAR(100) DEFAULT NULL,
+    city VARCHAR(50) DEFAULT NULL,
+    state CHAR(2) DEFAULT NULL,
+    zip_code VARCHAR(10) DEFAULT NULL,
+    phone VARCHAR(200) DEFAULT NULL,
+    supports_epcs TINYINT DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS loinc_catalog (
     id BIGINT NOT NULL AUTO_INCREMENT,
     loinc_code VARCHAR(20) UNIQUE NOT NULL,
