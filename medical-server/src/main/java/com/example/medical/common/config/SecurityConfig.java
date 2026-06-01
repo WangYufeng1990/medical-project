@@ -50,7 +50,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
                                 "/api/v1/patient/login", "/api/v1/patient/refresh",
                                 "/api/v1/fhir/metadata").permitAll()
-                        .requestMatchers("/doc.html", "/webjars/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

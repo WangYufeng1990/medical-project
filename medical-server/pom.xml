@@ -24,6 +24,7 @@
         <hapi-fhir.version>7.4.0</hapi-fhir.version>
         <hutool.version>5.8.34</hutool.version>
         <knife4j.version>4.5.0</knife4j.version>
+        <springdoc.version>2.6.0</springdoc.version>
         <redisson.version>3.40.2</redisson.version>
     </properties>
 
@@ -101,11 +102,11 @@
             <version>${redisson.version}</version>
         </dependency>
 
-        <!-- Knife4j -->
+        <!-- API Docs (Springdoc OpenAPI) -->
         <dependency>
-            <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-            <version>${knife4j.version}</version>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.7.0</version>
         </dependency>
 
         <!-- Utilities -->
