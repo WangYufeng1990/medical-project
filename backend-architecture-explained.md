@@ -562,6 +562,42 @@ OMB 编码映射：White→2106-3, Black→2054-5, Asian→2028-9, American Indi
 
 BillService 提供完整理赔生命周期：`submitClaim()` → `adjudicate()` → `pay()` / `denyClaim()`。
 
+### 10.6 CDS 临床决策支持
+
+**Drug-Drug Interaction：** `drug_interaction` 表存储药物对交互规则。`CdsService.checkDrugInteractions()` 两两交叉检查处方中的所有药品，返回严重级别（contraindicated/severe/moderate/minor）+ 描述 + 建议。
+
+**Drug-Allergy Contraindication：** `drug_allergy_class` 表映射 RxNorm 编码到过敏类别。`CdsService.checkAllergyContraindications()` 交叉比对患者过敏史与处方药品，标记禁忌。
+
+**CDS 端点：** `POST /api/v1/cds/check` 允许开方前预检查。`PrescriptionService.create()` 内置 CDS 检查，警告记入日志但不硬阻断。
+
+### 10.7 集成引擎对接
+
+**架构：** Hospital EHR → HL7 v2 → Mirth Connect → JSON/HTTP → Our Backend。后端不解析 HL7 v2 管道消息。
+
+**ADT 事件：** `POST /api/v1/integration/adt` — 接收 A01（入院）/A03（出院）/A08（更新），自动 upsert Patient（MRN 匹配）。
+
+**检验结果：** `POST /api/v1/integration/lab-results` — 批量写入 `observation` 表，`sourceMessageId` 幂等去重。支持 `Observation` 表向 FHIR Observation 资源的单向转换。
+
+### 10.8 LOINC 检验编码
+
+`loinc_catalog` 表存储 29 个常用 LOINC 编码（CBC/BMP/Lipid/HbA1c/TSH/UA），每个含 unit、参考范围、panel_parent_code。
+
+`LabAnalysisService.autoFlag()` 五级异常标识：LL（<80%下限）/L/H/HH（>150%上限）/N。
+
+趋势查询：`GET /api/v1/patients/{id}/observations?loinc=CODE`。面板展开：`GET /api/v1/loinc/panel/CBC`。
+
+### 10.9 ePrescribing + EPCS
+
+`pharmacy_directory` 表存储药房 NPI + 地址 + EPCS 支持标识。
+
+`PUT /api/v1/prescriptions/{id}/transmit?pharmacyId=` — 生成 NCPDP SCRIPT 10.6 NewRx XML。管制药品（Schedule II-V）触发 `EpcsService` EPCS 审计（含 prescriber NPI + DEA 记录）。
+
+### 10.10 eCQM 临床质量度量
+
+`quality_measure` 表存储 CMS MIPS/MACRA 度量定义（title + SQL 查询）。`QualityMeasureService.calculateReport()` 执行分母/分子/排除项 SQL → 性能率 → 对比 CMS 目标。
+
+种子数据包含 3 个 CMS 度量：CMS122v11（HbA1c 控制）、CMS125v11（乳腺癌筛查）、CMS165v11（高血压控制）。
+
 ---
 
 ## 第十一层：基础设施

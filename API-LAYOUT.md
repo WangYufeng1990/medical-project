@@ -250,6 +250,65 @@ Requires `ADMIN`.
 |--------|------|-------------|
 | GET | `/history` | Key lifecycle audit trail (KEY_INIT / KEY_ROTATION events) |
 
+### CDS — `/api/v1/cds`
+
+Requires `ADMIN` or `DOCTOR`. Clinical Decision Support — pre-prescription screening.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| POST | `/check` | body: {patientId, items[{rxnormCode, drugName}]} | Check drug-drug interactions + drug-allergy contraindications before prescribing |
+
+### Integration — `/api/v1/integration`
+
+Requires `ADMIN` or `DOCTOR`. Mirth Connect JSON integration for ADT and lab results.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| POST | `/adt` | body: AdtEventDTO | ADT event (A01/A03/A08) — upsert Patient by MRN |
+| POST | `/lab-results` | body: LabResultDTO | Batch lab results with sourceMessageId dedup |
+
+### Lab Results — `/api/v1/patients/{id}/observations` + `/api/v1/loinc`
+
+Requires `ADMIN` or `DOCTOR`. Lab trend analysis and LOINC catalog.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/patients/{id}/observations` | `?loinc=` | Lab trend by patient + LOINC code |
+| GET | `/loinc/catalog` | — | Full LOINC dictionary |
+| GET | `/loinc/panel/{parentCode}` | path | LOINC codes grouped by panel (CBC/BMP/LIPID) |
+
+### FHIR Observation — `/api/v1/fhir/Observation`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/Observation/{id}` | ADMIN,DOCTOR | Single FHIR Observation resource |
+| GET | `/Observation?patient=` | ADMIN,DOCTOR | Observations by patient (Bundle) |
+
+### Pharmacy — `/api/v1/pharmacies`
+
+Requires `ADMIN` or `DOCTOR`.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?zip=&state=` | Search pharmacy directory |
+
+### ePrescribing — `/api/v1/prescriptions/{id}/transmit`
+
+Requires `ADMIN` or `DOCTOR`.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| PUT | `/{id}/transmit` | `?pharmacyId=` | Transmit prescription via NCPDP SCRIPT, EPCS audit if controlled substance |
+
+### eCQM — `/api/v1/quality`
+
+Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/measures` | — | List all quality measure definitions |
+| GET | `/measures/{cmsId}/report` | path | Calculate performance report (CMS122/CMS125/CMS165) |
+
 ---
 
 ## Security

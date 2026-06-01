@@ -60,6 +60,11 @@ API docs: http://localhost:8080/doc.html
 | Data-at-Rest Encryption | AES-256-GCM via JPA `@Convert` — transparent encrypt/decrypt with versioned key rotation |
 | Emergency Access | Break-glass endpoint (`/api/v1/emergency`) — 30min expiry + synchronous audit |
 | Data Retention | Scheduled nightly purge — audit logs 6yr (2190 days) |
+| Clinical Decision Support | Drug-Drug Interaction + Drug-Allergy contraindication check (`/api/v1/cds/check`) |
+| Integration Engine | Mirth Connect JSON API — ADT events + lab results with dedup |
+| LOINC Lab Coding | 29-code catalog + auto-flag (LL/L/N/H/HH) + trend analysis |
+| ePrescribing + EPCS | NCPDP SCRIPT NewRx XML generation + controlled substance audit |
+| eCQM Quality Measures | CMS122/125/165 SQL-based performance reports |
 
 ## FHIR R4 Interoperability
 
@@ -95,6 +100,12 @@ US Core compliant: OMB race/ethnicity Coding extensions. SMART on FHIR OAuth2 sc
 | Consent | `/api/v1/consent` | ADMIN |
 | Emergency | `/api/v1/emergency` | ADMIN,DOCTOR |
 | Key Audit | `/api/v1/admin/keys` | ADMIN |
+| CDS | `/api/v1/cds` | ADMIN,DOCTOR |
+| Integration | `/api/v1/integration` | ADMIN,DOCTOR |
+| Lab Results | `/api/v1/patients/{id}/observations` | ADMIN,DOCTOR |
+| LOINC | `/api/v1/loinc` | ADMIN,DOCTOR |
+| Pharmacy | `/api/v1/pharmacies` | ADMIN,DOCTOR |
+| eCQM | `/api/v1/quality` | ADMIN,DOCTOR |
 
 ## Project Structure
 
@@ -115,13 +126,15 @@ medical-server/src/main/java/com/example/medical/
 ├── security/            JwtClaimMapper, LoginUser
 ├── module/
 │   ├── system/          users, roles, menus, auth, emergency access
-│   ├── patient/         patients, patient portal, FHIR, consent
+│   ├── patient/         patients, patient portal, FHIR, consent, FHIR Observation
 │   ├── appointment/     scheduling
-│   ├── prescription/    prescriptions + items
+│   ├── prescription/    prescriptions + items, CDS, ePrescribing, EPCS, pharmacy
 │   ├── billing/         bills + payments lifecycle
 │   ├── chat/            patient-doctor messaging
 │   ├── dashboard/       aggregate stats
-│   └── export/          CSV export
+│   ├── export/          CSV export
+│   ├── integration/     Mirth Connect ADT + lab results JSON API
+│   └── quality/         CMS eCQM quality measures
 └── util/                CsvUtil
 ```
 

@@ -488,7 +488,14 @@ Before:                          After:
 16. BillService             ← 保险理赔状态机
 17. DataRetentionJob        ← 定时数据留存清除
 18. EmergencyAccessController ← Break-Glass 紧急访问
-19. DataInitializer         ← 种子数据覆盖所有模块
+19. CdsService              ← Drug-Drug Interaction + Drug-Allergy 禁忌检查
+20. IntegrationController   ← ADT + Lab Results JSON API（Mirth Connect 对接）
+21. FhirObservationController ← FHIR Observation 端点 + 异常解释 Coding
+22. LabAnalysisService      ← LOINC 异常自动标识（LL/L/N/H/HH）+ 趋势查询
+23. EpcsService             ← EPCS 管制药品传输审计
+24. NcpdpScriptService      ← NCPDP SCRIPT NewRx XML 生成
+25. QualityMeasureService   ← eCQM SQL 查询 + CMS 性能率计算
+26. DataInitializer         ← 种子数据覆盖所有模块
 ```
 
 ---

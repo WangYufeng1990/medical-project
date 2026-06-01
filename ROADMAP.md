@@ -1,10 +1,12 @@
-# Round 5–9: 医疗进阶功能规划
+# Round 5–9: 医疗进阶功能规划 ✅ 全部完成
 
 > 基于当前 HIPAA + FHIR + US-Model 三支柱已完成，向临床决策支持、检验互操作、电子处方方向扩展。
+>
+> **状态：5/5 Rounds 已完成 (2026-06-01)**
 
 ---
 
-## Round 5: CDS — 临床决策支持（Drug-Drug / Drug-Allergy 交互检查）
+## Round 5: CDS — 临床决策支持 ✅ 完成
 
 ### 目标
 医生开处方时，系统自动检查药物相互作用和过敏禁忌，阻止危险处方。
@@ -73,7 +75,7 @@ CREATE TABLE cds_override (
 
 ---
 
-## Round 6: 集成引擎对接 — ADT + 检验结果 JSON API
+## Round 6: 集成引擎对接 — ADT + 检验结果 JSON API ✅ 完成
 
 ### 背景
 
@@ -180,7 +182,7 @@ CREATE TABLE observation (
 
 ---
 
-## Round 7: LOINC 检验编码 + 异常标识 + 趋势分析
+## Round 7: LOINC 检验编码 + 异常标识 + 趋势分析 ✅ 完成
 
 ### 目标
 基于 Round 6 的 `observation` 表，建立 LOINC 编码知识库，支持参考范围自动匹配、异常标识和趋势查询。
@@ -223,7 +225,7 @@ CREATE TABLE loinc_catalog (
 
 ---
 
-## Round 8: ePrescribing — 电子处方
+## Round 8: ePrescribing + EPCS ✅ 完成
 
 ### 目标
 支持电子处方发送到药房和 EPCS（管制药品电子处方）合规。
@@ -267,7 +269,7 @@ CREATE TABLE pharmacy_directory (
 
 ---
 
-## Round 9: eCQM — 临床质量度量
+## Round 9: eCQM — 临床质量度量 ✅ 完成
 
 ### 目标
 计算 CMS MIPS/MACRA 要求的临床质量指标。
@@ -313,44 +315,25 @@ CREATE TABLE quality_measure (
 
 ---
 
-## 执行优先级
+## 执行优先级（全部完成）
 
 ```
-Round 5  CDS (Drug-Drug + Drug-Allergy)          ← 最高优先，面试最常问
-Round 6  集成引擎对接 (ADT + Lab Results JSON)      ← 医院集成必备
-Round 7  LOINC 编码 + 异常标识 + 趋势分析          ← 依赖 Round 6 的 observation 表
-Round 8  ePrescribing + EPCS                      ← 法规要求但不紧急
-Round 9  eCQM 临床质量度量                        ← 依赖前面所有模块的数据
+Round 5  CDS (Drug-Drug + Drug-Allergy)          ✅ 2026-06-01
+Round 6  集成引擎对接 (ADT + Lab Results JSON)      ✅ 2026-06-01
+Round 7  LOINC 编码 + 异常标识 + 趋势分析          ✅ 2026-06-01
+Round 8  ePrescribing + EPCS                      ✅ 2026-06-01
+Round 9  eCQM 临床质量度量                        ✅ 2026-06-01
 ```
 
-**建议路径：**
-```
-当前项目 → Round 5 (CDS) → Round 6 (Integration API) → Round 7 (LOINC)
-                         ↘ Round 8 (eRx)              → Round 9 (eCQM)
-```
-CDS 和 Integration 是独立的两条线，可以在 CDS 之后并行或顺序做。
+**无需新增 Maven 依赖。** 所有 Rounds 纯业务逻辑 + 现有 Spring Boot/HAPI FHIR 栈实现。
 
----
+## 实际文件统计
 
-## 新增 Maven 依赖预估
-
-无需新增依赖。所有 Rounds 纯业务逻辑 + 现有 Spring Boot/HAPI FHIR 栈即可实现。
-
----
-
-## 总文件预估
-
-| Round | 新建文件 | 修改文件 |
-|-------|---------|---------|
-| 5 CDS | ~8 | 2 |
-| 6 Integration | ~7 | 1 |
-| 7 LOINC | ~4 | 1 |
-| 8 ePrescribing | ~6 | 1 |
-| 9 eCQM | ~5 | 1 |
-| **合计** | **~30** | **6** |
-
----
-
-## 下一步
-
-准备好后说"开始 Round 5"，我会按 CDS → HL7 v2 → LOINC 的顺序依次实现。
+| Round | 新建文件 | 修改文件 | Commit |
+|-------|---------|---------|--------|
+| 5 CDS | 9 | 3 | `4390489` |
+| 6 Integration | 8 | 2 | `290476d` |
+| 7 LOINC | 4 | 2 | `6fbeb07` |
+| 8 ePrescribing | 5 | 3 | `5a08006` |
+| 9 eCQM | 4 | 2 | `13800ec` |
+| **合计** | **30** | **12** | — |
