@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -32,14 +33,15 @@ public class DataRetentionJob {
     @Value("${app.retention.soft-delete-days:365}")
     private int softDeleteRetentionDays;
 
+    @Transactional
     @Scheduled(cron = "${app.retention.cron:0 0 3 * * ?}")
     public void purgeExpiredAuditLogs() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(auditLogRetentionDays);
         try {
-            auditLogRepository.deleteByCreateTimeBefore(cutoff);
-            log.info("Purged audit logs older than {} days (before {})", auditLogRetentionDays, cutoff);
+            int archived = auditLogRepository.archiveByCreateTimeBefore(cutoff);
+            log.info("Archived {} audit logs older than {} days (before {})", archived, auditLogRetentionDays, cutoff);
         } catch (Exception e) {
-            log.error("Failed to purge audit logs", e);
+            log.error("Failed to archive audit logs", e);
         }
     }
 }

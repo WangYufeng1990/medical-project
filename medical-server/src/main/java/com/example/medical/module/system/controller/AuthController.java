@@ -1,5 +1,6 @@
 package com.example.medical.module.system.controller;
 
+import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.LoginRequest;
 import com.example.medical.module.system.dto.LoginResponse;
@@ -18,16 +19,19 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
+    @Auditable(module = "auth", action = "LOGIN_SUCCESS")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return Result.ok(authService.login(request));
     }
 
     @PostMapping("/refresh")
+    @Auditable(module = "auth", action = "TOKEN_REFRESH")
     public Result<LoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return Result.ok(authService.refresh(request.getRefreshToken()));
     }
 
     @PostMapping("/logout")
+    @Auditable(module = "auth", action = "LOGOUT")
     public Result<Void> logout() {
         return Result.ok();
     }

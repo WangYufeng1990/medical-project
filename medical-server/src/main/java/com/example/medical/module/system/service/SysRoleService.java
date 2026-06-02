@@ -1,6 +1,7 @@
 package com.example.medical.module.system.service;
 
 import cn.hutool.core.util.StrUtil;
+import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.system.dto.SysRoleFormDTO;
@@ -33,6 +34,7 @@ public class SysRoleService {
     }
 
     @Transactional
+    @Auditable(module = "system", action = "CREATE_ROLE")
     public void create(SysRoleFormDTO dto) {
         if (sysRoleRepository.existsByRoleCode(dto.getRoleCode())) {
             throw new BusinessException(ResultCode.CONFLICT, "Role code already exists");
@@ -41,6 +43,7 @@ public class SysRoleService {
     }
 
     @Transactional
+    @Auditable(module = "system", action = "UPDATE_ROLE")
     public void update(Long id, SysRoleFormDTO dto) {
         SysRole role = sysRoleRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Role not found"));
@@ -53,6 +56,7 @@ public class SysRoleService {
     }
 
     @Transactional
+    @Auditable(module = "system", action = "DELETE_ROLE")
     public void delete(Long id) {
         sysRoleRepository.deleteById(id);
     }

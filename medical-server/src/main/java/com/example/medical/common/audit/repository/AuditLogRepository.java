@@ -3,6 +3,9 @@ package com.example.medical.common.audit.repository;
 import com.example.medical.common.audit.AuditLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,5 +21,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
 
     List<AuditLog> findByCreateTimeBetweenOrderByCreateTimeDesc(LocalDateTime start, LocalDateTime end);
 
-    void deleteByCreateTimeBefore(LocalDateTime cutoff);
+    @Modifying
+    @Query("UPDATE AuditLog a SET a.archived = 1 WHERE a.createTime < :cutoff AND a.archived = 0")
+    int archiveByCreateTimeBefore(@Param("cutoff") LocalDateTime cutoff);
 }

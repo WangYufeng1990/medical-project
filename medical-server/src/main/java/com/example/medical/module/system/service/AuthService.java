@@ -35,6 +35,8 @@ public class AuthService {
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
+    private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
+    private final jakarta.servlet.http.HttpServletRequest request;
 
     @Value("${okta.client-id:}")
     private String clientId;
@@ -54,11 +56,16 @@ public class AuthService {
     @SuppressWarnings("unchecked")
     public LoginResponse login(LoginRequest request) {
         SysUser user = sysUserRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password"));
+                .orElseThrow(() -> {
+                    auditLoginFailure(null, request.getUsername(), "USER_NOT_FOUND");
+                    return new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+                });
         if (user.getStatus() != null && user.getStatus() == 0) {
+            auditLoginFailure(user.getId(), user.getUsername(), "ACCOUNT_DISABLED");
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }
         if (isLocked(user)) {
+            auditLoginFailure(user.getId(), user.getUsername(), "ACCOUNT_LOCKED");
             throw new BusinessException(ResultCode.FORBIDDEN,
                     "Account is temporarily locked. Try again later.");
         }
@@ -70,6 +77,7 @@ public class AuthService {
         if (devMode) {
             if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                 recordFailedAttempt(user);
+                auditLoginFailure(user.getId(), user.getUsername(), "BAD_CREDENTIALS");
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(user);
@@ -78,6 +86,7 @@ public class AuthService {
             tokens = callOktaTokenEndpoint(request.getUsername(), request.getPassword());
             if (tokens == null) {
                 recordFailedAttempt(user);
+                auditLoginFailure(user.getId(), user.getUsername(), "OKTA_AUTH_FAILED");
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(user);
@@ -85,6 +94,17 @@ public class AuthService {
 
         return LoginResponse.fromEntity(user, roles, permissions,
                 tokens.accessToken(), tokens.refreshToken());
+    }
+
+    private void auditLoginFailure(Long userId, String username, String reason) {
+        try {
+            auditLogWriter.writeAsync(userId, username, null,
+                    "auth", "LOGIN_FAILED", username,
+                    "reason=" + reason,
+                    request != null ? request.getRemoteAddr() : "unknown",
+                    java.time.Instant.now());
+        } catch (Exception ignored) {
+        }
     }
 
     public LoginResponse refresh(String refreshToken) {

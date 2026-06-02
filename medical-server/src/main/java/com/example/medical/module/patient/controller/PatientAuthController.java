@@ -39,6 +39,8 @@ public class PatientAuthController {
     private final PatientAuthRepository patientAuthRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
+    private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
+    private final jakarta.servlet.http.HttpServletRequest httpRequest;
 
     @Value("${okta.client-id:}")
     private String clientId;
@@ -56,13 +58,19 @@ public class PatientAuthController {
     private boolean devMode;
 
     @PostMapping("/login")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGIN_SUCCESS")
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
         PatientAuth auth = patientAuthRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password"));
+                .orElseThrow(() -> {
+                    auditLoginFailure(null, request.getUsername(), "USER_NOT_FOUND");
+                    return new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+                });
         if (auth.getStatus() != null && auth.getStatus() == 0) {
+            auditLoginFailure(auth.getPatientId(), request.getUsername(), "ACCOUNT_DISABLED");
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }
         if (isLocked(auth)) {
+            auditLoginFailure(auth.getPatientId(), request.getUsername(), "ACCOUNT_LOCKED");
             throw new BusinessException(ResultCode.FORBIDDEN,
                     "Account is temporarily locked. Try again later.");
         }
@@ -74,6 +82,7 @@ public class PatientAuthController {
         if (devMode) {
             if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
                 recordFailedAttempt(auth);
+                auditLoginFailure(auth.getPatientId(), request.getUsername(), "BAD_CREDENTIALS");
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(auth);
@@ -82,6 +91,7 @@ public class PatientAuthController {
             tokens = callOktaPasswordGrant(auth.getUsername(), request.getPassword());
             if (tokens == null) {
                 recordFailedAttempt(auth);
+                auditLoginFailure(auth.getPatientId(), request.getUsername(), "OKTA_AUTH_FAILED");
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(auth);
@@ -92,6 +102,7 @@ public class PatientAuthController {
     }
 
     @PostMapping("/refresh")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH")
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody PatientRefreshRequest request) {
         if (isBlank(clientId) || isBlank(issuerUri)) {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Token refresh not available in dev mode — log in again");
@@ -180,6 +191,17 @@ public class PatientAuthController {
         auth.setLockedUntil(null);
         auth.setLastLoginTime(LocalDateTime.now());
         patientAuthRepository.save(auth);
+    }
+
+    private void auditLoginFailure(Long patientId, String username, String reason) {
+        try {
+            auditLogWriter.writeAsync(null, username, patientId,
+                    "auth", "PATIENT_LOGIN_FAILED", username,
+                    "reason=" + reason,
+                    httpRequest != null ? httpRequest.getRemoteAddr() : "unknown",
+                    java.time.Instant.now());
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean isLocked(PatientAuth auth) {

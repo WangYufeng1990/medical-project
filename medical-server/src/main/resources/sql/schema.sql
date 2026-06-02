@@ -242,10 +242,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail VARCHAR(500) DEFAULT NULL,
     ip VARCHAR(50) DEFAULT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    row_hash VARCHAR(64) DEFAULT NULL,
+    archived TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     INDEX idx_user_id (user_id),
     INDEX idx_create_time (create_time),
-    INDEX idx_target_id (target_id)
+    INDEX idx_target_id (target_id),
+    INDEX idx_archived (archived)
 );
 
 CREATE TABLE IF NOT EXISTS patient_auth (

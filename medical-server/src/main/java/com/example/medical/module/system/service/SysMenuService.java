@@ -1,5 +1,6 @@
 package com.example.medical.module.system.service;
 
+import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.system.dto.SysMenuFormDTO;
@@ -29,11 +30,13 @@ public class SysMenuService {
     }
 
     @Transactional
+    @Auditable(module = "system", action = "CREATE_MENU")
     public void create(SysMenuFormDTO dto) {
         sysMenuRepository.save(dto.toEntity());
     }
 
     @Transactional
+    @Auditable(module = "system", action = "UPDATE_MENU")
     public void update(Long id, SysMenuFormDTO dto) {
         SysMenu menu = sysMenuRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Menu not found"));
@@ -42,6 +45,7 @@ public class SysMenuService {
     }
 
     @Transactional
+    @Auditable(module = "system", action = "DELETE_MENU")
     public void delete(Long id) {
         if (sysMenuRepository.countByParentId(id) > 0) {
             throw new BusinessException(ResultCode.CONFLICT, "Delete child menus first");

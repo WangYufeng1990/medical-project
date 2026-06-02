@@ -14,10 +14,13 @@ import java.time.LocalDateTime;
 public class PatientVO {
 
     private Long id;
+    @PhiField
     private String mrn;
+    @PhiField
     private String ssnLast4;
     @PhiField
     private String name;
+    @PhiField
     private LocalDate dateOfBirth;
     private String sexAtBirth;
     private String genderIdentity;
@@ -26,6 +29,7 @@ public class PatientVO {
     private String preferredLanguage;
     private String maritalStatus;
     private String patientStatus;
+    @PhiField
     private String primaryCareProvider;
     @PhiField
     private String phoneMobile;
@@ -35,18 +39,31 @@ public class PatientVO {
     private String phoneWork;
     @PhiField
     private String email;
+    @PhiField
     private String addressLine1;
+    @PhiField
     private String addressLine2;
+    @PhiField
     private String city;
+    @PhiField
     private String state;
+    @PhiField
     private String zipCode;
+    @PhiField
     private String emergencyContactName;
+    @PhiField
     private String emergencyContactPhone;
+    @PhiField
     private String emergencyContactRelation;
+    @PhiField
     private String insurancePayer;
+    @PhiField
     private String insuranceMemberId;
+    @PhiField
     private String insuranceGroupNumber;
+    @PhiField
     private String medicalHistory;
+    @PhiField
     private String allergies;
     private LocalDateTime createTime;
 
