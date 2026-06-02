@@ -31,6 +31,7 @@ public class SysUser extends BaseEntity {
     @Column(name = "phone")
     private String phone;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "email")
     private String email;
 

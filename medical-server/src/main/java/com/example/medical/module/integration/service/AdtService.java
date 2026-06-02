@@ -41,6 +41,11 @@ public class AdtService {
 
         patientRepository.save(patient);
         log.info("ADT {}: patient mrn={} id={}", event.getEventType(),
-                event.getPatient().getMrn(), patient.getId());
+                maskMrn(event.getPatient().getMrn()), patient.getId());
+    }
+
+    private static String maskMrn(String mrn) {
+        if (mrn == null || mrn.length() <= 4) return "****";
+        return "****" + mrn.substring(mrn.length() - 4);
     }
 }

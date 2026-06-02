@@ -43,7 +43,7 @@ public class CdsService {
                             items.get(i).getDrugName() + " + " + items.get(j).getDrugName(),
                             di.getDescription(),
                             di.getRecommendation()));
-                    log.warn("CDS Drug-Drug Interaction: {} + {} = {} ({})",
+                    log.info("CDS Drug-Drug Interaction: {} + {} = {} ({})",
                             items.get(i).getDrugName(), items.get(j).getDrugName(),
                             di.getSeverity(), di.getDescription());
                 }

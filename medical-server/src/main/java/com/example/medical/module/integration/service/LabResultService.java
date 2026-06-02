@@ -35,7 +35,7 @@ public class LabResultService {
                 .orElse(null);
 
         if (patient == null) {
-            log.warn("Lab result ignored — patient MRN not found: {}", dto.getPatientMrn());
+            log.warn("Lab result ignored — patient MRN not found: {}", maskMrn(dto.getPatientMrn()));
             return 0;
         }
 
@@ -57,7 +57,12 @@ public class LabResultService {
 
         observationRepository.saveAll(observations);
         log.info("Lab results saved: {} observations for patient mrn={}",
-                observations.size(), dto.getPatientMrn());
+                observations.size(), maskMrn(dto.getPatientMrn()));
         return observations.size();
+    }
+
+    private static String maskMrn(String mrn) {
+        if (mrn == null || mrn.length() <= 4) return "****";
+        return "****" + mrn.substring(mrn.length() - 4);
     }
 }

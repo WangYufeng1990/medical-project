@@ -50,6 +50,6 @@ app:
     soft-delete-days: 365
     cron: "0 0 3 * * ?"
   aes:
-    key: ${AES_KEY:change-me-in-production-must-be-32-bytes}
+    key: ${AES_KEY}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}

@@ -11,6 +11,12 @@ spring:
   cache:
     type: none
 
+app:
+  aes:
+    key: dev-key-for-local-testing-must-be-32-bytes
+  rate-limit:
+    enabled: false
+
 server:
   port: 8080
 
@@ -22,7 +28,3 @@ okta:
   client-id:
   client-secret:
   issuer-uri:
-
-app:
-  rate-limit:
-    enabled: false
