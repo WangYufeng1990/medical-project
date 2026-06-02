@@ -64,17 +64,30 @@ public class PatientAuthController {
                     "Account is temporarily locked. Try again later.");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
-            recordFailedAttempt(auth);
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
-        }
+        boolean isDevMode = isBlank(clientId) || isBlank(issuerUri);
 
-        resetFailedAttempts(auth);
+        if (isDevMode) {
+            if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
+                recordFailedAttempt(auth);
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+            }
+            resetFailedAttempts(auth);
+        }
 
         Patient patient = patientRepository.findById(auth.getPatientId())
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
 
-        TokenPair tokens = exchangeForTokens(auth.getUsername(), request.getPassword(), patient.getId());
+        TokenPair tokens = isDevMode
+                ? generateDevToken(patient.getId(), auth.getUsername())
+                : callOktaPasswordGrant(auth.getUsername(), request.getPassword());
+
+        if (!isDevMode && tokens == null) {
+            recordFailedAttempt(auth);
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+        }
+        if (!isDevMode) {
+            resetFailedAttempts(auth);
+        }
 
         return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
                 patient.getId(), patient.getName(), auth.getUsername()));
@@ -88,13 +101,6 @@ public class PatientAuthController {
         TokenPair tokens = callOktaRefreshEndpoint(request.getRefreshToken());
         return Result.ok(new PatientLoginResponse(tokens.accessToken(), tokens.refreshToken(),
                 null, null, null));
-    }
-
-    private TokenPair exchangeForTokens(String username, String password, Long patientId) {
-        if (isBlank(clientId) || isBlank(issuerUri)) {
-            return generateDevToken(patientId, username);
-        }
-        return callOktaPasswordGrant(username, password);
     }
 
     private TokenPair generateDevToken(Long patientId, String username) {
@@ -113,27 +119,31 @@ public class PatientAuthController {
     }
 
     private TokenPair callOktaPasswordGrant(String username, String password) {
-        RestTemplate rt = new RestTemplate();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.setBasicAuth(clientId, clientSecret);
+        try {
+            RestTemplate rt = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.setBasicAuth(clientId, clientSecret);
 
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "password");
-        body.add("username", username);
-        body.add("password", password);
-        body.add("scope", "openid profile groups");
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("grant_type", "password");
+            body.add("username", username);
+            body.add("password", password);
+            body.add("scope", "openid profile groups");
 
-        ResponseEntity<Map> response = rt.exchange(
-                issuerUri + "/v1/token", HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+            ResponseEntity<Map> response = rt.exchange(
+                    issuerUri + "/v1/token", HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
 
-        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Okta authentication failed");
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return null;
+            }
+            Map<String, Object> res = response.getBody();
+            return new TokenPair(
+                    (String) res.get("access_token"),
+                    (String) res.get("refresh_token"));
+        } catch (Exception e) {
+            return null;
         }
-        Map<String, Object> res = response.getBody();
-        return new TokenPair(
-                (String) res.get("access_token"),
-                (String) res.get("refresh_token"));
     }
 
     private TokenPair callOktaRefreshEndpoint(String refreshToken) {

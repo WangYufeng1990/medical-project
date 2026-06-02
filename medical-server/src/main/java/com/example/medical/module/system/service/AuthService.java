@@ -7,6 +7,7 @@ import com.example.medical.module.system.dto.LoginResponse;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -58,18 +60,30 @@ public class AuthService {
                     "Account is temporarily locked. Try again later.");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            recordFailedAttempt(user);
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
-        }
+        boolean isDevMode = isBlank(clientId) || isBlank(issuerUri);
 
-        resetFailedAttempts(user);
+        if (isDevMode) {
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                recordFailedAttempt(user);
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+            }
+            resetFailedAttempts(user);
+        }
 
         List<String> roles = sysUserRepository.findRoleCodesByUserId(user.getId());
         List<String> permissions = sysUserRepository.findPermissionsByUserId(user.getId());
 
-        TokenPair tokens = exchangeForTokens(user.getId(), user.getUsername(),
-                request.getPassword(), roles);
+        TokenPair tokens = isDevMode
+                ? generateDevToken(user.getId(), user.getUsername(), roles)
+                : callOktaTokenEndpoint(request.getUsername(), request.getPassword());
+
+        if (!isDevMode) {
+            if (tokens == null) {
+                recordFailedAttempt(user);
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+            }
+            resetFailedAttempts(user);
+        }
 
         return LoginResponse.fromEntity(user, roles, permissions,
                 tokens.accessToken(), tokens.refreshToken());
@@ -101,14 +115,6 @@ public class AuthService {
                 userId, username, List.of(), List.of());
     }
 
-    private TokenPair exchangeForTokens(Long userId, String username,
-                                         String password, List<String> roles) {
-        if (isBlank(clientId) || isBlank(issuerUri)) {
-            return generateDevToken(userId, username, roles);
-        }
-        return callOktaTokenEndpoint(username, password);
-    }
-
     private TokenPair generateDevToken(Long userId, String username, List<String> roles) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -125,31 +131,36 @@ public class AuthService {
     }
 
     private TokenPair callOktaTokenEndpoint(String username, String password) {
-        RestTemplate restTemplate = new RestTemplate();
+        try {
+            RestTemplate restTemplate = new RestTemplate();
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.setBasicAuth(clientId, clientSecret);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.setBasicAuth(clientId, clientSecret);
 
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "password");
-        body.add("username", username);
-        body.add("password", password);
-        body.add("scope", "openid profile email groups");
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("grant_type", "password");
+            body.add("username", username);
+            body.add("password", password);
+            body.add("scope", "openid profile email groups");
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                issuerUri + "/v1/token",
-                HttpMethod.POST,
-                new HttpEntity<>(body, headers),
-                Map.class);
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    issuerUri + "/v1/token",
+                    HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    Map.class);
 
-        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Okta authentication failed");
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return null;
+            }
+            Map<String, Object> res = response.getBody();
+            return new TokenPair(
+                    (String) res.get("access_token"),
+                    (String) res.get("refresh_token"));
+        } catch (Exception e) {
+            log.warn("Okta token endpoint call failed for user={}: {}", username, e.getMessage());
+            return null;
         }
-        Map<String, Object> res = response.getBody();
-        return new TokenPair(
-                (String) res.get("access_token"),
-                (String) res.get("refresh_token"));
     }
 
     private Map<String, Object> callOktaRefreshEndpoint(String refreshToken) {
