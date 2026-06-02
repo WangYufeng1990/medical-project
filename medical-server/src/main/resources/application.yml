@@ -43,6 +43,7 @@ springdoc:
 
 app:
   security:
+    dev-mode: false
     access-token-expiry-seconds: 7200
     refresh-token-expiry-seconds: 2592000
   retention:

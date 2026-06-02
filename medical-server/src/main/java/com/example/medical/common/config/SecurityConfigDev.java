@@ -13,7 +13,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 @Configuration
-@Profile("!prod")
+@Profile({"dev", "h2"})
 public class SecurityConfigDev {
 
     private static final String RAW_KEY = "medical-dev-jwt-secret-key-for-local-development-only";

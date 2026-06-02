@@ -40,17 +40,20 @@ public class PatientAuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
 
-    @Value("${okta.client-id:#{null}}")
+    @Value("${okta.client-id:}")
     private String clientId;
 
-    @Value("${okta.client-secret:#{null}}")
+    @Value("${okta.client-secret:}")
     private String clientSecret;
 
-    @Value("${okta.issuer-uri:#{null}}")
+    @Value("${okta.issuer-uri:}")
     private String issuerUri;
 
     @Value("${app.security.access-token-expiry-seconds:7200}")
     private long accessTokenExpirySeconds;
+
+    @Value("${app.security.dev-mode:false}")
+    private boolean devMode;
 
     @PostMapping("/login")
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
@@ -64,28 +67,23 @@ public class PatientAuthController {
                     "Account is temporarily locked. Try again later.");
         }
 
-        boolean isDevMode = isBlank(clientId) || isBlank(issuerUri);
+        Patient patient = patientRepository.findById(auth.getPatientId())
+                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
 
-        if (isDevMode) {
+        TokenPair tokens;
+        if (devMode) {
             if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
                 recordFailedAttempt(auth);
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(auth);
-        }
-
-        Patient patient = patientRepository.findById(auth.getPatientId())
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
-
-        TokenPair tokens = isDevMode
-                ? generateDevToken(patient.getId(), auth.getUsername())
-                : callOktaPasswordGrant(auth.getUsername(), request.getPassword());
-
-        if (!isDevMode && tokens == null) {
-            recordFailedAttempt(auth);
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
-        }
-        if (!isDevMode) {
+            tokens = generateDevToken(patient.getId(), auth.getUsername());
+        } else {
+            tokens = callOktaPasswordGrant(auth.getUsername(), request.getPassword());
+            if (tokens == null) {
+                recordFailedAttempt(auth);
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
+            }
             resetFailedAttempts(auth);
         }
 
