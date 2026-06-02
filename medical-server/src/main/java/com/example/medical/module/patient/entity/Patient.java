@@ -2,6 +2,7 @@ package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
 import com.example.medical.common.config.AesAttributeConverter;
+import com.example.medical.common.config.LocalDateAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -29,6 +30,7 @@ public class Patient extends BaseEntity {
     @Column(name = "name")
     private String name;
 
+    @Convert(converter = LocalDateAttributeConverter.class)
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
@@ -53,7 +55,8 @@ public class Patient extends BaseEntity {
     @Column(name = "patient_status", length = 20)
     private String patientStatus;
 
-    @Column(name = "primary_care_provider", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "primary_care_provider")
     private String primaryCareProvider;
 
     @Convert(converter = AesAttributeConverter.class)
@@ -72,22 +75,28 @@ public class Patient extends BaseEntity {
     @Column(name = "email")
     private String email;
 
-    @Column(name = "address_line1", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "address_line1")
     private String addressLine1;
 
-    @Column(name = "address_line2", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "address_line2")
     private String addressLine2;
 
-    @Column(name = "city", length = 50)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "city")
     private String city;
 
-    @Column(name = "state", length = 2)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "state")
     private String state;
 
-    @Column(name = "zip_code", length = 10)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "zip_code")
     private String zipCode;
 
-    @Column(name = "emergency_contact_name", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "emergency_contact_name")
     private String emergencyContactName;
 
     @Convert(converter = AesAttributeConverter.class)
@@ -97,19 +106,23 @@ public class Patient extends BaseEntity {
     @Column(name = "emergency_contact_relation", length = 50)
     private String emergencyContactRelation;
 
-    @Column(name = "insurance_payer", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "insurance_payer")
     private String insurancePayer;
 
     @Convert(converter = AesAttributeConverter.class)
     @Column(name = "insurance_member_id")
     private String insuranceMemberId;
 
-    @Column(name = "insurance_group_number", length = 50)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "insurance_group_number")
     private String insuranceGroupNumber;
 
-    @Column(name = "medical_history")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "medical_history", length = 4000)
     private String medicalHistory;
 
-    @Column(name = "allergies")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "allergies", length = 2000)
     private String allergies;
 }
