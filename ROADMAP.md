@@ -337,3 +337,153 @@ Round 9  eCQM 临床质量度量                        ✅ 2026-06-01
 | 8 ePrescribing | 5 | 3 | `5a08006` |
 | 9 eCQM | 4 | 2 | `13800ec` |
 | **合计** | **30** | **12** | — |
+
+---
+
+# Round 10: 剩余 PHI 字段落盘加密 ✅ 完成
+
+> **状态：已完成 (2026-06-02)**
+
+Patient 表新增 12 个字段加密：address、city/state/zip、emergencyContactName、insurancePayer/GroupNumber、primaryCareProvider、medicalHistory(TEXT→VARCHAR 4000)、allergies(VARCHAR→2000)、dateOfBirth(LocalDate→VARCHAR 100)。
+
+`LocalDateAttributeConverter` 新建。Patient 表 24/31 字段已加密。
+
+---
+
+# Round 11–13: HIPAA/21 CFR Part 11 合规安全审计
+
+> **来源：** 地狱级合规审计 (2026-06-02)
+> **状态：待执行**
+
+---
+
+## Round 11: CRITICAL 红线修复
+
+### 11.1 登录审计追踪 (21 CFR Part 11 §11.300)
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 登录成功审计 | `AuthService.login()` | 添加 `@Auditable(module="auth", action="LOGIN_SUCCESS")` |
+| 登录失败审计 | `AuthService.login()` | 新增 `@AfterThrowing` 切面捕获失败事件 |
+| 患者登录审计 | `PatientAuthController.login()` | 同上 |
+| 令牌刷新审计 | `AuthService.refresh()`、`PatientAuthController.refresh()` | 添加 `@Auditable` |
+| 登出审计 | `AuthController.logout()` | 添加 `@Auditable` |
+
+### 11.2 生产 MySQL SSL 修复
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 补全 SSL 参数 | `application-prod.yml:3` | JDBC URL 添加 `useSSL=true&requireSSL=true&verifyServerCertificate=true` |
+
+### 11.3 审计日志防篡改
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 审计表只追加 | `schema.sql` | 添加数据库 TRIGGER 阻止 UPDATE/DELETE |
+| 哈希链完整性 | `AuditLog.java` | 添加 `SHA-256(prev_hash \|\| this_row)` 列 |
+| 移除物理删除 | `DataRetentionJob.java` | `deleteByCreateTimeBefore()` → 改为软删除 + 归档 |
+| 不可变实体 | `AuditLog.java` | 继承 `BaseEntity`，添加 `@SQLRestriction` |
+
+### 11.4 PatientVO @PhiField 补全
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 15 个字段标注 | `PatientVO.java` | `addressLine1/2`、`city`、`state`、`zipCode`、`dateOfBirth`、`medicalHistory`、`allergies`、`emergencyContactName/Phone/Relation`、`insurancePayer/MemberId/GroupNumber`、`primaryCareProvider` 添加 `@PhiField` |
+
+### 11.5 角色/菜单权限变更审计
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 角色 CRUD 审计 | `SysRoleService.java` | create/update/delete 添加 `@Auditable` |
+| 菜单 CRUD 审计 | `SysMenuService.java` | create/update/delete 添加 `@Auditable` |
+
+---
+
+## Round 12: HIGH 优先修复
+
+### 12.1 电子签名 (21 CFR Part 11 §11.200)
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 处方签署双因素 | `PrescriptionController.transmit()` | 要求重新输入密码 + TOTP |
+| 签名审计记录 | `EpcsService.java` | 实现 TODO 注释中的 EPCS 双因素验证 |
+| 账单/同意签名 | `BillController`、`ConsentController` | 关键操作需要签名确认 |
+
+### 12.2 审计日志归档（非删除）
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| WORM 归档服务 | 新建 `AuditArchiveService.java` | 6 年前记录移至仅追加存储 |
+| 移除硬删除 | `DataRetentionJob.java` | 改为标记 `archived=true` |
+
+### 12.3 AES 密钥派生升级 (NIST SP 800-132)
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| PBKDF2 替代 SHA-256 | `AesCryptoUtil.deriveKey()` | 使用 PBKDF2-HMAC-SHA256，310,000 迭代 + 随机盐 |
+
+### 12.4 无分页查询添加分页
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| FHIR Patient 分页 | `FhirPatientController.java` | 添加 `_count`/`_offset` 参数，max=500 |
+| FHIR Observation 分页 | `FhirObservationController.java` | 同上 |
+| 其他 findAll() 端点 | 6 个 controller | 添加分页或上限 |
+
+### 12.5 CSV 流式导出
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| StreamingResponseBody | `ExportController.java` | 逐行写入而非内存构建 String |
+| JPA Stream 查询 | `PatientRepository` | 添加 `streamAll()` 方法 |
+
+### 12.6 PatientService.update() PHI 掩码
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| phiAccess=true | `PatientService.update()` | 防止 `PatientFormDTO` 序列化到审计详情 |
+
+---
+
+## Round 13: MEDIUM 优化加固
+
+### 13.1 刷新令牌限速
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| refresh URI 限速 | `RateLimiterConfig.java` | 添加 `/refresh` 匹配，20 次/分钟/IP |
+
+### 13.2 Okta RestTemplate 池化
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 共享 RestTemplate Bean | `AuthService.java`、`PatientAuthController.java` | 连接池 + 5s 超时 + 断路器 |
+
+### 13.3 账户锁定原子化
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 原子失败计数 | `SysUserRepository.java` | `@Modifying UPDATE SET failed_attempts = failed_attempts + 1` |
+
+### 13.4 紧急访问原因净化
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 预定义原因码 | `EmergencyAccessController.java` | 限制 `reason` 为枚举值或正则净化 |
+
+### 13.5 移除硬编码密钥
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| 强制环境变量 | `application-*.yml` | 移除 dev/h2 配置中的默认密钥和密码 |
+| Vault 集成 | 新建 | 可选：集成 HashiCorp Vault |
+
+---
+
+## 执行优先级
+
+```
+Round 11  Critical 红线     ← 本周必须完成 (5 项)
+Round 12  HIGH 优先         ← 本月完成 (6 项)
+Round 13  MEDIUM 优化加固   ← 下月完成 (5 项)
+```
