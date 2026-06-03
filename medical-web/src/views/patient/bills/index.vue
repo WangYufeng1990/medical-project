@@ -36,7 +36,7 @@
   </el-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getMyBills } from '../../../api/patientPortal'
 

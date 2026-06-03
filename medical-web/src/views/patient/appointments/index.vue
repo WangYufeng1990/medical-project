@@ -29,7 +29,7 @@
   </el-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getMyAppointments } from '../../../api/patientPortal'
 

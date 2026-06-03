@@ -50,7 +50,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getProfile, updateProfile, changePassword } from '../../api/profile'
@@ -58,8 +58,8 @@ import { getProfile, updateProfile, changePassword } from '../../api/profile'
 const profile = ref({})
 const saving = ref(false)
 const savingPwd = ref(false)
-const profileFormRef = ref(null)
-const passwordFormRef = ref(null)
+const profileFormRef = ref<any>(null)
+const passwordFormRef = ref<any>(null)
 
 const profileForm = reactive({ realName: '', phone: '', email: '', gender: 0 })
 const profileRules = {

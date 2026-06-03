@@ -74,13 +74,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
 
-const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), statusFilter = ref(null)
-const dialogVisible = ref(false), editId = ref(null), submitting = ref(false), formRef = ref(null)
+const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), statusFilter = ref<any>(null)
+const dialogVisible = ref(false), editId = ref<any>(null), submitting = ref(false), formRef = ref<any>(null)
 const form = reactive({ patientId: null, doctorId: null, appointmentTime: '', description: '', notes: '', status: 0 })
 const rules = {
   patientId: [{ required: true, message: 'Required', trigger: 'blur' }],
@@ -96,7 +96,7 @@ async function fetchData() {
   } finally { loading.value = false }
 }
 
-async function openDialog(row) {
+async function openDialog(row?: any) {
   if (row) {
     editId.value = row.id
     const detail = await getAppointmentById(row.id)

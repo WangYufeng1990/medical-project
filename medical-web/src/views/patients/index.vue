@@ -213,13 +213,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
 
 const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), keyword = ref('')
-const dialogVisible = ref(false), editId = ref(null), submitting = ref(false), formRef = ref(null)
+const dialogVisible = ref(false), editId = ref<any>(null), submitting = ref(false), formRef = ref<any>(null)
 const form = reactive({
   name: '', mrn: '', ssn: '', dateOfBirth: null, sexAtBirth: '', genderIdentity: '',
   race: '', ethnicity: '', preferredLanguage: '', maritalStatus: '',
@@ -242,7 +242,7 @@ async function fetchData() {
   } finally { loading.value = false }
 }
 
-async function openDialog(row) {
+async function openDialog(row?: any) {
   if (row) {
     editId.value = row.id
     const detail = await getPatientById(row.id)

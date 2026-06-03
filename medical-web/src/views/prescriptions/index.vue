@@ -79,14 +79,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, deletePrescription } from '../../api/prescription'
 
 const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10)
-const dialogVisible = ref(false), submitting = ref(false), formRef = ref(null)
-const detailVisible = ref(false), detail = ref(null)
+const dialogVisible = ref(false), submitting = ref(false), formRef = ref<any>(null)
+const detailVisible = ref(false), detail = ref<any>(null)
 const form = reactive({
   patientId: null, doctorId: null, prescriptionDate: '', diagnosis: '',
   items: [{ drugName: '', specification: '', dosage: '', frequency: '', duration: 7, quantity: 1, unitPrice: 0 }]

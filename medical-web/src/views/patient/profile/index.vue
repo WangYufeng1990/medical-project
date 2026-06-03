@@ -14,11 +14,11 @@
   </el-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getMyProfile } from '../../../api/patientPortal'
 
-const profile = ref(null)
+const profile = ref<any>(null)
 const loading = ref(false)
 
 onMounted(async () => {

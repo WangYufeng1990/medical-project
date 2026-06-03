@@ -12,7 +12,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'

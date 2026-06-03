@@ -21,7 +21,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { usePatientStore } from '../../../stores/patient'
 import { getMyAppointments } from '../../../api/patientPortal'

@@ -69,13 +69,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMenuTree, getAllMenus, createMenu, updateMenu, deleteMenu } from '../../../api/menu'
 
 const loading = ref(false), tableData = ref([]), treeOptions = ref([])
-const dialogVisible = ref(false), editId = ref(null), submitting = ref(false), formRef = ref(null)
+const dialogVisible = ref(false), editId = ref<any>(null), submitting = ref(false), formRef = ref<any>(null)
 const form = reactive({ parentId: null, menuName: '', path: '', component: '', icon: '', type: 'MENU', permission: '', sort: 0, status: 1 })
 const rules = {
   menuName: [{ required: true, message: 'Required', trigger: 'blur' }],
@@ -91,7 +91,7 @@ async function fetchData() {
   } finally { loading.value = false }
 }
 
-function openDialog(row) {
+function openDialog(row?: any) {
   if (row) {
     editId.value = row.id
     Object.assign(form, {

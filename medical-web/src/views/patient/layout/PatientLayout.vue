@@ -56,7 +56,7 @@
   </el-container>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
 import { usePatientStore } from '../../../stores/patient'
 import { ElMessageBox } from 'element-plus'

@@ -53,13 +53,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRolePage, createRole, updateRole, deleteRole } from '../../../api/role'
 
 const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), keyword = ref('')
-const dialogVisible = ref(false), editId = ref(null), submitting = ref(false), formRef = ref(null)
+const dialogVisible = ref(false), editId = ref<any>(null), submitting = ref(false), formRef = ref<any>(null)
 const form = reactive({ roleName: '', roleCode: '', description: '', status: 1 })
 const rules = {
   roleName: [{ required: true, message: 'Required', trigger: 'blur' }],
@@ -74,7 +74,7 @@ async function fetchData() {
   } finally { loading.value = false }
 }
 
-function openDialog(row) {
+function openDialog(row?: any) {
   if (row) { editId.value = row.id; Object.assign(form, { roleName: row.roleName, roleCode: row.roleCode, description: row.description || '', status: row.status || 1 }) }
   else { editId.value = null; resetForm() }
   dialogVisible.value = true

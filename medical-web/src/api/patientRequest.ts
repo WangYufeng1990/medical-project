@@ -1,20 +1,20 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-const request = axios.create({
+const patientRequest = axios.create({
   baseURL: '/api/v1',
   timeout: 15000
 })
 
-request.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+patientRequest.interceptors.request.use((config) => {
+  const token = localStorage.getItem('patientToken')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-request.interceptors.response.use(
+patientRequest.interceptors.response.use(
   (response) => {
     const { code, message, data } = response.data
     if (code === 200) {
@@ -25,12 +25,13 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+      localStorage.removeItem('patientToken')
+      localStorage.removeItem('patientInfo')
+      window.location.href = '/patient/login'
     }
     ElMessage.error(error.message || 'Network error')
     return Promise.reject(error)
   }
 )
 
-export default request
+export default patientRequest as any

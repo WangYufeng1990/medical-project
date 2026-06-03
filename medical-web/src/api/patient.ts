@@ -19,3 +19,7 @@ export function updatePatient(id, data) {
 export function deletePatient(id) {
   return request.delete(`/patients/${id}`)
 }
+
+export function getPatientCase(id) {
+  return request.get(`/patients/${id}/case`)
+}

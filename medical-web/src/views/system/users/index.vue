@@ -75,7 +75,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getUserPage, getUserById, createUser, updateUser, deleteUser } from '../../../api/user'
@@ -88,9 +88,9 @@ const size = ref(10)
 const keyword = ref('')
 
 const dialogVisible = ref(false)
-const editId = ref(null)
+const editId = ref<any>(null)
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const form = reactive({
   username: '', password: '', realName: '', phone: '', email: '', gender: 0, status: 1
 })
@@ -109,7 +109,7 @@ async function fetchData() {
   } finally { loading.value = false }
 }
 
-async function openDialog(row) {
+async function openDialog(row?: any) {
   if (row) {
     editId.value = row.id
     const detail = await getUserById(row.id)

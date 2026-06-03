@@ -24,7 +24,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePatientStore } from '../../stores/patient'
@@ -32,7 +32,7 @@ import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const patientStore = usePatientStore()
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const loading = ref(false)
 const form = reactive({ username: '', password: '' })
 

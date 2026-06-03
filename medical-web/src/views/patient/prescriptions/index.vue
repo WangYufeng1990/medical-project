@@ -42,7 +42,7 @@
   </el-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getMyPrescriptions } from '../../../api/patientPortal'
 
@@ -51,7 +51,7 @@ const loading = ref(false)
 const total = ref(0)
 const query = reactive({ page: 1, size: 10 })
 const dialogVisible = ref(false)
-const selected = ref(null)
+const selected = ref<any>(null)
 
 async function fetchData() {
   loading.value = true

@@ -89,14 +89,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, createBill, payBill, deleteBill } from '../../api/bill'
 
-const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), statusFilter = ref(null)
-const dialogVisible = ref(false), submitting = ref(false), formRef = ref(null)
-const payDialogVisible = ref(false), paying = ref(false), payFormRef = ref(null), payingBillId = ref(null)
+const loading = ref(false), tableData = ref([]), total = ref(0), page = ref(1), size = ref(10), statusFilter = ref<any>(null)
+const dialogVisible = ref(false), submitting = ref(false), formRef = ref<any>(null)
+const payDialogVisible = ref(false), paying = ref(false), payFormRef = ref<any>(null), payingBillId = ref<any>(null)
 const form = reactive({ patientId: null, prescriptionId: null, totalCharge: 0 })
 const payForm = reactive({ paymentAmount: 0, paymentMethod: 'CREDIT_CARD' })
 const rules = {
