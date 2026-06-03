@@ -1,8 +1,8 @@
-# CLAUDE.md — Medical Management System (Backend)
+# CLAUDE.md — Medical Management System
 
 ## Project Overview
 
-A Spring Boot backend for a frontend-backend separated medical management system. Provides RESTful APIs consumed by a separate frontend application.
+HIPAA-compliant medical practice management system. Spring Boot backend + React frontend. FHIR R4 interoperability, 21 CFR Part 11 audit compliance, AES-256-GCM encryption, clinical decision support.
 
 ---
 
@@ -18,11 +18,12 @@ A Spring Boot backend for a frontend-backend separated medical management system
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
 | Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
 | FHIR | HAPI FHIR R4 | 7.x (org.hl7.fhir.r4) |
-| API Doc | Knife4j (Swagger wrapper) | latest |
+| API Doc | Springdoc OpenAPI | 2.7.0 (Swagger UI at /doc.html) |
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok, Hutool | latest |
-| Testing | JUnit 5 + Spring Boot Test | bundled |
+| Testing | JUnit 5 + Spring Boot Test | 94 integration tests |
+| Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**
 - No MyBatis/MyBatis-Plus (Spring Data JPA is the single ORM)
@@ -36,42 +37,64 @@ A Spring Boot backend for a frontend-backend separated medical management system
 
 ---
 
-## Directory Structure Convention
+## Project Structure
 
 ```
-src/
-└── main/
-    ├── java/com/example/medical/
-    │   ├── MedicalApplication.java          # entry point
-    │   ├── common/                          # shared infrastructure
-    │   │   ├── annotation/                  # @PhiField (Redis cache PHI redaction)
-    │   │   ├── audit/                       # @Auditable, AuditLogAspect, AuditLogWriter,
-    │   │   │                                # AuditLog, AuditLogVO, AuditLogService,
-    │   │   │                                # AuditLogController, KeyAudit, KeyAuditController
-    │   │   ├── config/                      # @Configuration classes
-    │   │   ├── exception/                   # GlobalExceptionHandler + custom exceptions
-    │   │   ├── job/                         # DataRetentionJob (scheduled purge)
-    │   │   ├── result/                      # unified Result<T> response wrapper
-    │   │   ├── base/                        # BaseEntity, BaseController (shared fields/methods)
-    │   │   ├── validation/                  # @ValidPassword, PasswordPolicyValidator
-    │   │   └── enums/                       # shared enums (ResultCode, etc.)
-    │   ├── module/                          # ---- business modules ----
-    │   │   ├── system/                      #   system management (users, roles, menus)
-    │   │   │   ├── controller/
-    │   │   │   ├── service/
-    │   │   │   ├── repository/              #   Spring Data JPA repositories
-    │   │   │   ├── entity/
-    │   │   │   └── dto/
-    │   │   ├── patient/                     #   patient records
-    │   │   ├── appointment/                 #   appointments / scheduling
-    │   │   ├── prescription/                #   prescriptions
-    │   │   ├── billing/                     #   billing & payments
-    │   │   └── ...                          #   add modules as needed
-    │   └── util/                            # general-purpose helper classes
-    └── resources/
-        ├── application.yml                  # default config
-        ├── application-dev.yml              # dev profile
-        └── application-prod.yml             # prod profile
+medical-project/
+├── CLAUDE.md                           # this file
+├── README.md                           # project overview + quick start
+├── docs/                               # design docs, interview prep, roadmap
+│   ├── API-LAYOUT.md
+│   ├── backend-architecture-explained.md
+│   ├── medical-learning-guide.md
+│   ├── LEARNING-ORDER.md
+│   ├── ROADMAP.md
+│   ├── INTERVIEW-BACKEND.md
+│   └── INTERVIEW-FRONTEND.md
+├── medical-server/                     # Spring Boot backend
+│   └── src/main/java/com/example/medical/
+│       ├── MedicalApplication.java
+│       ├── common/
+│       │   ├── annotation/             # @PhiField (Redis cache PHI redaction)
+│       │   ├── audit/                  # @Auditable, AuditLogAspect, AuditLogWriter,
+│       │   │                           # AuditLog, AuditLogVO, AuditLogService,
+│       │   │                           # AuditLogController, KeyAudit, KeyAuditController
+│       │   ├── base/                   # BaseEntity, PageQuery
+│       │   ├── config/                 # SecurityConfig, AesCryptoUtil, FhirConfig,
+│       │   │                           # CacheConfig, RateLimiterConfig, DataInitializer, etc.
+│       │   ├── enums/                  # ResultCode
+│       │   ├── exception/             # GlobalExceptionHandler, BusinessException
+│       │   ├── job/                    # DataRetentionJob (scheduled audit archive)
+│       │   ├── result/                 # Result<T>, PageResult<T>
+│       │   └── validation/            # @ValidPassword, PasswordPolicyValidator
+│       ├── module/
+│       │   ├── system/                 # users, roles, menus, auth, emergency access
+│       │   ├── patient/                # patients, FHIR, consent, observations, LOINC
+│       │   ├── appointment/            # scheduling with conflict detection
+│       │   ├── prescription/           # prescriptions + CDS + ePrescribing + EPCS
+│       │   ├── billing/                # insurance claim lifecycle
+│       │   ├── chat/                   # patient-doctor messaging
+│       │   ├── dashboard/              # aggregate statistics
+│       │   ├── export/                 # streaming CSV export
+│       │   ├── integration/            # Mirth Connect ADT + lab results JSON API
+│       │   └── quality/                # CMS eCQM quality measures
+│       ├── security/                   # JwtClaimMapper, LoginUser, DevJwtEncoder
+│       └── util/                       # CsvUtil
+│       └── resources/
+│           ├── application.yml
+│           ├── application-dev.yml
+│           ├── application-h2.yml
+│           ├── application-prod.yml
+│           └── logback-spring.xml
+└── medical-web/                        # React + TypeScript frontend
+    └── src/
+        ├── api/                        # axios API layer (request interceptor + module APIs)
+        ├── layout/                     # StaffLayout, PatientLayout
+        └── views/                      # dashboard, login, patients, appointments,
+            │                           # prescriptions, billing, profile,
+            │                           # system (users/roles/menus),
+            │                           # patient portal (dashboard/profile/...)
+            └── shared.module.css
 ```
 
 **Rules:**
@@ -87,18 +110,17 @@ src/
 
 ### 1. Zero Fluff
 - **No docstrings or comments on code that is self-explanatory.**
-- A comment is only justified when the WHY is non-obvious — a subtle invariant, a deliberate workaround, a constraint dictated by an upstream system.
-- Do not write "implementation plan" documents, README files, or any documentation unless explicitly asked.
+- A comment is only justified when the WHY is non-obvious.
+- No README/implementation-plan documents unless explicitly asked.
 
 ### 2. Dependency Discipline
 - **Do not add a dependency unless it solves a real, concrete problem.**
-- Always prefer the standard library, Spring Boot built-ins, or the stack already listed above before reaching for a new library.
-- If a new dependency seems necessary, state the justification and ask for approval.
+- Always prefer the standard library, Spring Boot built-ins, or the stack already listed.
 - No "just in case" or "we might need it later" dependencies.
 
 ### 3. Code Generation Discipline
-- **Do not generate boilerplate code proactively.** Wait for a concrete request from the user.
-- When asked to implement something, generate only the files directly needed — no extra "helper" classes, no speculative abstractions, no half-finished stubs.
+- **Do not generate boilerplate code proactively.**
+- When asked to implement something, generate only the files directly needed.
 - Three similar lines of code is better than a premature abstraction.
 
 ### 4. Error Handling
@@ -108,33 +130,35 @@ src/
 
 ### 5. API Design
 - All endpoints return `Result<T>`: `{ "code": 200, "message": "ok", "data": {...} }`
-- HTTP verbs strictly by semantics: GET for reads, POST for creates, PUT for full updates, PATCH for partial updates, DELETE for deletes.
+- HTTP verbs strictly by semantics: GET reads, POST creates, PUT full updates, PATCH partial, DELETE deletes.
 - Path naming: `/api/v1/<module>/<resource>`, e.g., `/api/v1/patients/{id}`
-- Paging parameters use a shared `PageQuery` base class.
-- All paginated endpoints MUST return `Result<PageResult<T>>`. `PageResult<T>` is a single standardized wrapper containing `total`, `size`, `current`, and `records`. Never leak raw Spring Data `Page` objects into the API response.
+- All paginated endpoints MUST return `Result<PageResult<T>>`.
 
 ### 6. Security
-- OAuth2 Resource Server validates JWTs issued by external IdP against its JWKS endpoint.
-- Passwords are hashed with BCrypt (for local fallback accounts only).
-- Medical data fields requiring AES encryption MUST use JPA `@Convert(converter = AesAttributeConverter.class)` on entity fields. NEVER write manual encrypt/decrypt wrappers in Service classes — encryption must be transparent to business logic.
-- Role-based access control via `@PreAuthorize("hasRole('ADMIN')")`, mapping JWT claims to Spring Security GrantedAuthorities via a custom `JwtAuthenticationConverter`.
+- OAuth2 Resource Server validates JWTs against external IdP JWKS endpoint.
+- Passwords: BCrypt hashed. Only local fallback accounts use this.
+- PHI fields: MUST use `@Convert(converter = AesAttributeConverter.class)` on entity fields. NEVER write manual encrypt/decrypt wrappers in Service classes.
+- RBAC via `@PreAuthorize("hasRole('ADMIN')")`, mapping JWT claims via custom `JwtAuthenticationConverter`.
+- Dev-mode authentication requires explicit `app.security.dev-mode: true` — must not auto-detect.
+- AES-256-GCM with versioned ciphertext. Key derivation: PBKDF2-HMAC-SHA256 310k iterations.
+- Audit logs have SHA-256 row_hash. Use archived flag, never DELETE.
 
 ### 7. Database
-- All tables MUST have `id`, `create_time`, `update_time` columns — inherited from `BaseEntity`.
-- Logical delete only (`is_deleted` flag) via `@SQLDelete` / Hibernate `@Where`, never physical DELETE.
-- Index foreign keys and frequently queried columns via `@Table(indexes = ...)`.
-- Medical data integrity: use `@Version` optimistic locking on critical entities.
+- All tables MUST have `id`, `create_time`, `update_time` — inherited from `BaseEntity`.
+- Logical delete only (`is_deleted` flag) via `@SQLDelete` / `@SQLRestriction`.
+- Medical data: use `@Version` optimistic locking on critical entities.
+- Audit log: immutable (archived flag + row_hash), never physically deleted.
 
 ### 8. Testing
 - Write tests only when asked.
-- When asked, cover: the happy path, one edge case, one failure mode. No more.
+- Happy path + one edge case + one failure mode. No more.
 - Use `@WebMvcTest` for controllers, `@DataJpaTest` for repositories.
 
 ### 9. Git
-- Do not initialize git or make commits unless explicitly asked.
-- When asked to commit: small, focused commits with messages in English present tense.
+- Do not init or commit unless explicitly asked.
+- Small, focused commits. Messages in English present tense.
 
 ### 10. Response Style
-- Be concise. State what you are about to do in one sentence, do it, report the result.
-- No summaries, no "great question!", no emojis, no markdown tables unless data comparison requires it.
+- Be concise. State what you are about to do, do it, report the result.
+- No summaries, no emojis, no markdown tables unless data comparison requires it.
 - If you hit a blocker or ambiguity, ask — don't guess.

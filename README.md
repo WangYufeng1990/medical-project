@@ -160,7 +160,11 @@ app:
 
 ## Documentation
 
-- [API Layout & Reference](API-LAYOUT.md)
-- [Architecture Explained](backend-architecture-explained.md)
-- [Medical Domain Learning Guide](medical-learning-guide.md)
+- [API Layout & Reference](docs/API-LAYOUT.md)
+- [Architecture Explained](docs/backend-architecture-explained.md)
+- [Medical Domain Learning Guide](docs/medical-learning-guide.md)
+- [Learning Order](docs/LEARNING-ORDER.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Interview Prep - Backend](docs/INTERVIEW-BACKEND.md)
+- [Interview Prep - Frontend](docs/INTERVIEW-FRONTEND.md)
 - [Development Rules](CLAUDE.md)
