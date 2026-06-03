@@ -1,17 +1,5 @@
 import request from './request'
-
-export function getRolePage(params) {
-  return request.get('/roles', { params })
-}
-
-export function createRole(data) {
-  return request.post('/roles', data)
-}
-
-export function updateRole(id, data) {
-  return request.put(`/roles/${id}`, data)
-}
-
-export function deleteRole(id) {
-  return request.delete(`/roles/${id}`)
-}
+export const getRolePage = (params: any) => request.get('/roles', { params })
+export const createRole = (data: any) => request.post('/roles', data)
+export const updateRole = (id: number, data: any) => request.put(`/roles/${id}`, data)
+export const deleteRole = (id: number) => request.delete(`/roles/${id}`)

@@ -1,25 +1,8 @@
 import request from './request'
 
-export function getPatientPage(params) {
-  return request.get('/patients', { params })
-}
-
-export function getPatientById(id) {
-  return request.get(`/patients/${id}`)
-}
-
-export function createPatient(data) {
-  return request.post('/patients', data)
-}
-
-export function updatePatient(id, data) {
-  return request.put(`/patients/${id}`, data)
-}
-
-export function deletePatient(id) {
-  return request.delete(`/patients/${id}`)
-}
-
-export function getPatientCase(id) {
-  return request.get(`/patients/${id}/case`)
-}
+export const getPatientPage = (params: any) => request.get('/patients', { params })
+export const getPatientById = (id: number) => request.get(`/patients/${id}`)
+export const createPatient = (data: any) => request.post('/patients', data)
+export const updatePatient = (id: number, data: any) => request.put(`/patients/${id}`, data)
+export const deletePatient = (id: number) => request.delete(`/patients/${id}`)
+export const getPatientCase = (id: number) => request.get(`/patients/${id}/case`)

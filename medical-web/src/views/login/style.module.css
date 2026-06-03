@@ -1,0 +1,8 @@
+.container { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f0f2f5; }
+.card { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.1); width: 380px; }
+.card h2 { text-align: center; margin-bottom: 24px; color: #303133; }
+.input { width: 100%; padding: 10px 12px; margin-bottom: 16px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+.input:focus { outline: none; border-color: var(--primary, #409EFF); }
+.btn { width: 100%; padding: 10px; background: var(--primary, #409EFF); color: #fff; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+.btn:hover { opacity: .85; }
+.error { background: #fef0f0; color: #f56c6c; padding: 8px 12px; margin-bottom: 16px; border-radius: 4px; font-size: 13px; }

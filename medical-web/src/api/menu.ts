@@ -1,21 +1,6 @@
 import request from './request'
-
-export function getMenuTree() {
-  return request.get('/menus/tree')
-}
-
-export function getAllMenus() {
-  return request.get('/menus')
-}
-
-export function createMenu(data) {
-  return request.post('/menus', data)
-}
-
-export function updateMenu(id, data) {
-  return request.put(`/menus/${id}`, data)
-}
-
-export function deleteMenu(id) {
-  return request.delete(`/menus/${id}`)
-}
+export const getMenuTree = () => request.get('/menus/tree')
+export const getMenuList = () => request.get('/menus')
+export const createMenu = (data: any) => request.post('/menus', data)
+export const updateMenu = (id: number, data: any) => request.put(`/menus/${id}`, data)
+export const deleteMenu = (id: number) => request.delete(`/menus/${id}`)

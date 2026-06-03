@@ -1,21 +1,6 @@
 import request from './request'
-
-export function getAppointmentPage(params) {
-  return request.get('/appointments', { params })
-}
-
-export function getAppointmentById(id) {
-  return request.get(`/appointments/${id}`)
-}
-
-export function createAppointment(data) {
-  return request.post('/appointments', data)
-}
-
-export function updateAppointment(id, data) {
-  return request.put(`/appointments/${id}`, data)
-}
-
-export function deleteAppointment(id) {
-  return request.delete(`/appointments/${id}`)
-}
+export const getAppointmentPage = (params: any) => request.get('/appointments', { params })
+export const getAppointmentById = (id: number) => request.get(`/appointments/${id}`)
+export const createAppointment = (data: any) => request.post('/appointments', data)
+export const updateAppointment = (id: number, data: any) => request.put(`/appointments/${id}`, data)
+export const deleteAppointment = (id: number) => request.delete(`/appointments/${id}`)

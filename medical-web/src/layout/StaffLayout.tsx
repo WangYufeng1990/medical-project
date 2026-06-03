@@ -1,0 +1,53 @@
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import styles from './StaffLayout.module.css'
+
+const menuItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['ADMIN','DOCTOR'] },
+  { path: '/patients', label: 'Patients', icon: '👤', roles: ['ADMIN','DOCTOR'] },
+  { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
+  { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
+  { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
+  { type: 'divider' } as any,
+  { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
+  { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
+  { path: '/system/menus', label: 'Menus', icon: '📋', roles: ['ADMIN'] },
+]
+
+export default function StaffLayout() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    navigate('/login')
+  }
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <aside className={styles.sidebar}>
+        <div className={styles.logo}>Medical System</div>
+        <nav>
+          {menuItems.map((item, i) => {
+            if (item.type === 'divider') return <hr key={i} className={styles.divider} />
+            return (
+              <div key={item.path}
+                className={`${styles.menuItem} ${location.pathname.startsWith(item.path) ? styles.active : ''}`}
+                onClick={() => navigate(item.path)}>
+                <span>{item.icon}</span> {item.label}
+              </div>
+            )
+          })}
+        </nav>
+        <div style={{ marginTop: 'auto', padding: '16px' }}>
+          <div className={styles.menuItem} onClick={() => navigate('/profile')}>
+            <span>🔧</span> Profile
+          </div>
+          <button onClick={handleLogout} className={styles.logoutBtn}>Logout</button>
+        </div>
+      </aside>
+      <main className={styles.main}>
+        <Outlet />
+      </main>
+    </div>
+  )
+}

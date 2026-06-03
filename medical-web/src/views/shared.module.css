@@ -1,0 +1,16 @@
+.table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.06); border-radius: 6px; overflow: hidden; }
+.table th, .table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #ebeef5; font-size: 13px; }
+.table th { background: #f5f7fa; font-weight: 600; color: #606266; }
+.btnPrimary { padding: 8px 16px; background: var(--primary); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btnSm { padding: 4px 10px; background: #f0f2f5; border: 1px solid #dcdfe6; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 12px; }
+.btnSmDanger { composes: btnSm; color: #f56c6c; border-color: #fbc4c4; }
+.pagination { display: flex; gap: 12px; align-items: center; margin-top: 16px; font-size: 13px; color: #606266; }
+.pagination button { padding: 4px 12px; border: 1px solid #dcdfe6; background: #fff; border-radius: 3px; cursor: pointer; }
+.modalOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: #fff; border-radius: 8px; padding: 24px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal h3 { margin-bottom: 16px; }
+.formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.formGroup { display: flex; flex-direction: column; gap: 4px; }
+.formGroup label { font-size: 12px; color: #909399; }
+.formGroup input, .formGroup select { padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; }
+.formActions { grid-column: span 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
