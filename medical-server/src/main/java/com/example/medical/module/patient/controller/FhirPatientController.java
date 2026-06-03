@@ -39,11 +39,16 @@ public class FhirPatientController {
 
     @GetMapping("/Patient")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public ResponseEntity<String> searchPatients(@RequestParam(value = "_id", required = false) String idParam) {
+    public ResponseEntity<String> searchPatients(
+            @RequestParam(value = "_id", required = false) String idParam,
+            @RequestParam(value = "_count", defaultValue = "50") int count,
+            @RequestParam(value = "_offset", defaultValue = "0") int offset) {
         IParser parser = fhirContext.newJsonParser().setPrettyPrint(true);
         Bundle bundle = new Bundle();
         bundle.setType(Bundle.BundleType.SEARCHSET);
         bundle.setTimestamp(new java.util.Date());
+
+        int maxCount = Math.min(count, 500);
 
         if (idParam != null && !idParam.isBlank()) {
             try {
@@ -55,12 +60,18 @@ public class FhirPatientController {
             } catch (NumberFormatException ignored) {
             }
         } else {
-            List<Patient> patients = patientRepository.findAll();
-            for (Patient p : patients) {
+            org.springframework.data.domain.PageRequest pageable =
+                    org.springframework.data.domain.PageRequest.of(
+                            offset / maxCount, maxCount,
+                            org.springframework.data.domain.Sort.by("id"));
+            org.springframework.data.domain.Page<Patient> page =
+                    patientRepository.findAll(pageable);
+            for (Patient p : page.getContent()) {
                 bundle.addEntry().setResource(buildFhirPatient(p))
                         .getRequest().setMethod(Bundle.HTTPVerb.GET)
                         .setUrl("Patient/" + p.getId());
             }
+            bundle.setTotal((int) page.getTotalElements());
         }
         bundle.setTotal(bundle.getEntry().size());
         return ResponseEntity.ok()

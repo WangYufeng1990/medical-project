@@ -48,7 +48,7 @@ public class PatientService {
     }
 
     @Transactional
-    @Auditable(module = "patient", action = "UPDATE")
+    @Auditable(module = "patient", action = "UPDATE", phiAccess = true)
     public void update(Long id, PatientFormDTO dto) {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));

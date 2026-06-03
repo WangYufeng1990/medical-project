@@ -62,7 +62,11 @@ public class EmergencyAccessController {
         if (patientId != null) {
             return Result.ok(emergencyAccessRepository.findByPatientIdOrderByAccessedAtDesc(patientId));
         }
-        return Result.ok(emergencyAccessRepository.findAll());
+        org.springframework.data.domain.PageRequest pageable =
+                org.springframework.data.domain.PageRequest.of(0, 500,
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC, "accessedAt"));
+        return Result.ok(emergencyAccessRepository.findAll(pageable).getContent());
     }
 
     @Data

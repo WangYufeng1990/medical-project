@@ -36,11 +36,14 @@ public class FhirObservationController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> searchObservations(
             @RequestParam(value = "patient", required = false) Long patientId,
-            @RequestParam(value = "code", required = false) String loincCode) {
+            @RequestParam(value = "code", required = false) String loincCode,
+            @RequestParam(value = "_count", defaultValue = "100") int count) {
         IParser parser = fhirContext.newJsonParser().setPrettyPrint(true);
         Bundle bundle = new Bundle();
         bundle.setType(Bundle.BundleType.SEARCHSET);
         bundle.setTimestamp(new java.util.Date());
+
+        int maxCount = Math.min(count, 500);
 
         List<Observation> observations;
         if (patientId != null && loincCode != null) {
@@ -49,7 +52,8 @@ public class FhirObservationController {
         } else if (patientId != null) {
             observations = observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId);
         } else {
-            observations = observationRepository.findAll();
+            observations = observationRepository.findAll(
+                    org.springframework.data.domain.PageRequest.of(0, maxCount)).getContent();
         }
 
         for (Observation o : observations) {

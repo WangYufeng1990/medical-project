@@ -165,8 +165,12 @@ public class AesCryptoUtil {
 
     private static SecretKey deriveKey(String raw) {
         try {
-            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            byte[] keyBytes = sha256.digest(raw.getBytes(StandardCharsets.UTF_8));
+            javax.crypto.SecretKeyFactory factory =
+                    javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] salt = "medical-aes-v2-salt".getBytes(StandardCharsets.UTF_8);
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                    raw.toCharArray(), salt, 310_000, 256);
+            byte[] keyBytes = factory.generateSecret(spec).getEncoded();
             return new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
             throw new RuntimeException("Key derivation failed", e);
