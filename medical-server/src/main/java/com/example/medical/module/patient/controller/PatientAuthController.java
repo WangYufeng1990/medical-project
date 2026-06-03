@@ -19,6 +19,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
@@ -41,6 +42,7 @@ public class PatientAuthController {
     private final JwtEncoder jwtEncoder;
     private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
     private final jakarta.servlet.http.HttpServletRequest httpRequest;
+    private final org.springframework.web.client.RestTemplate oktaRestTemplate;
 
     @Value("${okta.client-id:}")
     private String clientId;
@@ -58,6 +60,7 @@ public class PatientAuthController {
     private boolean devMode;
 
     @PostMapping("/login")
+    @Transactional
     @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGIN_SUCCESS")
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
         PatientAuth auth = patientAuthRepository.findByUsername(request.getUsername())
@@ -129,7 +132,7 @@ public class PatientAuthController {
 
     private TokenPair callOktaPasswordGrant(String username, String password) {
         try {
-            RestTemplate rt = new RestTemplate();
+            RestTemplate rt = oktaRestTemplate;
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
             headers.setBasicAuth(clientId, clientSecret);
@@ -178,17 +181,12 @@ public class PatientAuthController {
     }
 
     private void recordFailedAttempt(PatientAuth auth) {
-        int attempts = auth.getFailedAttempts() != null ? auth.getFailedAttempts() + 1 : 1;
-        auth.setFailedAttempts(attempts);
-        if (attempts >= MAX_FAILED_ATTEMPTS) {
-            auth.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
-        }
-        patientAuthRepository.save(auth);
+        patientAuthRepository.incrementFailedAttempts(auth.getId(),
+                LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
     }
 
     private void resetFailedAttempts(PatientAuth auth) {
-        auth.setFailedAttempts(0);
-        auth.setLockedUntil(null);
+        patientAuthRepository.resetFailedAttempts(auth.getId());
         auth.setLastLoginTime(LocalDateTime.now());
         patientAuthRepository.save(auth);
     }

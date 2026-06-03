@@ -51,6 +51,31 @@ public class RateLimiterConfig {
     }
 
     @Bean
+    public FilterRegistrationBean<Filter> refreshRateLimiter(RedissonClient redissonClient) {
+        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
+            HttpServletRequest httpReq = (HttpServletRequest) request;
+            String key = "rate:refresh:" + httpReq.getRemoteAddr();
+            RRateLimiter limiter = redissonClient.getRateLimiter(key);
+            limiter.trySetRate(RateType.OVERALL, 20, Duration.ofMinutes(1));
+
+            if (!limiter.tryAcquire()) {
+                HttpServletResponse httpResp = (HttpServletResponse) response;
+                httpResp.setStatus(429);
+                httpResp.setContentType("application/json");
+                httpResp.getWriter().write("{\"code\":429,\"message\":\"Token refresh rate limit exceeded.\"}");
+                return;
+            }
+            chain.doFilter(request, response);
+        };
+
+        FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
+        bean.setFilter(filter);
+        bean.addUrlPatterns("/api/v1/auth/refresh", "/api/v1/patient/refresh");
+        bean.setOrder(1);
+        return bean;
+    }
+
+    @Bean
     public FilterRegistrationBean<Filter> exportRateLimiter(RedissonClient redissonClient) {
         Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
             HttpServletRequest httpReq = (HttpServletRequest) request;

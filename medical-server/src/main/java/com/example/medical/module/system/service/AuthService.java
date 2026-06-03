@@ -15,6 +15,7 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -37,6 +38,7 @@ public class AuthService {
     private final JwtEncoder jwtEncoder;
     private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
     private final jakarta.servlet.http.HttpServletRequest request;
+    private final org.springframework.web.client.RestTemplate oktaRestTemplate;
 
     @Value("${okta.client-id:}")
     private String clientId;
@@ -53,6 +55,7 @@ public class AuthService {
     @Value("${app.security.dev-mode:false}")
     private boolean devMode;
 
+    @Transactional
     @SuppressWarnings("unchecked")
     public LoginResponse login(LoginRequest request) {
         SysUser user = sysUserRepository.findByUsername(request.getUsername())
@@ -117,7 +120,7 @@ public class AuthService {
         String accessToken = (String) tokenResponse.get("access_token");
         String newRefreshToken = (String) tokenResponse.get("refresh_token");
 
-        RestTemplate restTemplate = new RestTemplate();
+        RestTemplate restTemplate = oktaRestTemplate;
         String userinfoUrl = issuerUri + "/v1/userinfo";
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
@@ -150,7 +153,7 @@ public class AuthService {
 
     private TokenPair callOktaTokenEndpoint(String username, String password) {
         try {
-            RestTemplate restTemplate = new RestTemplate();
+            RestTemplate restTemplate = oktaRestTemplate;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -182,7 +185,7 @@ public class AuthService {
     }
 
     private Map<String, Object> callOktaRefreshEndpoint(String refreshToken) {
-        RestTemplate restTemplate = new RestTemplate();
+        RestTemplate restTemplate = oktaRestTemplate;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -218,18 +221,12 @@ public class AuthService {
     }
 
     private void recordFailedAttempt(SysUser user) {
-        int attempts = user.getFailedAttempts() != null ? user.getFailedAttempts() + 1 : 1;
-        user.setFailedAttempts(attempts);
-        if (attempts >= MAX_FAILED_ATTEMPTS) {
-            user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
-        }
-        sysUserRepository.save(user);
+        sysUserRepository.incrementFailedAttempts(user.getId(),
+                LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
     }
 
     private void resetFailedAttempts(SysUser user) {
-        user.setFailedAttempts(0);
-        user.setLockedUntil(null);
-        sysUserRepository.save(user);
+        sysUserRepository.resetFailedAttempts(user.getId());
     }
 
     private boolean isLocked(SysUser user) {
