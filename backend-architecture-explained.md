@@ -739,9 +739,11 @@ Result.fail(404, "Patient not found")
 | **软删除** | @SQLDelete + @SQLRestriction + 定时留存清除 |
 | **乐观锁** | @Version on BaseEntity |
 | **账户安全** | BCrypt + 登录限流 + 双端锁定(系统用户+患者) + 密码复杂度+历史策略 + HSTS/Clickjack/XSS 安全头 |
-| **数据最小化** | VO SSN 末4位 + FHIR SSN 掩码 + CSV PHI 掩码 + 审计 PHI 掩码 + Redis @PhiField 自动脱敏 |
+| **数据最小化** | VO SSN 末4位 + FHIR SSN 掩码 + CSV 流式导出 + 审计 PHI 掩码 + Redis @PhiField 全字段脱敏 |
 | **Break-Glass** | 紧急访问 + 同步审计 + 30分钟自动过期 |
 | **知情同意** | Consent 实体 + 患者自服务查看 + revoke 支持 |
-| **密钥安全** | 版本化密文 + 密钥轮换支持 + key_audit 审计表 + ADMIN 历史查询 |
+| **密钥安全** | PBKDF2 310k 迭代 + 版本化密文 + 密钥轮换 + key_audit 审计表 |
+| **21 CFR Part 11** | 登录成功/失败审计 + SHA-256 row_hash 防篡改 + 角色/菜单变更审计 |
+| **抗 DoS** | FHIR 分页 (max=500) + CSV StreamingResponseBody + 刷新令牌限速 + RestTemplate 池化 |
 | **分层解耦** | Entity/DTO 分离 + static bridge 解决 JPA/Spring DI 冲突 |
 | **开箱即用** | DataInitializer JPA 写入 + US 合成种子数据 |

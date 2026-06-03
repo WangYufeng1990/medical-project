@@ -355,10 +355,13 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 | `dashboard` | `'stats'` | 30 min | none |
 
 ### Audit Logging
-AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, IP, timestamp → `audit_log` table. Applied to all CUD service operations.
+AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, IP, timestamp → `audit_log` table. Applied to all CUD service operations. **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
 
 ### Rate Limiting
-Redisson `RRateLimiter` filter: 10 requests/minute per IP on login endpoints. Returns HTTP 429.
+Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
+
+### Encryption
+AES-256-GCM via JPA `@Convert` — transparent at-rest encryption. PBKDF2-HMAC-SHA256 (310k iterations) key derivation. Versioned ciphertext for key rotation. Redis cache PHI automatically redacted by `PhiMaskingRedisSerializer` + `@PhiField`.
 
 ### Database Conventions
 - All entities extend `BaseEntity`: `id` (auto-generated), `createTime`, `updateTime` (auto-managed via `@PrePersist`/`@PreUpdate`), `isDeleted` (logical delete via `@SQLDelete`)

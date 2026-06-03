@@ -65,6 +65,9 @@ API docs: http://localhost:8080/doc.html
 | LOINC Lab Coding | 29-code catalog + auto-flag (LL/L/N/H/HH) + trend analysis |
 | ePrescribing + EPCS | NCPDP SCRIPT NewRx XML generation + controlled substance audit |
 | eCQM Quality Measures | CMS122/125/165 SQL-based performance reports |
+| 21 CFR Part 11 Audit | Immutable audit log (SHA-256 hash chain + soft-delete) + login failure audit + role/menu change audit |
+| Encryption | AES-256-GCM + PBKDF2-HMAC-SHA256 (310k iterations) + versioned key rotation |
+| Anti-DoS | Pagination on FHIR/emergency/pharmacy endpoints + streaming CSV export + refresh rate limiting |
 
 ## FHIR R4 Interoperability
 
