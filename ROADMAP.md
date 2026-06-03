@@ -1,8 +1,20 @@
-# Round 5–9: 医疗进阶功能规划 ✅ 全部完成
+# 项目演进路线图 ✅ 全部完成
 
-> 基于当前 HIPAA + FHIR + US-Model 三支柱已完成，向临床决策支持、检验互操作、电子处方方向扩展。
+> 从 HIPAA + FHIR + US-Model 三支柱出发，历经临床决策支持、检验互操作、电子处方、合规审计修复、前端重构。
 >
-> **状态：5/5 Rounds 已完成 (2026-06-01)**
+> **状态：9 Rounds + 3 合规 Rounds + 前端重构 — 全部完成 (2026-06-03)**
+
+---
+
+## 前置 Rounds (已归档)
+
+| Round | 内容 | 状态 |
+|-------|------|------|
+| Pre-work | AES 落盘加密、FHIR SSN 脱敏、CSV 脱敏、Redis PHI、审计 patientId、密钥轮换 | ✅ |
+| 1 | 审计日志查询 API、安全响应头、账户锁定 | ✅ |
+| 2 | 密码策略、患者数据访问权、Token 配置外置 | ✅ |
+| 3 | FHIR 资源端点、SMART 作用域、US Core 修正 | ✅ |
+| 4 | 数据留存、知情同意、紧急访问、密钥审计 | ✅ |
 
 ---
 
@@ -493,3 +505,30 @@ Round 13  MEDIUM 优化加固   ✅ 2026-06-03  (3 项: 刷新限速/RestTemplat
 | 11 | `8d4ed44` | 5 |
 | 12 | `d9970d8` | 4 |
 | 13 | `3f68311` | 3 |
+
+---
+
+# Round 14–15: 前端重构 ✅ 全部完成
+
+> **状态：2/2 Rounds 已完成 (2026-06-03)**
+
+## Round 14: 前端 TypeScript 迁移 + PatientForm 组件 ✅ 完成
+
+| 任务 | 说明 | Commit |
+|------|------|--------|
+| Vue JS→TS | 20 个 Vue SFC 全部改用 `<script setup lang="ts">`；17 个 JS 文件改名 .ts | `6beb1a6` |
+| PatientForm | 完整 US 医疗模型表单：OMB 种族、结构化地址、保险字段、FHIR Bundle 解析、PHI 脱敏、[DECRYPT_FAILED] 防御 | `6beb1a6` |
+| Dashboard 跳转 | 统计卡片点击跳转对应模块路由 | `6beb1a6` |
+
+## Round 15: React 全量迁移 ✅ 完成
+
+| 任务 | 说明 | Commit |
+|------|------|--------|
+| 移除 Vue | 删除所有 `.vue` SFC 文件 | `50207ae` |
+| React + TS | React 18 + TypeScript + CSS Modules + Vite 5 | `50207ae` |
+| 30+ 组件 | StaffLayout、Login、Dashboard、Patients、Appointments、Prescriptions、Billing、Profile、System CRUD、Patient 门户全套 | `50207ae` |
+
+| Round | Commit | 说明 |
+|-------|--------|------|
+| 14 | `6beb1a6` | Vue TypeScript 迁移 + PatientForm |
+| 15 | `50207ae` | Vue→React 全量重写 |
