@@ -104,7 +104,8 @@ public class FhirObservationController {
         }
 
         if (o.getEffectiveDate() != null) {
-            fhirObs.setEffective(new DateTimeType(o.getEffectiveDate().toString()));
+            fhirObs.setEffective(new DateTimeType(
+                    o.getEffectiveDate().toString() + ":00"));
         }
 
         return fhirObs;

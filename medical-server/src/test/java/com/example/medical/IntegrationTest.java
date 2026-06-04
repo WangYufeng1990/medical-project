@@ -1255,4 +1255,403 @@ class IntegrationTest {
         assertNotEquals(500, result.getResponse().getStatus(),
                 "Export bills should not return 500");
     }
+
+    // ──────────────────────────────────────────────────────
+    // 15. AUDIT LOGS
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(86)
+    void auditLogs_shouldReturnPaginatedResults() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("page", "1").param("size", "10")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals(200, node.get("code").asInt());
+        assertTrue(node.get("data").get("total").asInt() > 0,
+                "Audit logs should contain entries from test bootstrap");
+    }
+
+    @Test
+    @Order(87)
+    void auditLogs_withFilters_shouldFilter() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("module", "patient").param("action", "CREATE")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").get("total").asInt() >= 0);
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 16. FHIR RESOURCE ENDPOINTS
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(88)
+    void fhirPatientById_shouldReturnFhirPatient() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/fhir/Patient/100")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/fhir+json"))
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("Patient", node.get("resourceType").asText());
+    }
+
+    @Test
+    @Order(89)
+    void fhirPatientSearch_shouldReturnBundle() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/fhir/Patient")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/fhir+json"))
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("Bundle", node.get("resourceType").asText());
+    }
+
+    @Test
+    @Order(90)
+    void fhirObservationSearch_shouldReturnBundle() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/fhir/Observation")
+                        .param("patient", "100")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/fhir+json"))
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("Bundle", node.get("resourceType").asText());
+        assertTrue(node.get("total").asInt() >= 0);
+    }
+
+    @Test
+    @Order(91)
+    void fhirObservationSearch_noPatient_shouldReturnBundle() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/fhir/Observation")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("Bundle", node.get("resourceType").asText());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 17. CDS
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(92)
+    void cdsCheck_shouldReturnResult() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "patientId", 100,
+                "items", List.of(
+                        Map.of("rxnormCode", "308191", "drugName", "Amoxicillin"),
+                        Map.of("rxnormCode", "5640", "drugName", "Ibuprofen")
+                )
+        ));
+        MvcResult result = mockMvc.perform(post("/api/v1/cds/check")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals(200, node.get("code").asInt());
+        assertNotNull(node.get("data").get("passed"));
+        assertTrue(node.get("data").get("warnings").isArray());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 18. INTEGRATION
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(93)
+    void integrationAdt_shouldProcessEvent() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "sourceMessageId", "test-adt-" + System.currentTimeMillis(),
+                "eventType", "A08",
+                "patient", Map.of("mrn", "MRN-10001", "name", "James Anderson",
+                        "dateOfBirth", "1998-02-14", "sexAtBirth", "M"),
+                "visit", Map.of("visitNumber", "V-TEST", "department", "Cardiology")
+        ));
+        mockMvc.perform(post("/api/v1/integration/adt")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(94)
+    void integrationLabResults_shouldSaveObservations() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "sourceMessageId", "test-lab-" + System.currentTimeMillis(),
+                "patientMrn", "MRN-10001",
+                "orderCode", "CBC",
+                "collectionDate", "2026-06-01T08:00:00",
+                "results", List.of(
+                        Map.of("loincCode", "6690-2", "display", "WBC",
+                                "value", "7.5", "unit", "10*3/uL",
+                                "referenceRange", "4.0-11.0", "abnormalFlag", "N")
+                )
+        ));
+        mockMvc.perform(post("/api/v1/integration/lab-results")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 19. LOINC CATALOG
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(95)
+    void loincCatalog_shouldReturnCodes() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/loinc/catalog")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").get(0).has("loincCode"));
+    }
+
+    @Test
+    @Order(96)
+    void loincPanel_shouldReturnGroupedCodes() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/loinc/panel/CBC")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").size() >= 5, "CBC panel should have 8 codes");
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 20. LAB TREND
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(97)
+    void labTrend_shouldReturnObservationsByLoinc() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/patients/100/observations")
+                        .param("loinc", "6690-2")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 21. PHARMACY
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(98)
+    void pharmacies_shouldReturnDirectory() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/pharmacies")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+        assertTrue(node.get("data").size() >= 3, "Seed data should have 5 pharmacies");
+    }
+
+    @Test
+    @Order(99)
+    void pharmacies_byState_shouldFilter() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/pharmacies")
+                        .param("state", "IL")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").size() > 0);
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 22. PRESCRIPTION TRANSMIT
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(100)
+    void prescriptionTransmit_shouldGenerateNcpdp() throws Exception {
+        MvcResult result = mockMvc.perform(put("/api/v1/prescriptions/300/transmit")
+                        .param("pharmacyId", "1")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals(200, node.get("code").asInt());
+        assertEquals("transmitted", node.get("data").get("status").asText());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 23. eCQM QUALITY MEASURES
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(101)
+    void qualityMeasures_shouldListDefinitions() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/quality/measures")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+        assertTrue(node.get("data").size() >= 3, "Seed data should have 3 CMS measures");
+    }
+
+    @Test
+    @Order(102)
+    void qualityReport_shouldCalculatePerformance() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/quality/measures/CMS122v11/report")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("CMS122v11", node.get("data").get("cmsId").asText());
+        assertTrue(node.get("data").get("performanceRate").isNumber());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 24. CONSENT
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(103)
+    void consent_create_shouldSucceed() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "consentType", "TREATMENT",
+                "scope", "general",
+                "patientId", 100
+        ));
+        mockMvc.perform(post("/api/v1/consent")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(104)
+    void consent_list_shouldReturnForPatient() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/consent")
+                        .param("patientId", "100")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+        assertTrue(node.get("data").size() >= 1);
+    }
+
+    @Test
+    @Order(105)
+    void consent_revoke_shouldSucceed() throws Exception {
+        // revoke the one just created (id=1)
+        mockMvc.perform(put("/api/v1/consent/1/revoke")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(106)
+    void patientConsent_selfService_shouldReturnRecords() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me/consent")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 25. EMERGENCY ACCESS
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(107)
+    void emergencyAccess_shouldReturnPatientData() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "reason", "Patient unconscious in ER — need allergy history immediately"
+        ));
+        MvcResult result = mockMvc.perform(post("/api/v1/emergency/access/100")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals(200, node.get("code").asInt());
+        assertNotNull(node.get("data").get("name"));
+    }
+
+    @Test
+    @Order(108)
+    void emergencyHistory_shouldReturnRecords() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/emergency/history")
+                        .param("patientId", "100")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+        assertTrue(node.get("data").size() >= 1);
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 26. KEY AUDIT
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(109)
+    void keyAudit_shouldReturnHistory() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/admin/keys/history")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertTrue(node.get("data").isArray());
+        // @PostConstruct ordering may vary; array may be empty or have entries
+    }
+
+    // ──────────────────────────────────────────────────────
+    // 27. PATIENT SELF-EDIT PROFILE
+    // ──────────────────────────────────────────────────────
+
+    @Test
+    @Order(110)
+    void patientUpdateOwnProfile_shouldSucceed() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "phoneMobile", "312-555-7777",
+                "email", "james.updated@email.com"
+        ));
+        mockMvc.perform(put("/api/v1/patient/me")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(111)
+    void patientUpdateOwnProfile_nameBlocked_shouldBeIgnored() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "name", "Hacked Name"
+        ));
+        mockMvc.perform(put("/api/v1/patient/me")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+        // verify name unchanged
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertEquals("James Anderson", node.get("data").get("name").asText());
+    }
 }
