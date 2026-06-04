@@ -16,7 +16,7 @@
 | 模块 | 路径 | 核心功能 |
 |------|------|---------|
 | **auth** | `module/system/service/AuthService.java` | Staff 登录/刷新/登出，Okta OAuth2 密码授予，dev-mode 本地 JWT，账户锁定(5 次失败→15min)，登录成功/失败全审计 |
-| **patient-auth** | `module/patient/controller/PatientAuthController.java` | 患者独立登录，认证与医疗记录分离审计，同样的锁定策略 |
+| **patient-auth** | `module/patient/controller/PatientAuthController.java` | 患者独立登录，认证与医疗记录分离审计，同样的锁定策略；`PatientPortalController` 提供自助 profile 更新 (`PUT /api/v1/patient/me`)，name 字段需 staff 验证不可自助修改 |
 | **patients** | `module/patient/` | 31 字段 US 医疗模型 CRUD，24/31 字段 AES 加密，PatientFormDTO→Entity→PatientVO(SSN 末 4 位) |
 | **appointments** | `module/appointment/` | 预约调度，30 分钟冲突检测，US visit type(NEW_PATIENT/FOLLOW_UP/URGENT_CARE 等)，CPT 编码 |
 | **prescriptions** | `module/prescription/` | 处方+药品项 CRUD，NDC/RxNorm/DEA/管制等级，CDS 集成(Drug-Drug + Drug-Allergy 检查) |
@@ -202,3 +202,6 @@ A: 只做 WARNING（不阻断），医生可以 override 并在 cds_override 表
 
 **Q: 为什么患者认证要分离？**
 A: HIPAA 要求认证记录和医疗记录分开审计。Patient 表存医疗数据，PatientAuth 表存凭证+锁定状态，通过 patientId FK 关联。这样医疗数据查询不会触发认证表锁，审计时也能区分是"谁登录了"还是"谁查看了数据"。
+
+**Q: 患者能自助修改自己的姓名吗？**
+A: 不能。`PUT /api/v1/patient/me` 允许患者修改 phone/email/address/emergencyContact，但后端显式忽略 `name` 字段。HIPAA §164.526 赋予患者请求修改 PHI 的权利，但 legal name 变更需要出示身份证件由 staff 验证后操作——这和 Epic MyChart 等主流 EHR 的做法一致。如果需要，可以通过 `PUT /api/v1/patients/{id}` (ADMIN/DOCTOR) 修改。
