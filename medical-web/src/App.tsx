@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { getUserRoles } from './utils/auth'
 import Login from './views/login'
 import StaffLayout from './layout/StaffLayout'
 import Dashboard from './views/dashboard'
@@ -30,9 +31,9 @@ export default function App() {
         <Route path="prescriptions" element={<Prescriptions />} />
         <Route path="billing" element={<Billing />} />
         <Route path="profile" element={<Profile />} />
-        <Route path="system/users" element={<Users />} />
-        <Route path="system/roles" element={<Roles />} />
-        <Route path="system/menus" element={<Menus />} />
+        <Route path="system/users" element={<AdminGuard><Users /></AdminGuard>} />
+        <Route path="system/roles" element={<AdminGuard><Roles /></AdminGuard>} />
+        <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>
@@ -50,6 +51,19 @@ export default function App() {
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
   if (!token) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem('token')
+  if (!token) return <Navigate to="/login" replace />
+  const roles = getUserRoles()
+  if (!roles.includes('ADMIN')) {
+    return <div style={{ padding: 48, textAlign: 'center' }}>
+      <h2 style={{ color: '#f56c6c' }}>Access Denied</h2>
+      <p style={{ color: '#909399', marginTop: 8 }}>Admin role required to access this page.</p>
+    </div>
+  }
   return <>{children}</>
 }
 

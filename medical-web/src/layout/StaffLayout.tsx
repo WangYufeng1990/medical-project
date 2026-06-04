@@ -1,4 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { hasAnyRole, getUserRoles } from '../utils/auth'
+import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
 const menuItems = [
@@ -16,6 +18,12 @@ const menuItems = [
 export default function StaffLayout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [roles, setRoles] = useState<string[]>([])
+
+  useEffect(() => { setRoles(getUserRoles()) }, [])
+
+  const visibleItems = menuItems.filter(item =>
+    item.type === 'divider' || hasAnyRole(item.roles))
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -27,7 +35,7 @@ export default function StaffLayout() {
       <aside className={styles.sidebar}>
         <div className={styles.logo}>Medical System</div>
         <nav>
-          {menuItems.map((item, i) => {
+          {visibleItems.map((item, i) => {
             if (item.type === 'divider') return <hr key={i} className={styles.divider} />
             return (
               <div key={item.path}

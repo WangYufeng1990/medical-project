@@ -3,6 +3,7 @@ package com.example.medical.module.patient.controller;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.PageResult;
+import java.util.Map;
 import com.example.medical.common.result.Result;
 import com.example.medical.common.validation.ValidPassword;
 import com.example.medical.module.appointment.dto.AppointmentVO;
@@ -64,6 +65,30 @@ public class PatientPortalController {
     public Result<PatientVO> profile(@AuthenticationPrincipal LoginUser loginUser) {
         Patient patient = patientRepository.findById(loginUser.getUserId()).orElse(null);
         return Result.ok(patient != null ? PatientVO.fromEntity(patient) : null);
+    }
+
+    @PutMapping
+    public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
+                                       @RequestBody Map<String, Object> body) {
+        Patient patient = patientRepository.findById(loginUser.getUserId())
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
+
+        // name changes require staff verification — NOT self-service
+        if (body.containsKey("phoneMobile")) patient.setPhoneMobile((String) body.get("phoneMobile"));
+        if (body.containsKey("phoneHome")) patient.setPhoneHome((String) body.get("phoneHome"));
+        if (body.containsKey("phoneWork")) patient.setPhoneWork((String) body.get("phoneWork"));
+        if (body.containsKey("email")) patient.setEmail((String) body.get("email"));
+        if (body.containsKey("addressLine1")) patient.setAddressLine1((String) body.get("addressLine1"));
+        if (body.containsKey("addressLine2")) patient.setAddressLine2((String) body.get("addressLine2"));
+        if (body.containsKey("city")) patient.setCity((String) body.get("city"));
+        if (body.containsKey("state")) patient.setState((String) body.get("state"));
+        if (body.containsKey("zipCode")) patient.setZipCode((String) body.get("zipCode"));
+        if (body.containsKey("emergencyContactName")) patient.setEmergencyContactName((String) body.get("emergencyContactName"));
+        if (body.containsKey("emergencyContactPhone")) patient.setEmergencyContactPhone((String) body.get("emergencyContactPhone"));
+        if (body.containsKey("emergencyContactRelation")) patient.setEmergencyContactRelation((String) body.get("emergencyContactRelation"));
+
+        patientRepository.save(patient);
+        return Result.ok();
     }
 
     @GetMapping("/appointments")
