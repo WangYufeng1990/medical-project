@@ -135,6 +135,7 @@ All require `PATIENT` role.
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/` | — | Current patient profile |
+| PUT | `/` | body: {phoneMobile, email, addressLine1, city, state, zipCode, ...} | Self-service profile update (name/DOB/MRN blocked — requires staff verification) |
 | GET | `/appointments` | `?page=1&size=10` | My appointments |
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |

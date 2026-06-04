@@ -196,7 +196,29 @@ CSS Modules (.module.css) — 每个组件独立作用域
 
 ---
 
-## 六、技术栈
+### 6. 权限隔离 (Role-Based UI)
+
+**侧边栏过滤：** `StaffLayout` 从 JWT payload (`parseJwt()`) 解码 roles，过滤菜单项 — doctor 看不到 Users/Roles/Menus。
+
+**路由守卫：** `AdminGuard` 组件包裹 `/system/*` 路由，doctor 直接访问 URL 时显示 "Access Denied" 而非空白 403 页。
+
+**患者字段限制：** 患者自助编辑 Profile 时，`name`/`MRN`/`DOB`/`sexAtBirth`/`insurance` 标记为 `readonly`。后端 `PUT /api/v1/patient/me` 忽略 `name` 参数——HIPAA 合规要求 legal name 变更必须通过 staff 验证。
+
+### 7. Appointment Status 标签化
+
+Appointment status 从原始数字 (0-6) 映射为彩色可读标签：
+
+```
+0 → Scheduled (蓝色)      3 → Completed (绿色)     6 → In Progress (蓝色)
+1 → Arrived (绿色)        4 → No-Show (橙色)
+2 → Cancelled (灰色)      5 → Rescheduled (橙色)
+```
+
+使用 `utils/labels.ts` 中的 `APPOINTMENT_STATUS` 常量映射，staff 和 patient 双视图共享。
+
+---
+
+## 八、技术栈
 
 | 层 | 技术 | 版本 |
 |----|------|------|
@@ -210,7 +232,7 @@ CSS Modules (.module.css) — 每个组件独立作用域
 
 ---
 
-## 七、常见面试追问
+## 九、常见面试追问
 
 **Q: 为什么选 React 而不是 Vue？**
 A: 美国医疗前端市场 React 占比 >70%。Epic MyChart、Cerner、Athenahealth、Zocdoc 等主要 EHR 和患者门户都用 React。面试 JD 写的是 React。
