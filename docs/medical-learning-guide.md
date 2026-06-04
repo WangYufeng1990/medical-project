@@ -448,6 +448,7 @@ Before:                          After:
 - PHI 掩码：电话仅显示末4位，Email 显示 `j***@domain.com`
 - 限流 5次/小时/IP — 防止批量数据泄露
 - 患者自服务导出：`GET /api/v1/patient/me/export` (HIPAA 164.524 数据访问权)
+- 患者自助更新 Profile：`PUT /api/v1/patient/me` — 可修改 phone/email/address/emergencyContact；name/DOB/MRN 必须通过 staff 验证（HIPAA §164.526）
 
 ### 10b. 审计日志查询
 

@@ -22,10 +22,12 @@ README.md  →  API-LAYOUT.md  →  backend-architecture-explained.md
 |------|------|------|------|---------|
 | **1** | `README.md` | 5 min | 大门 | 项目是什么、怎么跑起来、有哪些模块。先 `./mvnw spring-boot:run -Dspring-boot.run.profiles=h2` 跑起来 |
 | **2** | `API-LAYOUT.md` | 15 min | 外部契约 | 91 个端点全景，每个模块做什么。打开 `http://localhost:8080/doc.html` 对照 Swagger 看 |
-| **3** | `backend-architecture-explained.md` | 45 min | 内部骨架 | 12 层架构逐层展开 — 加密怎么工作、审计怎么隔离、FHIR 怎么构建、CDS 怎么检查。对照代码看 |
-| **4** | `medical-learning-guide.md` | 30 min | 领域翻译 | "传统后端的 age→dateOfBirth"、"国内身份证→美国 SSN+MRN"、"普通 CRUD→保险理赔状态机"。**重点读第 3 节（美国医疗数据模型）** |
+| **3** | `backend-architecture-explained.md` | 45 min | 内部骨架 | 12 层架构 + 5 个进阶模块（CDS/Integration/LOINC/eRx/eCQM）逐层展开 |
+| **4** | `medical-learning-guide.md` | 30 min | 领域翻译 | "传统后端的 age→dateOfBirth"、"国内身份证→美国 SSN+MRN"。**重点读第 3 节（美国医疗数据模型）** |
 | **5** | `CLAUDE.md` | 10 min | 规则约束 | 加依赖前看一下、写 DTO 前看一下、提交前看一下 |
-| **6** | `ROADMAP.md` | 5 min | 演进全貌 | 从 HIPAA 三支柱到 9 个 Round 全部完成的完整演进路径 |
+| **6** | `ROADMAP.md` | 5 min | 演进全貌 | 从 HIPAA 三支柱到 15 Rounds + React 前端迁移全部完成 |
+| **7** | `INTERVIEW-BACKEND.md` | 20 min | 面试准备 | 19 模块、6 大亮点、7 个面试追问 |
+| **8** | `INTERVIEW-FRONTEND.md` | 15 min | 面试准备 | 组件树、路由结构、PHI 脱敏、角色 UI 隔离、6 个面试追问 |
 
 ---
 

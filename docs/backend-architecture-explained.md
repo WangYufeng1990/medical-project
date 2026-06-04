@@ -418,7 +418,7 @@ public Executor auditExecutor() {
 
 ### 7.5 审计覆盖范围
 
-`@Auditable` 注解覆盖：PatientService (CRUD)、AppointmentService (CRUD)、PrescriptionService (CRUD)、BillService (lifecycle)、SysUserService (CRUD)、ExportController (CSV exports)、PatientPortalController (self-service export)。
+`@Auditable` 注解覆盖：PatientService (CRUD)、AppointmentService (CRUD)、PrescriptionService (CRUD)、BillService (lifecycle)、SysUserService (CRUD)、ExportController (CSV exports)、PatientPortalController (self-service export, profile update)。
 
 ---
 
