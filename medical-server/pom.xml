@@ -12,9 +12,9 @@
     </parent>
 
     <groupId>com.example</groupId>
-    <artifactId>medical</artifactId>
+    <artifactId>medical-server</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>medical</name>
+    <name>medical-server</name>
     <description>Medical Management System Backend</description>
 
     <properties>
