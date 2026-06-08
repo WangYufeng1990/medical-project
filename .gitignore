@@ -26,3 +26,10 @@ medical-web/.env.local
 docs/INTERVIEW-BACKEND.md
 docs/INTERVIEW-BACKEND-EN.md
 docs/INTERVIEW-FRONTEND.md
+
+# 中文版技术文档（本地保留，git 仅保留英文版）
+docs/API-LAYOUT.md
+docs/backend-architecture-explained.md
+docs/LEARNING-ORDER.md
+docs/medical-learning-guide.md
+docs/ROADMAP.md
