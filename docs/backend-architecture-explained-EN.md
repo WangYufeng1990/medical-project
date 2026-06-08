@@ -28,7 +28,7 @@ Three compliance goals run through the entire architecture:
 | **HAPI FHIR** | 7.4 | FHIR R4 native types (Bundle/Patient/Encounter/MedicationRequest) |
 | **MySQL** | 8.0+ | Primary database |
 | **Redis + Redisson** | 7.x / 3.40 | Cache + rate limiting |
-| **Springdoc OpenAPI** | 2.6.0 | API documentation (Swagger UI at /doc.html) |
+| **Springdoc OpenAPI** | 2.7.0 | API documentation (Swagger UI at /doc.html) |
 | **Lombok / Hutool** | latest | Boilerplate reduction + utilities |
 
 **Explicitly excluded technologies:** MyBatis/MyBatis-Plus, Spring Cloud microservices, gRPC/GraphQL, MongoDB/Elasticsearch, message queues, Shiro, self-issued JWT.
