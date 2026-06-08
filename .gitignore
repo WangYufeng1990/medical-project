@@ -19,23 +19,8 @@ medical-web/.env.local
 # ==========================================
 .DS_Store
 
-# 忽略 Claude Code 的本地配置和缓存
+# Claude Code
 .claude/
 
-# 面试复习资料（本地保留，不入仓库）
-docs/INTERVIEW-BACKEND.md
-docs/INTERVIEW-BACKEND-EN.md
-docs/INTERVIEW-FRONTEND.md
-
-# 中文版技术文档（本地保留，git 仅保留英文版）
-docs/API-LAYOUT.md
-docs/backend-architecture-explained.md
-docs/LEARNING-ORDER.md
-docs/medical-learning-guide.md
-docs/ROADMAP.md
-
-# 学习指南（本地保留，不入仓库）
-docs/medical-learning-guide-EN.md
-
-# 学习路径（本地保留，不入仓库）
-docs/LEARNING-ORDER-EN.md
+# Local notes
+docs/.local/
