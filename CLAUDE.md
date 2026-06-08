@@ -18,11 +18,11 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
 | Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
 | FHIR | HAPI FHIR R4 | 7.x (org.hl7.fhir.r4) |
-| API Doc | Springdoc OpenAPI | 2.7.0 (Swagger UI at /doc.html) |
+| API Doc | Springdoc OpenAPI | 2.6.0 (Swagger UI at /doc.html) |
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok, Hutool | latest |
-| Testing | JUnit 5 + Spring Boot Test | 94 integration tests |
+| Testing | JUnit 5 + Spring Boot Test | 121 tests (112 integration + 9 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**

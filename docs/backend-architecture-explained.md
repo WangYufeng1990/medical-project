@@ -27,8 +27,8 @@
 | **Spring Data JPA + QueryDSL** | 6.x / 5.x | ORM + 类型安全动态查询 |
 | **HAPI FHIR** | 7.4 | FHIR R4 原生类型（Bundle/Patient/Encounter/MedicationRequest） |
 | **MySQL** | 8.0+ | 主数据库 |
-| **Redis + Redisson** | 7.x / 3.x | 缓存 + 限流 |
-| **Knife4j (Swagger)** | 4.5 | API 文档 |
+| **Redis + Redisson** | 7.x / 3.40 | 缓存 + 限流 |
+| **Springdoc OpenAPI** | 2.6.0 | API 文档 (Swagger UI at /doc.html) |
 | **Lombok / Hutool** | latest | 代码简化 + 工具集 |
 
 **明确排除的技术：** MyBatis/MyBatis-Plus、Spring Cloud 微服务、gRPC/GraphQL、MongoDB/Elasticsearch、消息队列、Shiro、自签发 JWT。
@@ -327,13 +327,14 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 
 ### 6.2 加密字段清单
 
-| 实体 | 加密字段 |
-|------|---------|
-| Patient | `name`, `ssn`, `phoneMobile`, `phoneHome`, `insuranceMemberId` |
-| SysUser | `phone`, `stateLicenseNumber`, `deaNumber` |
-| Message | `content`（聊天记录） |
-| Bill | `insuranceClaimNumber` |
-| Prescription | `deaNumber` |
+| 实体 | 加密字段 (AesAttributeConverter) | 计数 |
+|------|---------|------|
+| Patient | `ssn`, `name`, `primaryCareProvider`, `phoneMobile`, `phoneHome`, `phoneWork`, `email`, `addressLine1`, `addressLine2`, `city`, `state`, `zipCode`, `emergencyContactName`, `emergencyContactPhone`, `insurancePayer`, `insuranceMemberId`, `insuranceGroupNumber`, `medicalHistory`, `allergies` (+ `dateOfBirth` 使用 LocalDateAttributeConverter) | 19+1 |
+| SysUser | `phone`, `email`, `stateLicenseNumber`, `deaNumber` | 4 |
+| Message | `content`（聊天记录） | 1 |
+| Bill | `insuranceClaimNumber` | 1 |
+| Prescription | `deaNumber` | 1 |
+| **合计** | | **26+1** |
 
 ### 6.3 加密算法
 
@@ -352,15 +353,11 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 
 **密钥审计：** `AesCryptoUtil.init()` 自动向 `key_audit` 表写入 `KEY_INIT` / `KEY_ROTATION` 事件。ADMIN 可通过 `GET /api/v1/admin/keys/history` 查看密钥生命周期。
 
-### 6.5 加密字段清单（完整）
+### 6.5 加密算法与密钥轮换细节
 
-| 实体 | 加密字段 | 新增于 |
-|------|---------|--------|
-| Patient | `name`, `ssn`, `phoneMobile`, `phoneHome`, `phoneWork`, `email`, `emergencyContactPhone`, `insuranceMemberId` | Round 0 补全 phoneWork/email/emergencyContactPhone |
-| SysUser | `phone`, `stateLicenseNumber`, `deaNumber` | — |
-| Message | `content`（聊天记录） | — |
-| Bill | `insuranceClaimNumber` | — |
-| Prescription | `deaNumber` | — |
+> 加密字段完整清单见 §6.2。本节重点说明算法实现。
+>
+> Patient 实体中 `dateOfBirth` 使用独立的 `LocalDateAttributeConverter`：将 LocalDate 转为 ISO 字符串后 AES-256-GCM 加密，存储为 VARCHAR(100)。其余所有加密字段统一使用 `AesAttributeConverter`。
 
 ---
 
@@ -668,19 +665,20 @@ Result.fail(404, "Patient not found")
 
 `POST /api/v1/emergency/access/{patientId}?reason=...` — 医生可突破常规权限查看任何患者数据，30 分钟自动过期。同步审计（`EmergencyAccess.audited=1`）+ WARN 级别日志。ADMIN 可查看历史 `GET /api/v1/emergency/history`。
 
-### 11.5 结构化日志
+### 11.8 结构化日志
 
 `logback-spring.xml`：
 - **生产环境** — JSON 格式（SIEM 友好），单独 `logs/audit.log`（保留 90 天）
 - **开发环境** — 人类可读格式
 - Hibernate SQL 日志关闭（`WARN` 级别）
 
-### 11.6 测试
+### 11.9 测试
 
-9 个单元测试覆盖：
-- `AesAttributeConverter` — 加密/解密/不同 IV/损毁数据降级
-- `GlobalExceptionHandler` — 401/404/409 状态码映射
-- `BaseEntity` — `@Version` 字段 + `@PrePersist` 回调
+121 测试覆盖 (4 文件)：
+- `IntegrationTest` — 112 集成测试，覆盖全部 14 个业务模块 API 端点
+- `AesAttributeConverterTest` — 4 测试：加密/解密/不同 IV/损毁数据降级
+- `GlobalExceptionHandlerTest` — 3 测试：401/404/409 状态码映射
+- `BaseEntityTest` — 2 测试：`@Version` 字段 + `@PrePersist` 回调
 
 ---
 

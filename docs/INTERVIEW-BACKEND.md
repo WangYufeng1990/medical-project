@@ -1,7 +1,7 @@
 # Medical Backend — 面试复习大纲（中文版）
 
-> Spring Boot 3.4 + MySQL + Redis + Okta OAuth2 + HAPI FHIR R4
-> 19 模块 | 27 张表 | 120 集成测试 | 15 Rounds 演进
+> Spring Boot 3.4.1 + MySQL + Redis + Okta OAuth2 + HAPI FHIR 7.4
+> 19 模块 | 22 张表 | 121 测试 (112 集成 + 9 单元) | 15 Rounds 演进
 
 ---
 
@@ -11,7 +11,7 @@
 2. [19 模块全景](#二19-模块全景)
 3. [6 大核心亮点](#三6-大核心亮点)
 4. [关键技术决策与权衡](#四关键技术决策与权衡)
-5. [数据库设计 (27 张表)](#五数据库设计-27-张表)
+5. [数据库设计 (22 张表)](#五数据库设计-22-张表)
 6. [安全架构分层](#六安全架构分层)
 7. [API 端点统计](#七api-端点统计)
 8. [技术栈清单](#八技术栈清单)
@@ -22,7 +22,7 @@
 
 ## 一、30 秒电梯演讲
 
-> "I built a HIPAA-compliant medical practice management system from scratch — Spring Boot backend with 21 CFR Part 11 audit trails, AES-256-GCM transparent encryption with versioned key rotation, FHIR R4 interoperability using HAPI FHIR, and clinical decision support for drug-drug interaction and drug-allergy checking. 19 modules, 27 database tables, 120 integration tests, full RBAC with Okta OAuth2."
+> "I built a HIPAA-compliant medical practice management system from scratch — Spring Boot backend with 21 CFR Part 11 audit trails, AES-256-GCM transparent encryption with versioned key rotation, FHIR R4 interoperability using HAPI FHIR, and clinical decision support for drug-drug interaction and drug-allergy checking. 19 modules, 22 database tables, 121 tests, full RBAC with Okta OAuth2."
 
 ---
 
@@ -32,7 +32,7 @@
 
 | 模块 | 路径 | 核心功能 | 关键技术点 |
 |------|------|---------|-----------|
-| **patients** | `module/patient/` | 31 字段美国医疗模型 CRUD | 24/31 字段 AES 加密；PatientFormDTO→Entity→PatientVO(SSN 末4位) |
+| **patients** | `module/patient/` | 29 字段美国医疗模型 CRUD | 19/29 字段 AES-256-GCM 加密 (+1 LocalDate 加密)；PatientFormDTO→Entity→PatientVO(SSN 末4位) |
 | **appointments** | `module/appointment/` | 预约调度+冲突检测 | 30分钟冲突窗口；US visit type(5 种)；CPT E&M 编码 |
 | **prescriptions** | `module/prescription/` | 处方+药品项 CRUD | NDC/RxNorm 双编码；DEA 管制等级；CDS 集成 |
 | **billing** | `module/billing/` | 保险理赔状态机 | DRAFT→SUBMITTED→PENDING→PAID/DENIED→APPEALED 6 状态 |
@@ -122,7 +122,7 @@
 └─────────────────────────────────────────────────┘
 ```
 
-**加密字段清单（24/31 Patient 字段 + SysUser + Message + Bill + Prescription）：**
+**加密字段清单（26 字段，覆盖 Patient(19) + SysUser(4) + Message(1) + Bill(1) + Prescription(1) + 额外 Patient dateOfBirth 使用 LocalDate 加密）：**
 
 | 实体 | 加密字段 |
 |------|---------|
@@ -322,7 +322,7 @@ Amoxicillin(308191) → Penicillin allergy class
 
 ---
 
-## 五、数据库设计 (27 张表)
+## 五、数据库设计 (22 张表)
 
 **ER 关系图（简化）：**
 ```
@@ -347,7 +347,7 @@ CDS 规则表: drug_interaction, drug_allergy_class, cds_override
 
 **所有表名：**
 ```
-业务: sys_user, sys_role, sys_menu, sys_user_role, sys_role_menu
+业务: sys_user, sys_role, sys_menu (+ JPA 关联表 sys_user_role, sys_role_menu)
 医疗: patient, patient_auth, appointment, prescription, prescription_item, bill
 通信: message
 审计: audit_log, password_history, consent, emergency_access, key_audit
@@ -355,6 +355,7 @@ CDS: drug_interaction, drug_allergy_class, cds_override
 检验: observation, loinc_catalog
 药房: pharmacy_directory
 质量: quality_measure
+(22 个 @Entity + 2 个自动关联表, 共 24 张物理表)
 ```
 
 ---
@@ -437,14 +438,14 @@ Layer 6: 抗攻击
 | Security | Spring Security + OAuth2 | 6.x | 原生 OAuth2 Resource Server 支持 |
 | ORM | Spring Data JPA + Querydsl | Hibernate 6.x | JPA 标准 + 类型安全动态查询 |
 | DB | MySQL | 8.0+ | RDBMS 广泛部署 |
-| Cache | Redis + Redisson | 7.x / 3.x | Redisson 提供分布式锁和限流 |
+| Cache | Redis + Redisson | 7.x / 3.40 | Redisson 提供分布式锁和限流 |
 | FHIR | HAPI FHIR R4 | 7.4 | Java 生态唯一成熟的 FHIR 库 |
-| API Doc | Springdoc OpenAPI | 2.7.0 | Spring Boot 3.4 兼容 |
+| API Doc | Springdoc OpenAPI | 2.6.0 | Spring Boot 3.4 兼容 |
 | Validation | Jakarta Validation | — | 声明式校验 (@ValidPassword) |
 | JSON | Jackson | — | Spring Boot 默认 |
 | Util | Lombok, Hutool | — | 减少样板代码 |
 | Build | Maven | 4.x | 依赖管理 |
-| Testing | JUnit 5 + Spring Boot Test | — | 120 集成测试 |
+| Testing | JUnit 5 + Spring Boot Test | — | 121 测试 (112 集成 + 9 单元) |
 
 ---
 
@@ -512,7 +513,7 @@ Okta 是现代 SaaS，SLA 通常是 99.99%。如果 Okta 真的宕机：① Staf
 **回答 "Tell me about yourself" 时的结构：**
 1. "I'm a backend engineer with N years of experience, recently focused on healthcare compliance."
 2. "I built this HIPAA-compliant medical system covering encryption, audit, FHIR interoperability, and clinical decision support."
-3. "The project has 19 modules, 120 integration tests, and implements 21 CFR Part 11 audit compliance."
+3. "The project has 19 modules, 121 tests, and implements 21 CFR Part 11 audit compliance."
 4. "I'm looking for a backend role where I can apply my healthcare domain knowledge."
 
 **回答 "What was the hardest problem?" 时的选择：**

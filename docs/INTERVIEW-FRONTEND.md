@@ -17,7 +17,7 @@
 Staff Portal (/)
 ├── /login                  → StaffLogin (Okta OAuth2 JWT)
 ├── /dashboard              → Dashboard (4 统计卡片，可点击跳转)
-├── /patients               → PatientList + PatientForm (31 字段 US 医疗模型)
+├── /patients               → PatientList + PatientForm (29 字段 US 医疗模型)
 ├── /appointments           → AppointmentList (预约 CRUD，时间冲突检测)
 ├── /prescriptions          → PrescriptionList (处方 + 药品项)
 ├── /billing                → BillingList (保险理赔状态)
@@ -63,7 +63,7 @@ Patient Portal (/patient)
 
 ### 2. PatientForm (`src/views/patients/index.tsx`)
 
-**完整的 US 医疗模型表单 — 31 个字段：**
+**完整的 US 医疗模型表单 — 29 个字段：**
 
 ```
 Identity:

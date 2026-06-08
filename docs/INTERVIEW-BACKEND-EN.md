@@ -1,7 +1,7 @@
 # Medical Backend — Interview Prep Guide
 
 > Spring Boot 3.4 + MySQL + Redis + Okta OAuth2 + HAPI FHIR R4
-> 19 modules | 27 tables | 120 integration tests | Evolution across 15 rounds
+> 19 modules | 22 tables | 121 tests (112 integration + 9 unit) | Evolution across 15 rounds
 
 ---
 
@@ -11,7 +11,7 @@
 2. [Module Overview (19 modules)](#2-module-overview)
 3. [6 Core Highlights](#3-6-core-highlights)
 4. [Key Technical Decisions & Trade-offs](#4-key-technical-decisions)
-5. [Database Design (27 tables)](#5-database-design)
+5. [Database Design (22 tables)](#5-database-design)
 6. [Security Architecture — 6 Layers](#6-security-architecture)
 7. [API Endpoint Statistics](#7-api-endpoint-statistics)
 8. [Tech Stack](#8-tech-stack)
@@ -22,7 +22,7 @@
 
 ## 1. Elevator Pitch
 
-> "I built a HIPAA-compliant medical practice management system from scratch — Spring Boot backend with 21 CFR Part 11 audit trails, AES-256-GCM transparent encryption with versioned key rotation, FHIR R4 interoperability using HAPI FHIR, and clinical decision support for drug-drug interaction and drug-allergy checking. 19 modules, 27 database tables, 120 integration tests, full RBAC with Okta OAuth2."
+> "I built a HIPAA-compliant medical practice management system from scratch — Spring Boot backend with 21 CFR Part 11 audit trails, AES-256-GCM transparent encryption with versioned key rotation, FHIR R4 interoperability using HAPI FHIR, and clinical decision support for drug-drug interaction and drug-allergy checking. 19 modules, 22 database tables, 121 tests, full RBAC with Okta OAuth2."
 
 ---
 
@@ -32,7 +32,7 @@
 
 | Module | Key Capabilities | Tech Highlights |
 |--------|-----------------|-----------------|
-| **patients** | 31-field US medical model CRUD | 24/31 fields AES encrypted; DTO→Entity→VO with SSN masking to last-4 |
+| **patients** | 29-field US medical model CRUD | 19/29 fields AES-256-GCM encrypted (+1 LocalDate encrypted); DTO→Entity→VO with SSN masking to last-4 |
 | **appointments** | Scheduling with conflict detection | 30-min conflict window; US visit types (NEW_PATIENT/FOLLOW_UP/URGENT_CARE/etc.); CPT E&M codes |
 | **prescriptions** | Rx + line items CRUD | NDC/RxNorm dual coding; DEA controlled substance scheduling; CDS integration |
 | **billing** | Insurance claim state machine | 6 states: DRAFT→SUBMITTED→PENDING→PAID/DENIED→APPEALED |
@@ -124,7 +124,7 @@
 └──────────────────────────────────────────────────┘
 ```
 
-**Encrypted fields (24/31 Patient columns + 4 entities):**
+**Encrypted fields (26 fields across 5 entities: Patient(19) + SysUser(4) + Message(1) + Bill(1) + Prescription(1), +1 Patient dateOfBirth via LocalDate encryption):**
 
 | Entity | Encrypted Fields |
 |--------|-----------------|
@@ -418,12 +418,12 @@ Layer 6: Anti-Attack
 | DB | MySQL | 8.0+ | Widely deployed RDBMS |
 | Cache | Redis + Redisson | 7.x / 3.x | Distributed locks + rate limiting |
 | FHIR | HAPI FHIR R4 | 7.4 | Only mature FHIR library for Java |
-| API Doc | Springdoc OpenAPI | 2.7.0 | Spring Boot 3.4 compatible |
+| API Doc | Springdoc OpenAPI | 2.6.0 | Spring Boot 3.4 compatible |
 | Validation | Jakarta Validation | — | Declarative validation (@ValidPassword) |
 | JSON | Jackson | — | Spring Boot default |
 | Util | Lombok, Hutool | — | Reduce boilerplate |
 | Build | Maven | 4.x | Dependency management |
-| Testing | JUnit 5 + Spring Boot Test | — | 120 integration tests |
+| Testing | JUnit 5 + Spring Boot Test | — | 121 tests (112 integration + 9 unit) |
 
 ---
 
@@ -488,7 +488,7 @@ The current monolithic architecture is designed for small-to-medium clinics (1-5
 **Structure for "Tell me about yourself":**
 1. "I'm a backend engineer with [N] years of experience, recently focused on healthcare compliance."
 2. "I built this HIPAA-compliant medical system covering encryption, audit, FHIR interoperability, and CDS."
-3. "The project has 19 modules, 120 integration tests, and implements 21 CFR Part 11."
+3. "The project has 19 modules, 121 tests, and implements 21 CFR Part 11."
 4. "I'm looking for a backend role where I can apply healthcare domain knowledge."
 
 **Pick your "hardest problem" story:**

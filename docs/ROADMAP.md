@@ -358,7 +358,7 @@ Round 9  eCQM 临床质量度量                        ✅ 2026-06-01
 
 Patient 表新增 12 个字段加密：address、city/state/zip、emergencyContactName、insurancePayer/GroupNumber、primaryCareProvider、medicalHistory(TEXT→VARCHAR 4000)、allergies(VARCHAR→2000)、dateOfBirth(LocalDate→VARCHAR 100)。
 
-`LocalDateAttributeConverter` 新建。Patient 表 24/31 字段已加密。
+`LocalDateAttributeConverter` 新建。Patient 表 19/29 字段 AES-256-GCM 加密 + 1字段 LocalDate 加密。
 
 ---
 
