@@ -21,3 +21,8 @@ medical-web/.env.local
 
 # 忽略 Claude Code 的本地配置和缓存
 .claude/
+
+# 面试复习资料（本地保留，不入仓库）
+docs/INTERVIEW-BACKEND.md
+docs/INTERVIEW-BACKEND-EN.md
+docs/INTERVIEW-FRONTEND.md
