@@ -110,7 +110,7 @@ public class PatientController {
 
 Controller's only job: accept parameters → call Service → wrap Result return. No business logic.
 
-### 4.2 Service Layer — Business Logic, Three Core Annotations
+### 4.2 Service Layer — Business Logic, Two Annotations + One Deliberate Omission
 
 ```java
 @Service
@@ -129,7 +129,7 @@ public class PatientService {
 |------------|---------|
 | `@Transactional` | Transaction protection — auto-rollback on failure |
 | `@Auditable(phiAccess = true)` | Async audit log — parameter values auto-masked as `[PHI]` |
-| No `@Cacheable` | Patient ePHI is **NOT cached** in Redis — prevents decrypted data leakage in cache |
+| *(no `@Cacheable`)* | Patient ePHI is **deliberately NOT cached** in Redis — prevents decrypted data leakage |
 
 ### 4.3 Repository Layer — Spring Data JPA
 
