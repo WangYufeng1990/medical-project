@@ -87,7 +87,7 @@ HTTP Request → Controller → Service → Repository → Database
 HTTP Response ← Controller ← Service ← Repository ← Database
 ```
 
-### 4.1 Controller Layer — Does Only Three Things
+### 4.1 Controller Layer — Single Responsibility: Route, Call Service, Wrap Result
 
 ```java
 @RestController

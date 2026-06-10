@@ -11,7 +11,7 @@
 | Cache | Redis 7 (Redisson + Spring Cache) |
 | Auth | Spring Boot OAuth2 Resource Server (external IdP) |
 | FHIR | HAPI FHIR R4 7.x |
-| API Doc | Springdoc OpenAPI |
+| API Doc | Springdoc OpenAPI 2.7.0 |
 | Util | Lombok, Hutool 5.8.34 |
 
 ## Directory Structure
@@ -31,11 +31,13 @@ src/main/java/com/example/medical/
 │   ├── system/          users, roles, menus, auth (login/refresh/logout)
 │   ├── patient/         patient CRUD, patient portal, FHIR case export, patient auth
 │   ├── appointment/     appointment scheduling with conflict detection
-│   ├── prescription/    prescriptions + items (CRUD)
-│   ├── billing/         bills + payment
+│   ├── prescription/    prescriptions + items (CRUD) + CDS + ePrescribing
+│   ├── billing/         bills + payment (claim lifecycle)
 │   ├── chat/            patient-doctor messaging
 │   ├── dashboard/       aggregate stats (JdbcTemplate)
-│   └── export/          CSV export (patients, bills)
+│   ├── export/          CSV export (patients, bills)
+│   ├── integration/     ADT + lab results JSON API
+│   └── quality/         eCQM clinical quality measures
 ├── security/            JwtClaimMapper, SecurityConfig
 └── util/                CsvUtil
 ```
@@ -153,7 +155,7 @@ All require `PATIENT` role.
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body | Update (30-min conflict check) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
-Appointment statuses: 0 = Scheduled, 1 = Completed, 2 = Cancelled.
+Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 4 = No-Show, 5 = Rescheduled, 6 = In Progress.
 
 ### Prescriptions — `/api/v1/prescriptions`
 
@@ -175,7 +177,7 @@ Appointment statuses: 0 = Scheduled, 1 = Completed, 2 = Cancelled.
 | PUT | `/{id}/pay` | ADMIN | path | Mark as paid |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
-Bill statuses: 0 = Unpaid, 1 = Paid, 2 = Refunded.
+Claim lifecycle: DRAFT → SUBMITTED → PENDING → PAID / DENIED → APPEALED.
 
 ### Chat (Staff) — `/api/v1/messages`
 
@@ -367,8 +369,8 @@ AES-256-GCM via JPA `@Convert` — transparent at-rest encryption. PBKDF2-HMAC-S
 ### Database Conventions
 - All entities extend `BaseEntity`: `id` (auto-generated), `createTime`, `updateTime` (auto-managed via `@PrePersist`/`@PreUpdate`), `isDeleted` (logical delete via `@SQLDelete`)
 - `@Version` optimistic locking on critical entities
-- No physical deletes — `@SQLDelete(sql = "UPDATE {table} SET is_deleted = 1 WHERE id = ?")`
-- `@Where(clause = "is_deleted = 0")` on entity level for automatic soft-delete filtering
+- No physical deletes — `@SQLDelete(sql = "UPDATE {table} SET is_deleted = 1 WHERE id = ? AND version = ?")`
+- `@SQLRestriction("is_deleted = 0")` on entity level for automatic soft-delete filtering (Hibernate 6.x)
 
 ### FHIR Interoperability
 - HAPI FHIR R4 provides standard US healthcare data models.
