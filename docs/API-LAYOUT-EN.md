@@ -64,15 +64,18 @@ Paginated endpoints return `Result<PageResult<T>>`:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/login` | public | Staff/patient login, redirects to IdP or validates local credentials |
-| POST | `/refresh` | Bearer token | Refresh OAuth2 access token via IdP |
+| POST | `/login` | public | Staff login — dev: BCrypt + local JWT, prod: Okta password grant |
+| POST | `/refresh` | Bearer token | Refresh staff access token via IdP (not available in dev mode) |
 | POST | `/logout` | Bearer token | Invalidate session at IdP / notify client to discard token |
 
 ### Patient Auth — `/api/v1/patient`
 
+Patient accounts are self-managed (local `patient_auth` table, BCrypt + local JWT). No external IdP involvement.
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/login` | public | Patient login |
+| POST | `/login` | public | Patient login — local BCrypt verification, returns locally-signed JWT |
+| POST | `/refresh` | Bearer token | Refresh patient access token — validates old token, issues new one |
 
 ### User Management — `/api/v1/users`
 

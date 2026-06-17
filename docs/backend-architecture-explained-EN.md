@@ -238,21 +238,38 @@ Production:                          Development (h2/dev profile):
 
 ```
 1. POST /api/v1/patient/login { username, password }
-2. Validates PatientAuth (BCrypt) + account lockout check (5 failures→15min lockout)
-3. Calls Okta /v1/token (scope: openid profile groups)
-4. JwtClaimMapper extracts groups claim → ROLE_PATIENT
+2. Lookup PatientAuth → account disabled/lockout check (5 failures→15min lockout)
+3. Local BCrypt password verification (no external IdP — patients are self-managed accounts)
+4. DevJwtEncoder issues HS256 JWT with uid, roles=[PATIENT], scp=[patient/Patient.read, ...]
+5. JwtClaimMapper extracts roles claim → ROLE_PATIENT
 ```
 
-**Development:** When `app.security.dev-mode=true` is explicitly set, `SecurityConfigDev` issues a locally-signed JWT with `roles` + `uid` claims — scoped to dev and h2 profiles only.
+Patient auth is **always local**, regardless of environment. Staff auth continues to use the external IdP
+(Okta / Auth0 / Cognito) for production, with the same `DevJwtEncoder` fallback in dev mode.
 
-### 5.3 Token Refresh Rotation
+Patient token refresh (`POST /api/v1/patient/refresh`) validates the old token with `JwtUtils`, looks up the
+`PatientAuth` record, and issues a fresh JWT — no external IdP involvement.
 
+**Development:** When `app.security.dev-mode=true` is explicitly set, `SecurityConfigDev` issues a locally-signed HMAC-SHA256 JWT with `roles` + `uid` claims — scoped to dev and h2 profiles only. Patient auth uses local JWT in **all** environments, not just dev.
+
+### 5.3 Token Refresh
+
+**Staff:**
 ```
 POST /api/v1/auth/refresh { refreshToken }
   → Okta /v1/token (grant_type=refresh_token)
   → Old refresh_token auto-invalidated on Okta side
   → Returns new access_token + refresh_token
   → Dev environment doesn't support refresh (re-login instead)
+```
+
+**Patient:**
+```
+POST /api/v1/patient/refresh { refreshToken }
+  → JwtUtils validates old access token signature + expiry
+  → PatientAuth lookup by subject → checks status (disabled accounts rejected)
+  → DevJwtEncoder issues new access token with same roles/scopes
+  → Works uniformly in all environments (no external IdP dependency)
 ```
 
 ### 5.4 RBAC Access Control
@@ -679,8 +696,9 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-121 tests across 4 files:
+137 tests across 5 files:
 - `IntegrationTest` — 112 integration tests covering all 14 business module API endpoints
+- `PatientAuthControllerTest` — 16 tests: login success/disabled/locked/bad-password/patient-orphaned, refresh valid/invalid/disabled, audit resilience, user enumeration prevention
 - `AesAttributeConverterTest` — 4 tests: encrypt/decrypt/different IV/corrupted data degradation
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
 - `BaseEntityTest` — 2 tests: `@Version` field + `@PrePersist` callback

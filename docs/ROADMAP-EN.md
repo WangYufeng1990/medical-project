@@ -469,7 +469,7 @@ Added encryption for 12 additional Patient fields: address, city/state/zip, emer
 
 | Task | File | Description |
 |------|------|-------------|
-| Shared RestTemplate Bean | `AuthService.java`, `PatientAuthController.java` | Connection pool + 5s timeout + circuit breaker |
+| Shared RestTemplate Bean | `AuthService.java` | Connection pool + 5s timeout + circuit breaker (staff Okta calls only; patient auth has no external IdP dependency) |
 
 ### 13.3 Account Lockout Atomicity
 
