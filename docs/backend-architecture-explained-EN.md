@@ -361,9 +361,17 @@ Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:1
 | `0x01` | `app.aes.key` (current) | All new encryptions use this version |
 | No prefix | `app.aes.key.previous` → fallback to `app.aes.key` | Legacy data backward-compatible decryption |
 
-**Rotation Process:** Update `app.aes.key` → old key set as `app.aes.key.previous` → old data re-encrypted through natural business writes → remove `previous` once confirmed no old data remains.
+**Rotation Process:**
+1. Keep `app.aes.key` unchanged, set `app.aes.key.previous` to the old key value
+2. Generate a new key, set it as `app.aes.key`
+3. Restart → `AesCryptoUtil.init()` detects rotation → writes `KEY_ROTATION` audit event
+4. `KeyRotationService` starts async background migration — scans all 27 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
+5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
+6. Once all columns show 0 remaining, remove `app.aes.key.previous` and restart
 
-**Key Audit:** `AesCryptoUtil.init()` auto-writes `KEY_INIT` / `KEY_ROTATION` events to the `key_audit` table. ADMIN can view key lifecycle via `GET /api/v1/admin/keys/history`.
+A daily 3 AM cron safety check idempotently resumes any incomplete migration.
+
+**Key Audit:** `AesCryptoUtil.init()` auto-writes `KEY_INIT` / `KEY_ROTATION` events to the `key_audit` table. `KeyRotationService` writes `ROTATION_COMPLETE` on successful migration. ADMIN can view key lifecycle via `GET /api/v1/admin/keys/history` and migration progress via `GET /api/v1/admin/keys/rotation-status`.
 
 ### 6.5 Encryption Algorithm & Key Rotation Details
 
@@ -689,10 +697,10 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-133 tests across 5 files:
+137 tests across 5 files:
 - `IntegrationTest` — 112 integration tests covering all 14 business module API endpoints
 - `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
-- `AesAttributeConverterTest` — 4 tests: encrypt/decrypt/different IV/corrupted data degradation
+- `AesAttributeConverterTest` — 8 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases)
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
 - `BaseEntityTest` — 2 tests: `@Version` field + `@PrePersist` callback
 

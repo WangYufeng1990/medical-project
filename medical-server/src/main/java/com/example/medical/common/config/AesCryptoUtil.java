@@ -178,8 +178,20 @@ public class AesCryptoUtil {
     }
 
     /**
+     * Re-encrypt a legacy ciphertext with the current key.
+     * Decrypts (automatically using PREVIOUS_KEY if unversioned),
+     * then re-encrypts with CURRENT_KEY, producing a v1-prefixed ciphertext.
+     * Returns null if the input is null or decryption fails.
+     */
+    public static String reencrypt(String cipherHex) {
+        if (cipherHex == null) return null;
+        String plaintext = decrypt(cipherHex);
+        if (plaintext == null || plaintext.equals("[DECRYPT_FAILED]")) return null;
+        return encrypt(plaintext);
+    }
+
+    /**
      * Returns true if key rotation is active (a previous key is configured).
-     * Useful for admin health checks.
      */
     public static boolean isRotationActive() {
         return rotationActive;

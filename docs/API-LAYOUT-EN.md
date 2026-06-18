@@ -256,6 +256,7 @@ Requires `ADMIN`.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/history` | Key lifecycle audit trail (KEY_INIT / KEY_ROTATION events) |
+| GET | `/rotation-status` | Key rotation migration progress — per-table legacy row counts |
 
 ### CDS — `/api/v1/cds`
 
