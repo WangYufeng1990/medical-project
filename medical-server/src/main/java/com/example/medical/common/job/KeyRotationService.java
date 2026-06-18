@@ -6,15 +6,11 @@ import com.example.medical.common.config.AesCryptoUtil;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +55,7 @@ public class KeyRotationService {
             new TableColumn("prescription", "dea_number")
     );
 
-    private final DataSource dataSource;
+    private final JdbcTemplate jdbc;
     private final KeyAuditRepository keyAuditRepo;
     private final TransactionTemplate transactionTemplate;
     private final Executor rotationExecutor;
@@ -86,7 +82,7 @@ public class KeyRotationService {
 
     @Scheduled(cron = "0 0 3 * * ?")
     void safetyCheck() {
-        if (!AesCryptoUtil.isRotationActive() || complete) return;
+        if (running || !AesCryptoUtil.isRotationActive() || complete) return;
         log.info("Rotation safety check — resuming migration if incomplete");
         rotationExecutor.execute(this::runBatchRotation);
     }
@@ -120,14 +116,21 @@ public class KeyRotationService {
 
         while (true) {
             Integer batchCount = transactionTemplate.execute(status -> {
-                List<RowData> rows = fetchLegacyRows(table, column);
+                String sql = "SELECT id, " + column + " FROM " + table
+                           + " WHERE " + column + " IS NOT NULL"
+                           + " AND " + column + " NOT LIKE '01%'"
+                           + " LIMIT " + BATCH_SIZE;
+                List<RowData> rows = jdbc.query(sql,
+                        (rs, i) -> new RowData(rs.getLong("id"), rs.getString(column)));
+
                 if (rows.isEmpty()) return 0;
 
                 int count = 0;
                 for (RowData row : rows) {
                     String newCipher = AesCryptoUtil.reencrypt(row.ciphertext);
                     if (newCipher != null) {
-                        updateRow(table, column, row.id, newCipher);
+                        jdbc.update("UPDATE " + table + " SET " + column + " = ? WHERE id = ?",
+                                newCipher, row.id);
                         count++;
                     } else {
                         log.warn("Rotation: skipping row id={} in {}.{} — decryption failed", row.id, table, column);
@@ -151,49 +154,18 @@ public class KeyRotationService {
         }
     }
 
-    private List<RowData> fetchLegacyRows(String table, String column) {
-        List<RowData> rows = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "SELECT id, " + column + " FROM " + table
-                     + " WHERE " + column + " IS NOT NULL"
-                     + " AND " + column + " NOT LIKE '01%'"
-                     + " LIMIT " + BATCH_SIZE)) {
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    rows.add(new RowData(rs.getLong("id"), rs.getString(column)));
-                }
-            }
-        } catch (Exception e) {
-            log.error("Rotation: failed to fetch legacy rows from {}.{}", table, column, e);
-        }
-        return rows;
-    }
-
-    private void updateRow(String table, String column, long id, String newCipher) {
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE " + table + " SET " + column + " = ? WHERE id = ?")) {
-            ps.setString(1, newCipher);
-            ps.setLong(2, id);
-            ps.executeUpdate();
-        } catch (Exception e) {
-            log.error("Rotation: failed to update {}.{} id={}", table, column, id, e);
-        }
-    }
-
     private int countLegacyRows(String table, String column) {
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "SELECT COUNT(*) FROM " + table
-                     + " WHERE " + column + " IS NOT NULL"
-                     + " AND " + column + " NOT LIKE '01%'");
-             ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) return rs.getInt(1);
+        try {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM " + table
+                    + " WHERE " + column + " IS NOT NULL"
+                    + " AND " + column + " NOT LIKE '01%'",
+                    Integer.class);
+            return count != null ? count : 0;
         } catch (Exception e) {
-            // ignore
+            log.warn("Rotation: failed to count legacy rows in {}.{}", table, column, e);
+            return -1;
         }
-        return 0;
     }
 
     private void writeAudit(String eventType, String detail) {
