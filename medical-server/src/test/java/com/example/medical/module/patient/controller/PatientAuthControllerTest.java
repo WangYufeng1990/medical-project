@@ -8,7 +8,6 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
-import com.example.medical.security.JwtUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +37,6 @@ class PatientAuthControllerTest {
     @Mock private PatientAuthRepository patientAuthRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtEncoder jwtEncoder;
-    @Mock private JwtUtils jwtUtils;
     @Mock private AuditLogWriter auditLogWriter;
     @Mock private HttpServletRequest httpRequest;
 
@@ -53,7 +51,7 @@ class PatientAuthControllerTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(controller, "accessTokenExpirySeconds", 7200L);
+        ReflectionTestUtils.setField(controller, "patientTokenExpirySeconds", 86400L);
     }
 
     // ──────────────────────────────────────────────────────
@@ -101,6 +99,28 @@ class PatientAuthControllerTest {
         assertEquals(200, result.getCode());
     }
 
+    @Test
+    void login_shouldUsePatientTokenExpiryConfig() {
+        PatientAuth auth = authWith(PATIENT_ID, USERNAME, BCRYPT_HASH, 1, null);
+        Patient patient = patientWith(PATIENT_ID, "James Anderson");
+        Jwt jwt = jwtWith(TOKEN_VALUE);
+
+        when(patientAuthRepository.findByUsername(USERNAME)).thenReturn(Optional.of(auth));
+        when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+        when(passwordEncoder.matches(RAW_PASSWORD, BCRYPT_HASH)).thenReturn(true);
+        when(jwtEncoder.encode(any(JwtEncoderParameters.class))).thenReturn(jwt);
+
+        controller.login(req(USERNAME, RAW_PASSWORD));
+
+        // Verify token was generated with the 86400s expiry, not the staff 7200s default
+        verify(jwtEncoder).encode(argThat(params -> {
+            var claims = params.getClaims();
+            Instant now = Instant.now();
+            long diff = claims.getExpiresAt().getEpochSecond() - claims.getIssuedAt().getEpochSecond();
+            return diff == 86400L;
+        }));
+    }
+
     // ──────────────────────────────────────────────────────
     // LOGIN — user not found
     // ──────────────────────────────────────────────────────
@@ -122,7 +142,6 @@ class PatientAuthControllerTest {
 
     @Test
     void userNotFound_and_badPassword_returnSameMessage() {
-        // Prevents user enumeration: both cases must say "Invalid username or password"
         when(patientAuthRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
         BusinessException notFound = assertThrows(BusinessException.class, () ->
@@ -243,105 +262,8 @@ class PatientAuthControllerTest {
 
         assertEquals(ResultCode.UNAUTHORIZED.getCode(), ex.getCode());
         assertTrue(ex.getMessage().contains("Patient record not found"));
-        // Password was valid, but patient record is orphaned.
-        // resetFailedAttempts is never reached because patient lookup throws first.
         verify(patientAuthRepository, never()).resetFailedAttempts(anyLong());
         verify(patientAuthRepository, never()).incrementFailedAttempts(anyLong(), any());
-    }
-
-    // ──────────────────────────────────────────────────────
-    // REFRESH — success
-    // ──────────────────────────────────────────────────────
-
-    @Test
-    void refresh_shouldReturnNewToken_whenTokenValid() {
-        PatientAuth auth = authWith(PATIENT_ID, USERNAME, BCRYPT_HASH, 1, null);
-        Jwt oldJwt = oldJwtWith(USERNAME);
-        Jwt newJwt = jwtWith("new-token-value");
-
-        when(jwtUtils.validateToken(TOKEN_VALUE)).thenReturn(true);
-        when(jwtUtils.parseToken(TOKEN_VALUE)).thenReturn(oldJwt);
-        when(patientAuthRepository.findByUsername(USERNAME)).thenReturn(Optional.of(auth));
-        when(jwtEncoder.encode(any(JwtEncoderParameters.class))).thenReturn(newJwt);
-
-        Result<PatientAuthController.PatientLoginResponse> result =
-                controller.refresh(refreshReq(TOKEN_VALUE));
-
-        assertEquals(200, result.getCode());
-        assertEquals("new-token-value", result.getData().getToken());
-        assertEquals(PATIENT_ID, result.getData().getPatientId());
-        assertEquals(USERNAME, result.getData().getUsername());
-        assertNull(result.getData().getRefreshToken());
-    }
-
-    @Test
-    void refresh_shouldUseAuthPatientId_notTokenClaim() {
-        // patientId MUST come from PatientAuth, not the JWT claim
-        PatientAuth auth = authWith(PATIENT_ID, USERNAME, BCRYPT_HASH, 1, null);
-        Jwt oldJwt = oldJwtWith(USERNAME); // no uid claim
-        Jwt newJwt = jwtWith("final-token");
-
-        when(jwtUtils.validateToken(TOKEN_VALUE)).thenReturn(true);
-        when(jwtUtils.parseToken(TOKEN_VALUE)).thenReturn(oldJwt);
-        when(patientAuthRepository.findByUsername(USERNAME)).thenReturn(Optional.of(auth));
-        when(jwtEncoder.encode(any(JwtEncoderParameters.class))).thenReturn(newJwt);
-
-        Result<PatientAuthController.PatientLoginResponse> result =
-                controller.refresh(refreshReq(TOKEN_VALUE));
-
-        assertEquals(PATIENT_ID, result.getData().getPatientId());
-    }
-
-    // ──────────────────────────────────────────────────────
-    // REFRESH — invalid / expired token
-    // ──────────────────────────────────────────────────────
-
-    @Test
-    void refresh_shouldReturn401_whenTokenInvalid() {
-        when(jwtUtils.validateToken("expired-token")).thenReturn(false);
-
-        BusinessException ex = assertThrows(BusinessException.class, () ->
-                controller.refresh(refreshReq("expired-token")));
-
-        assertEquals(ResultCode.UNAUTHORIZED.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Invalid or expired token"));
-        verify(jwtUtils, never()).parseToken(anyString());
-        verify(patientAuthRepository, never()).findByUsername(anyString());
-    }
-
-    // ──────────────────────────────────────────────────────
-    // REFRESH — account state checks
-    // ──────────────────────────────────────────────────────
-
-    @Test
-    void refresh_shouldReturn403_whenAccountDisabled() {
-        PatientAuth auth = authWith(PATIENT_ID, USERNAME, BCRYPT_HASH, 0, null);
-        Jwt oldJwt = oldJwtWith(USERNAME);
-
-        when(jwtUtils.validateToken(TOKEN_VALUE)).thenReturn(true);
-        when(jwtUtils.parseToken(TOKEN_VALUE)).thenReturn(oldJwt);
-        when(patientAuthRepository.findByUsername(USERNAME)).thenReturn(Optional.of(auth));
-
-        BusinessException ex = assertThrows(BusinessException.class, () ->
-                controller.refresh(refreshReq(TOKEN_VALUE)));
-
-        assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("Account is disabled"));
-    }
-
-    @Test
-    void refresh_shouldReturn401_whenUserNotFound() {
-        Jwt oldJwt = oldJwtWith("ghost");
-
-        when(jwtUtils.validateToken(TOKEN_VALUE)).thenReturn(true);
-        when(jwtUtils.parseToken(TOKEN_VALUE)).thenReturn(oldJwt);
-        when(patientAuthRepository.findByUsername("ghost")).thenReturn(Optional.empty());
-
-        BusinessException ex = assertThrows(BusinessException.class, () ->
-                controller.refresh(refreshReq(TOKEN_VALUE)));
-
-        assertEquals(ResultCode.UNAUTHORIZED.getCode(), ex.getCode());
-        assertTrue(ex.getMessage().contains("User not found"));
     }
 
     // ──────────────────────────────────────────────────────
@@ -388,21 +310,10 @@ class PatientAuthControllerTest {
                 Map.of("alg", "HS256"), Map.of("sub", USERNAME, "uid", PATIENT_ID));
     }
 
-    private Jwt oldJwtWith(String username) {
-        return new Jwt(TOKEN_VALUE, Instant.now(), Instant.now().plusSeconds(3600),
-                Map.of("alg", "HS256"), Map.of("sub", username));
-    }
-
     private PatientAuthController.PatientLoginRequest req(String username, String password) {
         PatientAuthController.PatientLoginRequest r = new PatientAuthController.PatientLoginRequest();
         r.setUsername(username);
         r.setPassword(password);
-        return r;
-    }
-
-    private PatientAuthController.PatientRefreshRequest refreshReq(String token) {
-        PatientAuthController.PatientRefreshRequest r = new PatientAuthController.PatientRefreshRequest();
-        r.setRefreshToken(token);
         return r;
     }
 }

@@ -7,14 +7,12 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
-import com.example.medical.security.JwtUtils;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
@@ -36,12 +34,11 @@ public class PatientAuthController {
     private final PatientAuthRepository patientAuthRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
-    private final JwtUtils jwtUtils;
     private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
     private final jakarta.servlet.http.HttpServletRequest httpRequest;
 
-    @Value("${app.security.access-token-expiry-seconds:7200}")
-    private long accessTokenExpirySeconds;
+    @Value("${app.security.patient-token-expiry-seconds:86400}")
+    private long patientTokenExpirySeconds;
 
     @PostMapping("/login")
     @Transactional
@@ -78,32 +75,13 @@ public class PatientAuthController {
                 patient.getId(), patient.getName(), auth.getUsername()));
     }
 
-    @PostMapping("/refresh")
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH")
-    public Result<PatientLoginResponse> refresh(@Valid @RequestBody PatientRefreshRequest request) {
-        if (!jwtUtils.validateToken(request.getRefreshToken())) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid or expired token");
-        }
-        Jwt jwt = jwtUtils.parseToken(request.getRefreshToken());
-        String username = jwt.getSubject();
-
-        PatientAuth auth = patientAuthRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "User not found"));
-        if (auth.getStatus() != null && auth.getStatus() == 0) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
-        }
-
-        String newToken = generateToken(auth.getPatientId(), username);
-        return Result.ok(new PatientLoginResponse(newToken, null, auth.getPatientId(), null, username));
-    }
-
     private String generateToken(Long patientId, String username) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(username)
                 .id(patientId.toString())
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(accessTokenExpirySeconds))
+                .expiresAt(now.plusSeconds(patientTokenExpirySeconds))
                 .claim("uid", patientId.toString())
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile", "patient/Patient.read", "patient/Observation.read"))
@@ -150,11 +128,5 @@ public class PatientAuthController {
         private final Long patientId;
         private final String name;
         private final String username;
-    }
-
-    @Data
-    static class PatientRefreshRequest {
-        @NotBlank(message = "Refresh token is required")
-        private String refreshToken;
     }
 }

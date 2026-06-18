@@ -247,14 +247,13 @@ Production:                          Development (h2/dev profile):
 Patient auth is **always local**, regardless of environment. Staff auth continues to use the external IdP
 (Okta / Auth0 / Cognito) for production, with the same `DevJwtEncoder` fallback in dev mode.
 
-Patient token refresh (`POST /api/v1/patient/refresh`) validates the old token with `JwtUtils`, looks up the
-`PatientAuth` record, and issues a fresh JWT — no external IdP involvement.
+Patient tokens have a longer default expiry (24 hours, configurable via `app.security.patient-token-expiry-seconds`)
+since there is no separate refresh token. When the token expires, the patient simply logs in again.
 
 **Development:** When `app.security.dev-mode=true` is explicitly set, `SecurityConfigDev` issues a locally-signed HMAC-SHA256 JWT with `roles` + `uid` claims — scoped to dev and h2 profiles only. Patient auth uses local JWT in **all** environments, not just dev.
 
-### 5.3 Token Refresh
+### 5.3 Token Refresh (Staff Only)
 
-**Staff:**
 ```
 POST /api/v1/auth/refresh { refreshToken }
   → Okta /v1/token (grant_type=refresh_token)
@@ -263,14 +262,8 @@ POST /api/v1/auth/refresh { refreshToken }
   → Dev environment doesn't support refresh (re-login instead)
 ```
 
-**Patient:**
-```
-POST /api/v1/patient/refresh { refreshToken }
-  → JwtUtils validates old access token signature + expiry
-  → PatientAuth lookup by subject → checks status (disabled accounts rejected)
-  → DevJwtEncoder issues new access token with same roles/scopes
-  → Works uniformly in all environments (no external IdP dependency)
-```
+Patient tokens are long-lived (default 24h) with no refresh mechanism. Expired tokens require re-login.
+This is appropriate for browser-SPA use where token revocation isn't needed.
 
 ### 5.4 RBAC Access Control
 
@@ -696,9 +689,9 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-137 tests across 5 files:
+133 tests across 5 files:
 - `IntegrationTest` — 112 integration tests covering all 14 business module API endpoints
-- `PatientAuthControllerTest` — 16 tests: login success/disabled/locked/bad-password/patient-orphaned, refresh valid/invalid/disabled, audit resilience, user enumeration prevention
+- `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
 - `AesAttributeConverterTest` — 4 tests: encrypt/decrypt/different IV/corrupted data degradation
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
 - `BaseEntityTest` — 2 tests: `@Version` field + `@PrePersist` callback

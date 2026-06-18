@@ -71,11 +71,12 @@ Paginated endpoints return `Result<PageResult<T>>`:
 ### Patient Auth — `/api/v1/patient`
 
 Patient accounts are self-managed (local `patient_auth` table, BCrypt + local JWT). No external IdP involvement.
+Tokens are long-lived (default 24h, configurable via `app.security.patient-token-expiry-seconds`);
+expired tokens require re-login.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/login` | public | Patient login — local BCrypt verification, returns locally-signed JWT |
-| POST | `/refresh` | Bearer token | Refresh patient access token — validates old token, issues new one |
 
 ### User Management — `/api/v1/users`
 
