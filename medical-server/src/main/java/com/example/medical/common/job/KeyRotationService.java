@@ -163,7 +163,7 @@ public class KeyRotationService {
                     Integer.class);
             return count != null ? count : 0;
         } catch (Exception e) {
-            log.warn("Rotation: failed to count legacy rows in {}.{}", table, column, e);
+            log.warn("Rotation: failed to count legacy rows in {}.{} — {}", table, column, e.getMessage());
             return -1;
         }
     }
