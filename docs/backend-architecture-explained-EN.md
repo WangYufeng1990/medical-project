@@ -362,8 +362,8 @@ Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:1
 | No prefix | `app.aes.key.previous` → fallback to `app.aes.key` | Legacy data backward-compatible decryption |
 
 **Rotation Process (zero-downtime API):**
-1. Generate a new key
-2. `POST /api/v1/admin/keys/rotate { "newKey": "...", "oldKey": "<current app.aes.key>" }`
+1. Admin generates a new key externally (e.g. `openssl rand -base64 32`)
+2. `POST /api/v1/admin/keys/rotate { "newKey": "<new key>", "oldKey": "<current app.aes.key>" }`
 3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates rotation
 4. `KeyRotationService` starts async background migration — scans all 27 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
 5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
