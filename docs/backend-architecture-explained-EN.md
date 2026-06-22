@@ -361,13 +361,15 @@ Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:1
 | `0x01` | `app.aes.key` (current) | All new encryptions use this version |
 | No prefix | `app.aes.key.previous` → fallback to `app.aes.key` | Legacy data backward-compatible decryption |
 
-**Rotation Process:**
-1. Keep `app.aes.key` unchanged, set `app.aes.key.previous` to the old key value
-2. Generate a new key, set it as `app.aes.key`
-3. Restart → `AesCryptoUtil.init()` detects rotation → writes `KEY_ROTATION` audit event
+**Rotation Process (zero-downtime API):**
+1. Generate a new key
+2. `POST /api/v1/admin/keys/rotate { "newKey": "...", "oldKey": "<current app.aes.key>" }`
+3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates rotation
 4. `KeyRotationService` starts async background migration — scans all 27 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
 5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
-6. Once all columns show 0 remaining, remove `app.aes.key.previous` and restart
+6. Once `rotationActive=false` and `complete=true`, update `application.yml` (`app.aes.key` → new value, `app.aes.key.previous` → old value) to survive restarts
+
+On restart with `app.aes.key.previous` still set, `@PostConstruct` triggers an idempotent scan — no rows match, completes in under a second.
 
 A daily 3 AM cron safety check idempotently resumes any incomplete migration.
 

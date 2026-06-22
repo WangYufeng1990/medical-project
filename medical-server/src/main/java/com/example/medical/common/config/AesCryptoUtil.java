@@ -191,6 +191,33 @@ public class AesCryptoUtil {
     }
 
     /**
+     * Runtime key rotation — callable from the admin API without restart.
+     * Swaps the current key to a new value, sets the old key as previous,
+     * and activates rotation mode. The caller is responsible for triggering
+     * the background re-encryption job.
+     */
+    public static synchronized void rotate(String newKey, String oldKey) {
+        SecretKey newCurrent = deriveKey(newKey);
+        SecretKey newPrevious = deriveKey(oldKey);
+        CURRENT_KEY = newCurrent;
+        PREVIOUS_KEY = newPrevious;
+        rotationActive = true;
+        log.info("AES key rotated at runtime — current=v1, previous=v0");
+    }
+
+    /**
+     * Call after background re-encryption completes. Marks rotation as
+     * finished so that future restarts (where yaml still references a
+     * previous key) only trigger an empty idempotent scan.
+     */
+    public static synchronized void markRotationComplete() {
+        if (rotationActive) {
+            rotationActive = false;
+            log.info("AES key rotation marked complete");
+        }
+    }
+
+    /**
      * Returns true if key rotation is active (a previous key is configured).
      */
     public static boolean isRotationActive() {

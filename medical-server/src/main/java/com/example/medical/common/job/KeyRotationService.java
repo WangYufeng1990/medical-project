@@ -80,6 +80,17 @@ public class KeyRotationService {
         }
     }
 
+    /**
+     * Called from the admin API to trigger a runtime key rotation.
+     * The caller must have already called {@link AesCryptoUtil#rotate(String, String)}.
+     */
+    public void startRuntimeRotation() {
+        complete = false;
+        remainingByTable.clear();
+        log.info("Runtime key rotation triggered — starting background re-encryption");
+        rotationExecutor.execute(this::runBatchRotation);
+    }
+
     @Scheduled(cron = "0 0 3 * * ?")
     void safetyCheck() {
         if (running || !AesCryptoUtil.isRotationActive() || complete) return;
@@ -100,6 +111,7 @@ public class KeyRotationService {
                 migrateColumn(tc);
             }
             complete = true;
+            AesCryptoUtil.markRotationComplete();
             log.info("Key rotation complete — all {} encrypted columns migrated", ENCRYPTED_COLUMNS.size());
             writeAudit("ROTATION_COMPLETE", "All legacy ciphertexts re-encrypted with current key");
         } catch (Exception e) {
