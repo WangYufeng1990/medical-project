@@ -532,3 +532,56 @@ Round 13  MEDIUM Hardening     ✅ 2026-06-03  (3 items: refresh rate limit/Rest
 |-------|--------|-------------|
 | 14 | `6beb1a6` | Vue TypeScript migration + PatientForm |
 | 15 | `50207ae` | Vue→React full rewrite |
+
+---
+
+# Round 16: CDS Auto-Sync (Deferred)
+
+> **Status: Deferred — low priority, implement only if operational need arises**
+>
+> **Reason:** Current CDS knowledge base (`drug_interaction` table) relies on manual seed data. As the prescription drug catalog grows, manual maintenance becomes unsustainable. RxNav API (free, maintained by NLM) provides a programmatic way to pull drug-drug interaction data by RxNorm code.
+
+## Background
+
+RxNav's Interaction API returns known interactions for a given RxNorm code sourced from NDF-RT and DailyMed. A scheduled job can periodically pull this data and upsert into the local `drug_interaction` table, keeping the knowledge base current without manual entry.
+
+## Feature Scope
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 16.1 | **RxNav Sync Service** | `RxNavSyncService` — calls RxNav Interaction API for each drug in local inventory, maps to `DrugInteraction` entity |
+| 16.2 | **Scheduled Sync Job** | `@Scheduled` weekly pull, only for drugs that appear in prescription history (on-demand scope, not full catalog) |
+| 16.3 | **Source Attribution** | Add `source` column to `drug_interaction` table (`MANUAL` / `RXNAV`), manual entries survive sync, RxNav entries overwrite on conflict |
+| 16.4 | **Config Guard** | Feature gated behind `app.cds.rxnav-sync.enabled: false` by default; URL configurable via `app.cds.rxnav-sync.base-url` |
+
+## Plan
+
+1. Add `source VARCHAR(20) DEFAULT 'MANUAL'` column to `drug_interaction` table
+2. Create `RxNavSyncService`:
+   - Read distinct RxNorm codes from `prescription_item` table
+   - For each code, call `GET /REST/interaction/list.json?rxcuis={code}` against RxNav
+   - Map response to local `DrugInteraction` fields (drug_a, drug_b, severity, description)
+   - Upsert via `uk_drug_pair`, only overwrite rows where `source = 'RXNAV'`
+3. Add `@Scheduled` cron in `RxNavSyncJob` (default: weekly Sunday 3am)
+4. Add `application.yml` config block with `enabled: false`
+
+## Files Involved
+
+| File | Action |
+|------|--------|
+| `module/prescription/service/RxNavSyncService.java` | New — sync logic |
+| `module/prescription/job/RxNavSyncJob.java` | New — scheduled trigger |
+| `module/prescription/entity/DrugInteraction.java` | Modified — add `source` column |
+| `resources/sql/schema.sql` | Modified — alter `drug_interaction` |
+| `application.yml` | Modified — add `app.cds.rxnav-sync.*` config |
+
+## No New Dependencies
+
+RxNav is a plain REST API returning JSON. Standard `RestTemplate` + Jackson suffice.
+
+## Data Volume & Risk
+
+- RxNav's `/interaction/list` endpoint is per-drug, not bulk. Call count = number of distinct RxNorm codes in local prescription history (typically dozens to low hundreds, not thousands).
+- API is rate-limited but free and does not require registration.
+- Low risk: sync is additive (upsert), `source` column prevents overwriting manually curated entries.
+- Rollback: delete all rows where `source = 'RXNAV'` and redeploy.
