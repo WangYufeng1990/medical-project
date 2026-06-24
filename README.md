@@ -161,6 +161,7 @@ app:
 
 ## Documentation
 
+- [Mirth Connect Integration](docs/MIRTH-CONNECT-INTEGRATION.md)
 - [API Layout & Reference](docs/API-LAYOUT.md)
 - [Architecture Explained](docs/backend-architecture-explained.md)
 - [Medical Domain Learning Guide](docs/medical-learning-guide.md)
