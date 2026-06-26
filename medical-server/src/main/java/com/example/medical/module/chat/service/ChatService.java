@@ -4,12 +4,14 @@ import com.example.medical.common.result.PageResult;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageVO;
 import com.example.medical.module.chat.entity.Message;
+import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ public class ChatService {
     private final MessageRepository messageRepository;
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public MessageVO sendMessage(Long senderId, Long receiverId, String content) {
@@ -33,7 +36,9 @@ public class ChatService {
         msg.setContent(content);
         msg.setIsRead(0);
         messageRepository.save(msg);
-        return MessageVO.fromEntity(msg);
+        MessageVO vo = MessageVO.fromEntity(msg);
+        eventPublisher.publishEvent(new NewMessageEvent(senderId, receiverId, vo));
+        return vo;
     }
 
     public PageResult<MessageVO> getConversation(Long currentUserId, Long partnerId,
@@ -60,7 +65,7 @@ public class ChatService {
 
     public PageResult<ConversationVO> getConversations(Long currentUserId,
                                                         long page, long size) {
-        List<Message> allMessages = messageRepository.findRecentMessagesByUser(currentUserId, 500);
+        List<Message> allMessages = messageRepository.findRecentMessagesByUser(currentUserId, 20);
         if (allMessages.isEmpty()) {
             return PageResult.of(0, size, page, List.of());
         }
