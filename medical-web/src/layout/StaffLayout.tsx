@@ -9,6 +9,7 @@ const menuItems = [
   { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
   { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
+  { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
   { type: 'divider' } as any,
   { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },

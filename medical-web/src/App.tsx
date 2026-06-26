@@ -8,6 +8,7 @@ import Appointments from './views/appointments'
 import Prescriptions from './views/prescriptions'
 import Billing from './views/billing'
 import Profile from './views/profile'
+import Chat from './views/chat'
 import Users from './views/system/users'
 import Roles from './views/system/roles'
 import Menus from './views/system/menus'
@@ -18,6 +19,7 @@ import PatientProfile from './views/patient/profile'
 import PatientAppointments from './views/patient/appointments'
 import PatientPrescriptions from './views/patient/prescriptions'
 import PatientBills from './views/patient/bills'
+import PatientChat from './views/patient/chat'
 
 export default function App() {
   return (
@@ -29,6 +31,7 @@ export default function App() {
         <Route path="patients" element={<Patients />} />
         <Route path="appointments" element={<Appointments />} />
         <Route path="prescriptions" element={<Prescriptions />} />
+        <Route path="chat" element={<Chat />} />
         <Route path="billing" element={<Billing />} />
         <Route path="profile" element={<Profile />} />
         <Route path="system/users" element={<AdminGuard><Users /></AdminGuard>} />
@@ -43,6 +46,7 @@ export default function App() {
         <Route path="appointments" element={<PatientAppointments />} />
         <Route path="prescriptions" element={<PatientPrescriptions />} />
         <Route path="bills" element={<PatientBills />} />
+        <Route path="chat" element={<PatientChat />} />
       </Route>
     </Routes>
   )

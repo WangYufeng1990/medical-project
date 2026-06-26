@@ -6,6 +6,7 @@ const items = [
   { path: '/patient/appointments', label: 'Appointments' },
   { path: '/patient/prescriptions', label: 'Prescriptions' },
   { path: '/patient/bills', label: 'Bills' },
+  { path: '/patient/chat', label: 'Messages' },
 ]
 
 export default function PatientLayout() {

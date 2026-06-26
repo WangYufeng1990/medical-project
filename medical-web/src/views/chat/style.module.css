@@ -1,0 +1,33 @@
+.wrapper { display: flex; height: calc(100vh - 48px); gap: 0; background: #fff; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
+
+.sidebar { width: 260px; border-right: 1px solid #ebeef5; display: flex; flex-direction: column; background: #fafafa; }
+.sidebarHeader { padding: 16px; font-weight: 600; font-size: 15px; border-bottom: 1px solid #ebeef5; background: #fff; }
+.conversationList { flex: 1; overflow-y: auto; }
+.conversationItem { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background .15s; }
+.conversationItem:hover { background: #ecf5ff; }
+.conversationItemActive { background: #ecf5ff; border-left: 3px solid var(--primary); }
+.partnerName { font-size: 14px; font-weight: 500; color: #303133; }
+.lastMsg { font-size: 12px; color: #909399; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.conversationMeta { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+.conversationTime { font-size: 11px; color: #c0c4cc; }
+.unreadBadge { background: #f56c6c; color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+
+.chatArea { flex: 1; display: flex; flex-direction: column; }
+.chatHeader { padding: 14px 20px; font-weight: 600; font-size: 15px; border-bottom: 1px solid #ebeef5; background: #fff; }
+.chatPlaceholder { flex: 1; display: flex; align-items: center; justify-content: center; color: #c0c4cc; font-size: 14px; }
+.messageList { flex: 1; padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #fafafa; }
+.loadMore { text-align: center; padding: 8px; }
+.loadMore button { background: none; border: 1px solid #dcdfe6; border-radius: 4px; padding: 4px 16px; cursor: pointer; font-size: 12px; color: #606266; }
+.messageRow { display: flex; max-width: 70%; }
+.messageRowMe { align-self: flex-end; }
+.messageRowOther { align-self: flex-start; }
+.messageBubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; word-break: break-word; }
+.messageBubbleMe { background: var(--primary); color: #fff; border-bottom-right-radius: 2px; }
+.messageBubbleOther { background: #fff; color: #303133; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.messageTime { font-size: 10px; color: #c0c4cc; margin-top: 2px; }
+.messageTimeMe { text-align: right; }
+
+.inputArea { padding: 12px 20px; border-top: 1px solid #ebeef5; display: flex; gap: 10px; background: #fff; }
+.inputArea input { flex: 1; padding: 8px 14px; border: 1px solid #dcdfe6; border-radius: 20px; font-size: 13px; outline: none; }
+.inputArea input:focus { border-color: var(--primary); }
+.inputArea button { padding: 8px 20px; background: var(--primary); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 13px; white-space: nowrap; }
