@@ -535,53 +535,76 @@ Round 13  MEDIUM Hardening     ✅ 2026-06-03  (3 items: refresh rate limit/Rest
 
 ---
 
-# Round 16: CDS Auto-Sync (Deferred)
+# Round 16: CDS — Real-Time Commercial DDI API (Deferred)
 
 > **Status: Deferred — low priority, implement only if operational need arises**
 >
-> **Reason:** Current CDS knowledge base (`drug_interaction` table) relies on manual seed data. As the prescription drug catalog grows, manual maintenance becomes unsustainable. RxNav API (free, maintained by NLM) provides a programmatic way to pull drug-drug interaction data by RxNorm code.
+> **Reason:** Current CDS knowledge base (`drug_interaction` table) relies on manual seed data. RxNav has shut down its Interaction API. The industry standard is now subscription-based commercial APIs (DrugBank, First Databank, MediSpan, etc.) that provide real-time DDI results — no local knowledge base syncing needed. The approach is fundamentally different: rather than pulling data into a local table and doing pairwise lookups, call the vendor API in real time at prescription creation.
 
 ## Background
 
-RxNav's Interaction API returns known interactions for a given RxNorm code sourced from NDF-RT and DailyMed. A scheduled job can periodically pull this data and upsert into the local `drug_interaction` table, keeping the knowledge base current without manual entry.
+Modern DDI checking has moved away from local rule tables:
+- **RxNav Interaction API** — shut down by NLM, no longer available.
+- **Commercial APIs** — DrugBank, First Databank (FDB), MediSpan, Cerner Multum — provide real-time interaction screening via REST/gRPC. The vendor maintains the knowledge base; the backend only sends the drug list and receives interaction results.
+- **Industry shift** — local drug-drug comparison is increasingly rare outside legacy EHRs.
+
+## Approach
+
+Replace local `drug_interaction` table lookup with a pluggable external DDI provider:
+
+```
+PrescriptionService.create()
+  └─ CdsService.checkDrugInteractions(items)
+       ├─ match whitelist → skip (known-safe combination, e.g. Metformin+Metformin ER)
+       ├─ cache hit (local drug_interaction, source=API) → return cached result
+       ├─ cache miss + provider configured → call vendor API, save result to local table
+       └─ provider unavailable + cache miss → fallback to local manual rules
+```
+
+### Three Roles of the Local Table
+
+| Role | source column | Purpose |
+|------|-------------|---------|
+| **Whitelist** | `MANUAL` + `severity = 'safe'` | Known-safe combinations that should never raise a warning, even if a vendor API flags them. Clinician-curated. |
+| **Cache** | `DRUGBANK` / `FDB` / etc. | API results persisted locally. On subsequent checks for the same drug pair, skip the API call entirely. Protects against API failures for commonly prescribed combinations. |
+| **Fallback** | `MANUAL` (existing seed data) | Default behavior when no vendor API is configured. Preserved as zero-cost baseline. |
 
 ## Feature Scope
 
 | # | Feature | Description |
 |---|---------|-------------|
-| 16.1 | **RxNav Sync Service** | `RxNavSyncService` — calls RxNav Interaction API for each drug in local inventory, maps to `DrugInteraction` entity |
-| 16.2 | **Scheduled Sync Job** | `@Scheduled` weekly pull, only for drugs that appear in prescription history (on-demand scope, not full catalog) |
-| 16.3 | **Source Attribution** | Add `source` column to `drug_interaction` table (`MANUAL` / `RXNAV`), manual entries survive sync, RxNav entries overwrite on conflict |
-| 16.4 | **Config Guard** | Feature gated behind `app.cds.rxnav-sync.enabled: false` by default; URL configurable via `app.cds.rxnav-sync.base-url` |
+| 16.1 | **DDI Provider Interface** | `DdiProvider` interface — `List<CdsWarning> check(List<String> rxnormCodes)`. Pluggable implementations behind `@ConditionalOnProperty` |
+| 16.2 | **DrugBank Adapter** | `DrugBankDdiProvider` — calls DrugBank Interaction API, maps response to `CdsWarning` list. API key configured via `app.cds.provider.api-key` |
+| 16.3 | **Local Cache Layer** | API results upserted into `drug_interaction` with `source = provider name`. Next check hits local DB first — no API call needed for previously seen drug pairs |
+| 16.4 | **Whitelist** | `drug_interaction` rows with `severity = 'safe'` act as explicit whitelist. Whitelisted pairs are skipped before any API call or local rule check. Clinicians manage whitelist via admin API |
+| 16.5 | **Check Order** | Whitelist → local cache → vendor API → manual rules. Each step short-circuits on match |
+| 16.6 | **Config Toggle** | `app.cds.provider.type: NONE` (default). `NONE` uses local table only; `DRUGBANK` / `FDB` enables cache + API mode |
 
 ## Plan
 
-1. Add `source VARCHAR(20) DEFAULT 'MANUAL'` column to `drug_interaction` table
-2. Create `RxNavSyncService`:
-   - Read distinct RxNorm codes from `prescription_item` table
-   - For each code, call `GET /REST/interaction/list.json?rxcuis={code}` against RxNav
-   - Map response to local `DrugInteraction` fields (drug_a, drug_b, severity, description)
-   - Upsert via `uk_drug_pair`, only overwrite rows where `source = 'RXNAV'`
-3. Add `@Scheduled` cron in `RxNavSyncJob` (default: weekly Sunday 3am)
-4. Add `application.yml` config block with `enabled: false`
+1. Add `source VARCHAR(20) DEFAULT 'MANUAL'` column to `drug_interaction`; add `safe` to severity enum
+2. Define `DdiProvider` interface in `module/prescription/service/ddi/`
+3. Refactor `CdsService.checkDrugInteractions()` to layered check: whitelist → cache → API → fallback
+4. Implement `DrugBankDdiProvider` — call API, map response, upsert to local table with `source = 'DRUGBANK'`
+5. Add admin endpoints: `GET/POST/DELETE /api/v1/cds/whitelist` for clinician-managed whitelist entries
+6. Add `application.yml` config with all gating disabled by default
 
 ## Files Involved
 
 | File | Action |
 |------|--------|
-| `module/prescription/service/RxNavSyncService.java` | New — sync logic |
-| `module/prescription/job/RxNavSyncJob.java` | New — scheduled trigger |
-| `module/prescription/entity/DrugInteraction.java` | Modified — add `source` column |
+| `module/prescription/service/ddi/DdiProvider.java` | New — interface |
+| `module/prescription/service/ddi/DrugBankDdiProvider.java` | New — reference adapter |
+| `module/prescription/service/CdsService.java` | Modified — layered check logic |
+| `module/prescription/controller/CdsController.java` | Modified — whitelist CRUD endpoints |
+| `module/prescription/entity/DrugInteraction.java` | Modified — add `source` column, `safe` severity |
 | `resources/sql/schema.sql` | Modified — alter `drug_interaction` |
-| `application.yml` | Modified — add `app.cds.rxnav-sync.*` config |
+| `application.yml` | Modified — add `app.cds.provider.*` config |
 
-## No New Dependencies
+## Risk & Trade-offs
 
-RxNav is a plain REST API returning JSON. Standard `RestTemplate` + Jackson suffice.
-
-## Data Volume & Risk
-
-- RxNav's `/interaction/list` endpoint is per-drug, not bulk. Call count = number of distinct RxNorm codes in local prescription history (typically dozens to low hundreds, not thousands).
-- API is rate-limited but free and does not require registration.
-- Low risk: sync is additive (upsert), `source` column prevents overwriting manually curated entries.
-- Rollback: delete all rows where `source = 'RXNAV'` and redeploy.
+- **Commercial API cost** — subscription required; this is the primary reason this feature is deferred.
+- **Latency** — external API call adds ~200-500ms on cache miss only. Cache hits (common drugs) stay sub-millisecond. Circuit breaker prevents blocking if provider is down.
+- **Whitelist responsibility** — clinician-curated; stale whitelist entries could suppress real interactions. Admin UI should show `created_at` and `created_by` for audit.
+- **Cache invalidation** — API results cached indefinitely. Optionally add `cached_at` timestamp + configurable TTL for future refresh.
+- **Fail-open** — if vendor API is unreachable and no cache hit, fall through to local manual rules. If no local rule either, prescription proceeds (log warning).

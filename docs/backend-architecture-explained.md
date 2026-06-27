@@ -66,7 +66,7 @@ medical-server/src/main/java/com/example/medical/
     ├── appointment/  Appointment scheduling (US visit type + CPT codes)
     ├── prescription/ Prescription management (NDC/RxNorm/DEA/controlled substance)
     ├── billing/      Billing management (insurance claim lifecycle + CPT/ICD-10)
-    ├── chat/         Instant messaging (message content encryption)
+    ├── chat/         Instant messaging (AES-encrypted content, SSE real-time push)
     ├── dashboard/    Dashboard statistics
     └── export/       Data export (CSV + audit + rate limit)
 ```

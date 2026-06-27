@@ -193,6 +193,10 @@ Requires `ADMIN` or `DOCTOR`.
 | GET | `/{partnerId}` | `?page=1&size=50` | Paginated messages with partner (auto-read) |
 | POST | `/` | body: MessageFormDTO | Send a message |
 
+### Chat SSE — `/api/v1/chat/subscribe`
+
+Server-Sent Events endpoint for real-time message push. Token passed via query param (`?token=<jwt>`) since browser `EventSource` does not support custom headers. Returns `text/event-stream` with `new_message` events.
+
 ### Chat (Patient) — `/api/v1/patient/me/messages`
 
 Requires `PATIENT`. Same endpoints as staff chat.
