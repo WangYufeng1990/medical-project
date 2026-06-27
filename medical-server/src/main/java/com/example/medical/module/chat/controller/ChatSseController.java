@@ -1,11 +1,10 @@
 package com.example.medical.module.chat.controller;
 
 import com.example.medical.module.chat.event.NewMessageEvent;
-import com.example.medical.module.chat.dto.MessageVO;
+import com.example.medical.security.LoginUser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -21,8 +20,9 @@ public class ChatSseController {
     static final Map<Long, SseEmitter> EMITTERS = new ConcurrentHashMap<>();
 
     @GetMapping(value = "/api/v1/chat/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@AuthenticationPrincipal Jwt jwt) {
-        Long userId = extractUserId(jwt);
+    public SseEmitter subscribe() {
+        LoginUser user = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long userId = user.getUserId();
         SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
 
         EMITTERS.put(userId, emitter);
@@ -51,17 +51,5 @@ public class ChatSseController {
         } catch (IOException e) {
             EMITTERS.remove(receiverId);
         }
-    }
-
-    private Long extractUserId(Jwt jwt) {
-        String uid = jwt.getClaimAsString("uid");
-        if (uid != null) {
-            try { return Long.valueOf(uid); } catch (NumberFormatException ignored) {}
-        }
-        String jti = jwt.getId();
-        if (jti != null) {
-            try { return Long.valueOf(jti); } catch (NumberFormatException ignored) {}
-        }
-        return 0L;
     }
 }
