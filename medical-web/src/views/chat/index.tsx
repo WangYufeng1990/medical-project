@@ -18,7 +18,7 @@ export default function Chat() {
 
   const token = localStorage.getItem('token')
   const raw = token ? parseJwt(token) ?? {} : {}
-  const currentUserId: number = (raw as any).uid ?? (raw as any).jti ?? 0
+  const currentUserId = Number((raw as any).uid ?? (raw as any).jti ?? 0)
 
   const loadConversations = useCallback(() => {
     getConversations(1, 20).then((r: any) => setConversations(r.records ?? []))

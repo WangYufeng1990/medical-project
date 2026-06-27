@@ -21,7 +21,7 @@ export default function PatientChat() {
   const auth = (h: any) => ({ ...h, Authorization: `Bearer ${token}` })
 
   const raw = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])) } catch { return {} } })() : {}
-  const currentUserId: number = (raw as any).uid ?? (raw as any).jti ?? 0
+  const currentUserId = Number((raw as any).uid ?? (raw as any).jti ?? 0)
 
   const loadConversations = useCallback(() => {
     axios.get(`${BASE}/conversations`, { params: { page: 1, size: 20 }, headers: auth({}) })
