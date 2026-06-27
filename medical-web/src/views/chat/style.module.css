@@ -24,6 +24,7 @@
 .messageBubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .messageBubbleMe { background: var(--primary); color: #fff; border-bottom-right-radius: 2px; }
 .messageBubbleOther { background: #fff; color: #303133; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.senderName { font-size: 11px; color: #909399; margin-bottom: 2px; padding-left: 2px; }
 .messageTime { font-size: 10px; color: #c0c4cc; margin-top: 2px; }
 .messageTimeMe { text-align: right; }
 

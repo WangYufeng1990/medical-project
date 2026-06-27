@@ -111,14 +111,17 @@ export default function Chat() {
                   <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, np) }}>Load earlier</button>
                 </div>
               )}
-              {messages.map(m => (
-                <div key={m.id} className={`${styles.messageRow} ${m.senderId === currentUserId ? styles.messageRowMe : styles.messageRowOther}`}>
+              {messages.map(m => {
+                const isMe = m.senderId === currentUserId
+                return (
+                <div key={m.id} className={`${styles.messageRow} ${isMe ? styles.messageRowMe : styles.messageRowOther}`}>
                   <div>
-                    <div className={`${styles.messageBubble} ${m.senderId === currentUserId ? styles.messageBubbleMe : styles.messageBubbleOther}`}>{m.content}</div>
-                    <div className={`${styles.messageTime} ${m.senderId === currentUserId ? styles.messageTimeMe : ''}`}>{formatTime(m.createTime)}</div>
+                    {!isMe && <div className={styles.senderName}>{selectedPartner!.name}</div>}
+                    <div className={`${styles.messageBubble} ${isMe ? styles.messageBubbleMe : styles.messageBubbleOther}`}>{m.content}</div>
+                    <div className={`${styles.messageTime} ${isMe ? styles.messageTimeMe : ''}`}>{formatTime(m.createTime)}</div>
                   </div>
                 </div>
-              ))}
+                )})}
             </div>
             <div className={styles.inputArea}>
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend() }} placeholder="Type a message..." />

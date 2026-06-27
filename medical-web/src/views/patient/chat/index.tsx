@@ -117,14 +117,17 @@ export default function PatientChat() {
                   <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, np) }}>Load earlier</button>
                 </div>
               )}
-              {messages.map(m => (
-                <div key={m.id} className={`${chatStyles.messageRow} ${m.senderId === currentUserId ? chatStyles.messageRowMe : chatStyles.messageRowOther}`}>
+              {messages.map(m => {
+                const isMe = m.senderId === currentUserId
+                return (
+                <div key={m.id} className={`${chatStyles.messageRow} ${isMe ? chatStyles.messageRowMe : chatStyles.messageRowOther}`}>
                   <div>
-                    <div className={`${chatStyles.messageBubble} ${m.senderId === currentUserId ? chatStyles.messageBubbleMe : chatStyles.messageBubbleOther}`}>{m.content}</div>
-                    <div className={`${chatStyles.messageTime} ${m.senderId === currentUserId ? chatStyles.messageTimeMe : ''}`}>{formatTime(m.createTime)}</div>
+                    {!isMe && <div className={chatStyles.senderName}>{selectedPartner!.name}</div>}
+                    <div className={`${chatStyles.messageBubble} ${isMe ? chatStyles.messageBubbleMe : chatStyles.messageBubbleOther}`}>{m.content}</div>
+                    <div className={`${chatStyles.messageTime} ${isMe ? chatStyles.messageTimeMe : ''}`}>{formatTime(m.createTime)}</div>
                   </div>
                 </div>
-              ))}
+                )})}
             </div>
             <div className={chatStyles.inputArea}>
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend() }} placeholder="Type a message..." />
