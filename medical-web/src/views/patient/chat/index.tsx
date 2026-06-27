@@ -33,7 +33,8 @@ export default function PatientChat() {
   const loadMessages = useCallback((partnerId: number, page: number) => {
     axios.get(`${BASE}/${partnerId}`, { params: { page, size: 50 }, headers: auth({}) })
       .then(r => {
-        setMessages(prev => page === 1 ? (r.data.data.records ?? []).reverse() : [...(r.data.data.records ?? []).reverse(), ...prev])
+        const batch = r.data.data.records ?? []
+        setMessages(prev => page === 1 ? batch : [...batch, ...prev])
         setMsgTotal(r.data.data.total ?? 0)
       })
   }, [])

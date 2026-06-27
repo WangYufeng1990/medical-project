@@ -28,7 +28,8 @@ export default function Chat() {
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
     getMessages(partnerId, page, 50).then((r: any) => {
-      setMessages(prev => page === 1 ? (r.records ?? []).reverse() : [...(r.records ?? []).reverse(), ...prev])
+      const batch = r.records ?? []
+      setMessages(prev => page === 1 ? batch : [...batch, ...prev])
       setMsgTotal(r.total ?? 0)
     })
   }, [])

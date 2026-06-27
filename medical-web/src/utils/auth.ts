@@ -1,7 +1,9 @@
 export function parseJwt(token: string): any {
   try {
     const base64Url = token.split('.')[1]
-    return JSON.parse(atob(base64Url))
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(base64)
+    return JSON.parse(json)
   } catch { return {} }
 }
 
