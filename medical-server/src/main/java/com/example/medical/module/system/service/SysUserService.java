@@ -18,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -68,7 +69,11 @@ public class SysUserService {
     public void update(Long id, SysUserFormDTO dto) {
         SysUser user = sysUserRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
+        Integer oldStatus = user.getStatus();
         dto.applyTo(user);
+        if (oldStatus != null && oldStatus == 1 && user.getStatus() != null && user.getStatus() == 0) {
+            user.setForceLogoutAfter(LocalDateTime.now());
+        }
         sysUserRepository.save(user);
     }
 

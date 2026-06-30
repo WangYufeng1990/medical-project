@@ -37,4 +37,7 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long>, JpaSpec
             "INNER JOIN sys_user_role ur ON rm.role_id = ur.role_id " +
             "WHERE ur.user_id = :userId AND m.status = 1 AND m.permission IS NOT NULL", nativeQuery = true)
     List<String> findPermissionsByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT u.forceLogoutAfter FROM SysUser u WHERE u.id = :userId")
+    java.time.LocalDateTime findForceLogoutAfterByUserId(@Param("userId") Long userId);
 }

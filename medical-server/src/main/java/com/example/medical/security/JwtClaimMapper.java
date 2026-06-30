@@ -1,24 +1,43 @@
 package com.example.medical.security;
 
+import com.example.medical.module.system.repository.SysUserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
+
+    private final SysUserRepository sysUserRepository;
 
     @Override
     @SuppressWarnings("unchecked")
     public UsernamePasswordAuthenticationToken convert(Jwt jwt) {
-        String username = jwt.getClaimAsString("sub");
-
         Long userId = extractUserId(jwt);
+        if (userId != null && userId > 0) {
+            LocalDateTime forceLogout = sysUserRepository.findForceLogoutAfterByUserId(userId);
+            if (forceLogout != null && jwt.getIssuedAt() != null) {
+                LocalDateTime issuedAt = LocalDateTime.ofInstant(jwt.getIssuedAt(), ZoneId.systemDefault());
+                if (issuedAt.isBefore(forceLogout)) {
+                    throw new JwtValidationException("Token issued before force logout",
+                            List.of(new org.springframework.security.oauth2.core.OAuth2Error(
+                                    "token_revoked", "Account was disabled or credentials changed after token issuance", null)));
+                }
+            }
+        }
+
+        String username = jwt.getClaimAsString("sub");
 
         List<String> groups = jwt.getClaimAsStringList("groups");
         if (groups == null) {
