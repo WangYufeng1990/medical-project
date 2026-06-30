@@ -85,6 +85,7 @@ public class PatientAuthController {
                 .claim("uid", patientId.toString())
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile", "patient/Patient.read", "patient/Observation.read"))
+                .claim("perm", List.of("patient:read", "patient:profile", "patient:appointments", "patient:prescriptions", "patient:bills", "patient:chat"))
                 .build();
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }

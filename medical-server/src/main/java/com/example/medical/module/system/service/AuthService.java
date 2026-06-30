@@ -84,7 +84,7 @@ public class AuthService {
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
             }
             resetFailedAttempts(user);
-            tokens = generateDevToken(user.getId(), user.getUsername(), roles);
+            tokens = generateDevToken(user.getId(), user.getUsername(), roles, permissions);
         } else {
             tokens = callOktaTokenEndpoint(request.getUsername(), request.getPassword());
             if (tokens == null) {
@@ -146,7 +146,8 @@ public class AuthService {
                 userId, username, roles, permissions);
     }
 
-    private TokenPair generateDevToken(Long userId, String username, List<String> roles) {
+    private TokenPair generateDevToken(Long userId, String username, List<String> roles,
+                                         List<String> permissions) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(username)
@@ -156,6 +157,7 @@ public class AuthService {
                 .claim("uid", userId.toString())
                 .claim("roles", roles)
                 .claim("scp", buildFhirScopes(roles))
+                .claim("perm", permissions != null ? permissions : List.of())
                 .build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
         return new TokenPair(token, null);

@@ -44,8 +44,10 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
             groups = jwt.getClaimAsStringList("roles");
         }
         List<String> scopes = jwt.getClaimAsStringList("scp");
+        List<String> perms = jwt.getClaimAsStringList("perm");
         if (groups == null) groups = List.of();
         if (scopes == null) scopes = List.of();
+        if (perms == null) perms = List.of();
 
         String scope = jwt.getClaimAsString("scope");
         Long emergencyPatientId = null;
@@ -60,6 +62,9 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         }
         for (String s : scopes) {
             authorities.add(new SimpleGrantedAuthority("SCOPE_" + s));
+        }
+        for (String perm : perms) {
+            authorities.add(new SimpleGrantedAuthority(perm));
         }
 
         LoginUser loginUser = new LoginUser(userId, username, "", scopes, emergencyPatientId, scope);
