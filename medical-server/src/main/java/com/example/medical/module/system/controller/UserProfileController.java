@@ -1,5 +1,6 @@
 package com.example.medical.module.system.controller;
 
+import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
@@ -42,10 +43,25 @@ public class UserProfileController {
     }
 
     @PutMapping
+    @Auditable(module = "system", action = "UPDATE_PROFILE")
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                       @Valid @RequestBody ProfileUpdateRequest request) {
         SysUser user = sysUserRepository.findById(loginUser.getUserId())
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
+        boolean hasCredentialChange = isAnyDifferent(request.getNpi(), user.getNpi(),
+                request.getLicenseState(), user.getLicenseState(),
+                request.getTaxonomyCode(), user.getTaxonomyCode(),
+                request.getCredentials(), user.getCredentials(),
+                request.getSpecialty(), user.getSpecialty());
+        if (hasCredentialChange) {
+            if (request.getCurrentPassword() == null || request.getCurrentPassword().isBlank()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "Current password is required to change professional credentials (NPI, license, specialty)");
+            }
+            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "Current password is incorrect");
+            }
+        }
         user.setRealName(request.getRealName());
         user.setPhone(request.getPhone());
         user.setEmail(request.getEmail());
@@ -57,6 +73,15 @@ public class UserProfileController {
         user.setSpecialty(request.getSpecialty());
         sysUserRepository.save(user);
         return Result.ok();
+    }
+
+    private static boolean isAnyDifferent(Object... pairs) {
+        for (int i = 0; i < pairs.length; i += 2) {
+            Object newVal = pairs[i];
+            Object oldVal = pairs[i + 1];
+            if (newVal != null && !newVal.equals(oldVal)) return true;
+        }
+        return false;
     }
 
     @PutMapping("/password")
@@ -95,6 +120,7 @@ public class UserProfileController {
 
     @Data
     static class ProfileUpdateRequest {
+        private String currentPassword;
         private String realName;
         private String phone;
         private String email;
