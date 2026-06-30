@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +26,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/users/me")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
 public class UserProfileController {
 
     private final SysUserRepository sysUserRepository;
