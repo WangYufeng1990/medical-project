@@ -6,12 +6,14 @@ import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.hl7.fhir.r4.model.*;
 import org.hl7.fhir.r4.model.Bundle;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -30,11 +32,25 @@ public class FhirPatientController {
     @GetMapping("/Patient/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> getPatient(@PathVariable Long id) {
+        enforceEmergencyScope(id);
         Patient p = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
 
         org.hl7.fhir.r4.model.Patient fp = buildFhirPatient(p);
         return encode(fp);
+    }
+
+    private void enforceEmergencyScope(Long requestedPatientId) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser user) {
+            if ("EMERGENCY".equals(user.getScope())) {
+                if (user.getEmergencyPatientId() == null
+                        || !user.getEmergencyPatientId().equals(requestedPatientId)) {
+                    throw new BusinessException(ResultCode.FORBIDDEN,
+                            "Emergency access restricted to patient " + user.getEmergencyPatientId());
+                }
+            }
+        }
     }
 
     @GetMapping("/Patient")

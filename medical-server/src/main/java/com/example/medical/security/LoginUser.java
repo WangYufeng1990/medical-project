@@ -11,13 +11,28 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Getter
-@AllArgsConstructor
 public class LoginUser implements UserDetails {
 
     private Long userId;
     private String username;
     private String password;
     private List<String> permissions;
+    private Long emergencyPatientId;
+    private String scope;
+
+    public LoginUser(Long userId, String username, String password, List<String> permissions) {
+        this(userId, username, password, permissions, null, null);
+    }
+
+    public LoginUser(Long userId, String username, String password, List<String> permissions,
+                     Long emergencyPatientId, String scope) {
+        this.userId = userId;
+        this.username = username;
+        this.password = password;
+        this.permissions = permissions;
+        this.emergencyPatientId = emergencyPatientId;
+        this.scope = scope;
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

@@ -1,14 +1,18 @@
 package com.example.medical.module.patient.controller;
 
-import org.springframework.data.domain.Page;
+import com.example.medical.common.enums.ResultCode;
+import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.patient.dto.PatientFormDTO;
 import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.service.PatientService;
+import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -31,7 +35,21 @@ public class PatientController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PatientVO> getById(@PathVariable Long id) {
+        enforceEmergencyScope(id);
         return Result.ok(patientService.getById(id));
+    }
+
+    private void enforceEmergencyScope(Long requestedPatientId) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser user) {
+            if ("EMERGENCY".equals(user.getScope())) {
+                if (user.getEmergencyPatientId() == null
+                        || !user.getEmergencyPatientId().equals(requestedPatientId)) {
+                    throw new BusinessException(ResultCode.FORBIDDEN,
+                            "Emergency access restricted to patient " + user.getEmergencyPatientId());
+                }
+            }
+        }
     }
 
     @PostMapping

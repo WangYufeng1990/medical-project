@@ -28,15 +28,22 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         if (groups == null) groups = List.of();
         if (scopes == null) scopes = List.of();
 
+        String scope = jwt.getClaimAsString("scope");
+        Long emergencyPatientId = null;
+        try {
+            Number n = jwt.getClaim("patientId");
+            if (n != null) emergencyPatientId = n.longValue();
+        } catch (Exception ignored) {}
+
         List<GrantedAuthority> authorities = new ArrayList<>();
         for (String group : groups) {
             authorities.add(new SimpleGrantedAuthority("ROLE_" + group.toUpperCase()));
         }
-        for (String scope : scopes) {
-            authorities.add(new SimpleGrantedAuthority("SCOPE_" + scope));
+        for (String s : scopes) {
+            authorities.add(new SimpleGrantedAuthority("SCOPE_" + s));
         }
 
-        LoginUser loginUser = new LoginUser(userId, username, "", scopes);
+        LoginUser loginUser = new LoginUser(userId, username, "", scopes, emergencyPatientId, scope);
         return new UsernamePasswordAuthenticationToken(loginUser, null, authorities);
     }
 
