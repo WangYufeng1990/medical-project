@@ -16,4 +16,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long>,
     List<Appointment> findConflicting(@Param("doctorId") Long doctorId,
                                        @Param("start") LocalDateTime start,
                                        @Param("end") LocalDateTime end);
+
+    @Query("SELECT DISTINCT a.patientId FROM Appointment a WHERE a.doctorId = :doctorId")
+    List<Long> findDistinctPatientIdsByDoctor(@Param("doctorId") Long doctorId);
 }
