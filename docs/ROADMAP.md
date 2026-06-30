@@ -608,3 +608,147 @@ PrescriptionService.create()
 - **Whitelist responsibility** — clinician-curated; stale whitelist entries could suppress real interactions. Admin UI should show `created_at` and `created_by` for audit.
 - **Cache invalidation** — API results cached indefinitely. Optionally add `cached_at` timestamp + configurable TTL for future refresh.
 - **Fail-open** — if vendor API is unreachable and no cache hit, fall through to local manual rules. If no local rule either, prescription proceeds (log warning).
+
+---
+
+# Round 17: RBAC Security Remediation
+
+> **Status: Planned — ordered by severity, execute top-down**
+>
+> **Source:** RBAC audit (2026-06-29). 12 findings from CRITICAL to LOW.
+
+---
+
+## 17-1 CRITICAL: Externalize JWT signing key + separate issuer per profile
+
+| Task | File | Description |
+|------|------|-------------|
+| Add prod JwtDecoder/JwtEncoder bean | `SecurityConfigProd.java` | New `@Profile("prod")` config reading key from `AES_KEY` env var or HashiCorp Vault |
+| Remove hardcoded dev key | `SecurityConfigDev.java` | Read `app.security.dev-jwt-secret` from application-dev.yml, with fallback only for h2 |
+| Add `iss` claim to JWT | `AuthService.java`, `PatientAuthController.java` | Set `issuer("medical-server")` for staff, `issuer("medical-server/patient")` for patient tokens |
+| Validate `iss` in mapper | `JwtClaimMapper.java` | Reject tokens where staff endpoint receives patient-issued token or vice versa |
+| Add `aud` claim | `AuthService.java`, `PatientAuthController.java` | Set audience for staff vs patient endpoints |
+
+**Risk:** Without this fix, anyone with knowledge of the hardcoded string can forge arbitrary role tokens.
+
+---
+
+## 17-2 HIGH: Enforce emergency access expiry in data access layer
+
+| Task | File | Description |
+|------|------|-------------|
+| Add emergency session token | `EmergencyAccessController.java` | Generate a short-lived (30min) JWT with `scope=EMERGENCY` + `patientId` claim instead of returning full patient data directly |
+| Validate emergency scope | `PatientController.java`, `FhirPatientController.java` | Accept emergency token as alternative auth for patient-specific endpoints, reject if expired or wrong patient |
+| Add `@PreAuthorize` guard | `EmergencyAccessController.java` | Require explicit EMERGENCY scope on follow-up data access |
+
+**Risk:** Current implementation creates an audit log entry but provides no actual access control — the 30-minute window is never enforced.
+
+---
+
+## 17-3 HIGH: Scope patient export to own patients only
+
+| Task | File | Description |
+|------|------|-------------|
+| Add doctor-patient relationship filter | `ExportController.java`, `PatientRepository.java` | DOCTOR role can only export patients they have appointments/prescriptions with; ADMIN retains full access |
+| Add `@PreAuthorize` check | `ExportController.java` | Replace `hasAnyRole(ADMIN,DOCTOR)` with role-specific query scoping |
+
+**Risk:** Any doctor can currently export the entire patient database as CSV including PHI fields.
+
+---
+
+## 17-4 HIGH: Token revocation for disabled accounts
+
+| Task | File | Description |
+|------|------|-------------|
+| Add `forceLogoutAfter` timestamp to `SysUser` | `SysUser.java`, `schema.sql` | Set to `now()` when account is disabled, password changed, or role changed |
+| Validate in `JwtClaimMapper` | `JwtClaimMapper.java` | Check `iat` claim against `forceLogoutAfter` — reject tokens issued before the revocation timestamp |
+| Cache revocation timestamp | `AuthService.java` | Redis cache with 2-min TTL to avoid DB hit on every request |
+
+**Risk:** Disabled accounts retain access for up to 2 hours (token expiry). No way to immediately revoke a compromised session.
+
+---
+
+## 17-5 MEDIUM: Emergency access audit review flow
+
+| Task | File | Description |
+|------|------|-------------|
+| Default `audited=0` | `EmergencyAccessController.java` | Remove `ea.setAudited(1)` — let `@PrePersist` default to 0 |
+| Add review endpoint | `EmergencyAccessController.java` | `PUT /api/v1/emergency/{id}/review` — ADMIN only, sets `audited=1` + `reviewedBy` + `reviewedAt` |
+| Add pending review list | `EmergencyAccessController.java` | `GET /api/v1/emergency?audited=0` — ADMIN only, lists unreviewed emergency accesses |
+
+---
+
+## 17-6 MEDIUM: Re-authentication for sensitive profile changes
+
+| Task | File | Description |
+|------|------|-------------|
+| Require password for NPI/DEA/license changes | `UserProfileController.java` | Add `currentPassword` field to update request; validate with `passwordEncoder.matches()` before applying changes |
+| Add `@Auditable` | `UserProfileController.java` | Audit log when professional credentials are modified |
+
+**Risk:** A staff member can change their NPI, DEA number, or license without re-entering their password — a stolen session allows credential hijacking.
+
+---
+
+## 17-7 MEDIUM: Add @PreAuthorize to unprotected controllers
+
+| Task | File | Description |
+|------|------|-------------|
+| Add `@PreAuthorize` | `UserProfileController.java` | `hasAnyRole('ADMIN','DOCTOR')` — currently no guard |
+| Add `@PreAuthorize` | `ChatSseController.java` | `hasAnyRole('ADMIN','DOCTOR','PATIENT')` — currently relies only on SecurityConfig chain |
+
+---
+
+## 17-8 MEDIUM: Remove plaintext credential logging
+
+| Task | File | Description |
+|------|------|-------------|
+| Redact log message | `DataInitializer.java` | Change `log.info("Seed data initialized (admin/admin123, ...)")` to `log.info("Seed data initialized (admin: bcrypt, doctor1: bcrypt, patient1: bcrypt)")` |
+
+---
+
+## 17-9 MEDIUM: Return role changes in token refresh
+
+| Task | File | Description |
+|------|------|-------------|
+| Fetch current roles on refresh | `AuthService.java` | In Okta refresh flow, re-extract roles from the new access token claims |
+| Populate roles/permissions | `AuthService.java` | `LoginResponse.forRefresh()` should query current role/permission list, not pass `List.of()` |
+
+**Risk:** After role change, clients operate with stale cached roles until next full login.
+
+---
+
+## 17-10 LOW: Wire permission-based authorization
+
+| Task | File | Description |
+|------|------|-------------|
+| Convert `@PreAuthorize("hasRole('ADMIN')")` to `hasAuthority('system:user:list')` | Multiple controllers | Replace role checks with specific permission checks where granularity matters |
+| Rename permission strings | `LoginUser`, `JwtClaimMapper` | Ensure permissions use consistent prefix, or create without prefix and use `hasAuthority()` |
+
+**Note:** Low priority — current role-based model is functional. Permission-based model would enable finer-grained control (e.g., doctor who can view prescriptions but not create them).
+
+---
+
+## 17-11 LOW: Verify FHIR metadata endpoint exists
+
+| Task | File | Description |
+|------|------|-------------|
+| Check and add if missing | `FhirPatientController.java` or new controller | `GET /api/v1/fhir/metadata` returning CapabilityStatement |
+| Remove from permitAll if not implemented | `SecurityConfig.java` | Don't leave dead permitAll entries |
+
+---
+
+## Execution Order
+
+```
+17-1  CRITICAL  JWT key externalization + iss/aud separation
+17-2  HIGH      Emergency access enforcement
+17-3  HIGH      Patient export scoping
+17-4  HIGH      Token revocation for disabled accounts
+17-5  MEDIUM    Emergency audit review flow
+17-6  MEDIUM    Profile re-authentication
+17-7  MEDIUM    Missing @PreAuthorize
+17-8  MEDIUM    Plaintext credential logging
+17-9  MEDIUM    Token refresh role sync
+17-10 LOW       Permission-based authorization
+17-11 LOW       FHIR metadata endpoint
+```
