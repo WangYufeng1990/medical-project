@@ -131,9 +131,19 @@ public class AuthService {
         String username = userInfo != null ? (String) userInfo.getOrDefault("sub", "unknown") : "unknown";
         Long userId = userInfo != null ? resolveUserId(userInfo) : 0L;
 
+        List<String> roles = List.of();
+        List<String> permissions = List.of();
+        if (userId > 0) {
+            SysUser user = sysUserRepository.findById(userId).orElse(null);
+            if (user != null) {
+                roles = sysUserRepository.findRoleCodesByUserId(userId);
+                permissions = sysUserRepository.findPermissionsByUserId(userId);
+            }
+        }
+
         return LoginResponse.forRefresh(accessToken,
                 newRefreshToken != null ? newRefreshToken : refreshToken,
-                userId, username, List.of(), List.of());
+                userId, username, roles, permissions);
     }
 
     private TokenPair generateDevToken(Long userId, String username, List<String> roles) {
