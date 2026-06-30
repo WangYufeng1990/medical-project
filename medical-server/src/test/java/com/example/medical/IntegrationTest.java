@@ -1577,7 +1577,7 @@ class IntegrationTest {
 
     @Test
     @Order(107)
-    void emergencyAccess_shouldReturnPatientData() throws Exception {
+    void emergencyAccess_shouldReturnToken() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "reason", "Patient unconscious in ER — need allergy history immediately"
         ));
@@ -1588,7 +1588,8 @@ class IntegrationTest {
                 .andReturn();
         JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
         assertEquals(200, node.get("code").asInt());
-        assertNotNull(node.get("data").get("name"));
+        assertNotNull(node.get("data").get("token"));
+        assertEquals(100, node.get("data").get("patientId").asLong());
     }
 
     @Test

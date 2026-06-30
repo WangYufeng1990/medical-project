@@ -5,8 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -28,7 +26,6 @@ public class AuditLogWriter {
     private final AuditLogRepository auditLogRepository;
 
     @Async("auditExecutor")
-    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 3)
     public void writeAsync(Long userId, String username, Long patientId,
                            String module, String action, String targetId,
                            String detail, String ip, Instant eventTime) {
