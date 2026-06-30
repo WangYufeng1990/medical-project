@@ -16,12 +16,22 @@ import java.security.NoSuchAlgorithmException;
 @Profile({"dev", "h2"})
 public class SecurityConfigDev {
 
-    private static final String RAW_KEY = "medical-dev-jwt-secret-key-for-local-development-only";
+    private static final String H2_FALLBACK_KEY = "medical-dev-jwt-secret-key-for-local-development-only";
 
-    private static byte[] derive256BitKey() {
+    @org.springframework.beans.factory.annotation.Value("${app.security.dev-jwt-secret:#{null}}")
+    private String configuredKey;
+
+    private String getRawKey() {
+        if (configuredKey != null && !configuredKey.isBlank()) {
+            return configuredKey;
+        }
+        return H2_FALLBACK_KEY;
+    }
+
+    private byte[] derive256BitKey() {
         try {
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            return sha256.digest(RAW_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return sha256.digest(getRawKey().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }

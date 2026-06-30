@@ -16,6 +16,7 @@ app:
     key: dev-key-for-local-testing-must-be-32-bytes
   security:
     dev-mode: true
+    dev-jwt-secret: dev-jwt-key-for-local-testing-only-32chars
   rate-limit:
     enabled: false
 
