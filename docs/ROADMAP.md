@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model three-pillar foundation, through clinical decision support, lab interoperability, ePrescribing, compliance audit remediation, and frontend migration.
 >
-> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration — All Complete (2026-06-03)**
+> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration + RBAC Remediation — All Complete (2026-06-30)**
 
 ---
 
@@ -611,11 +611,11 @@ PrescriptionService.create()
 
 ---
 
-# Round 17: RBAC Security Remediation
+# Round 17: RBAC Security Remediation ✅ Complete
 
-> **Status: Planned — ordered by severity, execute top-down**
+> **Status: All 11 items complete (2026-06-30)**
 >
-> **Source:** RBAC audit (2026-06-29). 12 findings from CRITICAL to LOW.
+> **Source:** RBAC audit (2026-06-29). 12 findings remediated, 11 implemented, 1 informational.
 
 ---
 
@@ -737,18 +737,18 @@ PrescriptionService.create()
 
 ---
 
-## Execution Order
+## Execution Order (All Complete ✅)
 
 ```
-17-1  CRITICAL  JWT key externalization + iss/aud separation
-17-2  HIGH      Emergency access enforcement
-17-3  HIGH      Patient export scoping
-17-4  HIGH      Token revocation for disabled accounts
-17-5  MEDIUM    Emergency audit review flow
-17-6  MEDIUM    Profile re-authentication
-17-7  MEDIUM    Missing @PreAuthorize
-17-8  MEDIUM    Plaintext credential logging
-17-9  MEDIUM    Token refresh role sync
-17-10 LOW       Permission-based authorization
-17-11 LOW       FHIR metadata endpoint
+17-1  CRITICAL  JWT key externalization + iss/aud separation     ✅ 9baa70e
+17-2  HIGH      Emergency access enforcement                     ✅ 8fe38cc
+17-3  HIGH      Patient export scoping                           ✅ 4d14735
+17-4  HIGH      Token revocation for disabled accounts           ✅ 2fafb6f
+17-5  MEDIUM    Emergency audit review flow                      ✅ db46fb6
+17-6  MEDIUM    Profile re-authentication                        ✅ 16a061a
+17-7  MEDIUM    Missing @PreAuthorize                            ✅ 200cdea
+17-8  MEDIUM    Plaintext credential logging                     ✅ bc58e67
+17-9  MEDIUM    Token refresh role sync                          ✅ c0a43fb
+17-10 LOW       Permission-based authorization                   ✅ 1fd5d60
+17-11 LOW       FHIR metadata endpoint                           ✅ 07a0f73
 ```
