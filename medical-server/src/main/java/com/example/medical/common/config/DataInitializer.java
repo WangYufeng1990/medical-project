@@ -43,7 +43,7 @@ public class DataInitializer implements CommandLineRunner {
         seedQualityMeasures();
         seedCds();
 
-        log.info("Seed data initialized (admin/admin123, doctor1/doctor123, patient1/patient123 using BCrypt)");
+        log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
     private void seedUsers() {
