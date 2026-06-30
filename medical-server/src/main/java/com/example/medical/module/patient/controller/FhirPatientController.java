@@ -29,6 +29,37 @@ public class FhirPatientController {
     private final PatientRepository patientRepository;
     private final FhirContext fhirContext;
 
+    @GetMapping(value = "/metadata", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> metadata() {
+        CapabilityStatement cs = new CapabilityStatement();
+        cs.setFhirVersion(Enumerations.FHIRVersion._4_0_1);
+        cs.setStatus(Enumerations.PublicationStatus.ACTIVE);
+        cs.setDate(new java.util.Date());
+        cs.setKind(CapabilityStatement.CapabilityStatementKind.INSTANCE);
+        cs.setSoftware(new CapabilityStatement.CapabilityStatementSoftwareComponent()
+                .setName("Medical Management System").setVersion("0.0.1"));
+        cs.addFormat("json").addFormat("xml");
+        cs.setPublisher("Medical Project");
+        cs.addImplementationGuide("http://hl7.org/fhir/us/core/ImplementationGuide/hl7.fhir.us.core");
+
+        CapabilityStatement.CapabilityStatementRestComponent rest = cs.addRest();
+        rest.setMode(CapabilityStatement.RestfulCapabilityMode.SERVER);
+
+        CapabilityStatement.CapabilityStatementRestResourceComponent pr = rest.addResource();
+        pr.setType("Patient");
+        pr.setProfile("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
+        pr.addInteraction().setCode(CapabilityStatement.TypeRestfulInteraction.READ);
+        pr.addInteraction().setCode(CapabilityStatement.TypeRestfulInteraction.SEARCHTYPE);
+
+        CapabilityStatement.CapabilityStatementRestResourceComponent or = rest.addResource();
+        or.setType("Observation");
+        or.setProfile("http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab");
+        or.addInteraction().setCode(CapabilityStatement.TypeRestfulInteraction.READ);
+        or.addInteraction().setCode(CapabilityStatement.TypeRestfulInteraction.SEARCHTYPE);
+
+        return encode(cs);
+    }
+
     @GetMapping("/Patient/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> getPatient(@PathVariable Long id) {
