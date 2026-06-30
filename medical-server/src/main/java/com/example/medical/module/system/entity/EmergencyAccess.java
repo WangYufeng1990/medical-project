@@ -32,6 +32,12 @@ public class EmergencyAccess {
     @Column(name = "audited")
     private Integer audited;
 
+    @Column(name = "reviewed_by")
+    private Long reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
     @PrePersist
     protected void onCreate() {
         if (accessedAt == null) accessedAt = LocalDateTime.now();

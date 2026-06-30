@@ -77,15 +77,34 @@ public class EmergencyAccessController {
     @GetMapping("/history")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<java.util.List<EmergencyAccess>> history(
-            @RequestParam(required = false) Long patientId) {
+            @RequestParam(required = false) Long patientId,
+            @RequestParam(required = false) Integer audited) {
+        if (audited != null) {
+            return Result.ok(emergencyAccessRepository.findByAuditedOrderByAccessedAtDesc(audited));
+        }
         if (patientId != null) {
             return Result.ok(emergencyAccessRepository.findByPatientIdOrderByAccessedAtDesc(patientId));
         }
-        org.springframework.data.domain.PageRequest pageable =
-                org.springframework.data.domain.PageRequest.of(0, 500,
-                        org.springframework.data.domain.Sort.by(
-                                org.springframework.data.domain.Sort.Direction.DESC, "accessedAt"));
+        var pageable = org.springframework.data.domain.PageRequest.of(0, 500,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "accessedAt"));
         return Result.ok(emergencyAccessRepository.findAll(pageable).getContent());
+    }
+
+    @PutMapping("/{id}/review")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Void> review(@PathVariable Long id, @AuthenticationPrincipal LoginUser loginUser) {
+        EmergencyAccess ea = emergencyAccessRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Emergency access record not found"));
+        if (ea.getAudited() != null && ea.getAudited() == 1) {
+            throw new BusinessException(ResultCode.CONFLICT, "Already reviewed");
+        }
+        ea.setAudited(1);
+        ea.setReviewedBy(loginUser.getUserId());
+        ea.setReviewedAt(LocalDateTime.now());
+        emergencyAccessRepository.save(ea);
+        log.info("Emergency access {} reviewed by {}", id, loginUser.getUsername());
+        return Result.ok();
     }
 
     @Data

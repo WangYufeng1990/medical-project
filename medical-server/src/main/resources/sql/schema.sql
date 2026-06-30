@@ -308,6 +308,8 @@ CREATE TABLE IF NOT EXISTS emergency_access (
     accessed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NULL DEFAULT NULL,
     audited TINYINT NOT NULL DEFAULT 0,
+    reviewed_by BIGINT DEFAULT NULL,
+    reviewed_at TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_emergency_user_id (user_id),
     INDEX idx_emergency_patient_id (patient_id)
