@@ -41,6 +41,7 @@ public class ChatService {
         return vo;
     }
 
+    @Transactional
     public PageResult<MessageVO> getConversation(Long currentUserId, Long partnerId,
                                                   long page, long size) {
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
@@ -81,9 +82,8 @@ public class ChatService {
             Long partnerId = entry.getKey();
             List<Message> msgs = entry.getValue();
             Message lastMsg = msgs.get(0);
-            int unread = (int) msgs.stream()
-                    .filter(m -> m.getReceiverId().equals(currentUserId) && m.getIsRead() == 0)
-                    .count();
+            // Use countUnread query for accurate count (not limited to 20 latest)
+            int unread = messageRepository.countUnread(currentUserId, partnerId);
 
             conversations.add(ConversationVO.of(partnerId,
                     resolveName(partnerId), lastMsg.getContent(),

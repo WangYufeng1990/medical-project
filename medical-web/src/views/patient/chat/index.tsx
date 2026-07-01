@@ -31,7 +31,7 @@ export default function PatientChat() {
   useEffect(() => { loadConversations() }, [loadConversations])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
-    axios.get(`${BASE}/${partnerId}`, { params: { page, size: 50 }, headers: auth({}) })
+    return axios.get(`${BASE}/${partnerId}`, { params: { page, size: 50 }, headers: auth({}) })
       .then(r => {
         const batch = r.data.data.records ?? []
         setMessages(prev => page === 1 ? batch : [...batch, ...prev])
@@ -43,8 +43,7 @@ export default function PatientChat() {
     setSelectedPartner({ id: p.partnerId, name: p.partnerName })
     setMsgPage(1)
     setMessages([])
-    loadMessages(p.partnerId, 1)
-    loadConversations()
+    loadMessages(p.partnerId, 1).then(() => loadConversations())
   }
 
   const handleSend = async () => {

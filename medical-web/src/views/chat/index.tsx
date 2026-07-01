@@ -27,7 +27,7 @@ export default function Chat() {
   useEffect(() => { loadConversations() }, [loadConversations])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
-    getMessages(partnerId, page, 50).then((r: any) => {
+    return getMessages(partnerId, page, 50).then((r: any) => {
       const batch = r.records ?? []
       setMessages(prev => page === 1 ? batch : [...batch, ...prev])
       setMsgTotal(r.total ?? 0)
@@ -38,8 +38,7 @@ export default function Chat() {
     setSelectedPartner({ id: p.partnerId, name: p.partnerName })
     setMsgPage(1)
     setMessages([])
-    loadMessages(p.partnerId, 1)
-    loadConversations()
+    loadMessages(p.partnerId, 1).then(() => loadConversations())
   }
 
   const handleSend = async () => {
