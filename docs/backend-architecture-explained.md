@@ -204,19 +204,22 @@ Production:                          Development (h2/dev profile):
 │  Issues  │    (RS256 public key)    │ Local JwtDecoder  │
 │  JWT     │                          │ + JwtEncoder      │
 │  MFA     │                          │ HMAC-SHA256       │
-└────┬────┘                          └──────────────────┘
-     │
-     ▼
-┌─────────────┐
-│ JwtDecoder  │ ← Spring Boot auto-configuration
-│ Validates    │   issuer-uri → JWKS endpoint
-│ sig + expiry │
-└──────┬──────┘
+└────┬────┘                          │ (key from config) │
+     │                               └──────────────────┘
+     ▼                                        │
+┌─────────────┐                               │  Prod profile:
+│ JwtDecoder  │ ← Spring Boot auto-           │  SecurityConfigProd
+│ Validates    │   configuration              │  key from AES_KEY
+│ sig + expiry │                              │  env var
+└──────┬──────┘                               │
        ▼
 ┌──────────────┐
-│JwtClaimMapper│ ← Okta claims → Spring Security
-│ groups→ROLE_* │   groups → ROLE_ADMIN/DOCTOR/PATIENT
-│ scp→SCOPE_*  │   uid → userId
+│JwtClaimMapper│ ← claims → Spring Security
+│ roles→ROLE_* │   roles → ROLE_ADMIN/DOCTOR/PATIENT
+│ perm →auth   │   perm  → hasAuthority() permissions
+│ scp→SCOPE_*  │   uid   → userId
+│              │   iss   → staff: medical-server, patient: medical-server/patient
+│              │   forceLogoutAfter → token revocation for disabled accounts
 └──────────────┘
 ```
 

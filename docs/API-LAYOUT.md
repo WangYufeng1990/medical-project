@@ -211,12 +211,12 @@ Requires `ADMIN` or `DOCTOR`.
 
 ### Export — `/api/v1/export`
 
-Requires `ADMIN` or `DOCTOR`.
+Requires `ADMIN` or `DOCTOR`. DOCTOR role is scoped to own patients only (from appointments/prescriptions); ADMIN exports all records.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/patients` | CSV download of all patients (PHI masked: phone→last4, email→j***@domain) |
-| GET | `/bills` | CSV download of all bills (claim numbers masked) |
+| GET | `/patients` | CSV download (DOCTOR: own patients; ADMIN: all). PHI masked: phone→last4, email→j***@domain |
+| GET | `/bills` | CSV download (DOCTOR: own patients' bills; ADMIN: all). Claim numbers masked |
 
 ### Audit Logs — `/api/v1/audit-logs`
 
@@ -250,8 +250,9 @@ Requires `ADMIN` or `DOCTOR`. Break-glass access with mandatory audit.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| POST | `/access/{patientId}` | body: {reason} | Emergency patient data access (30min expiry, synchronously audited) |
-| GET | `/history` | `?patientId=` | View emergency access history (ADMIN only) |
+| POST | `/access/{patientId}` | body: {reason} | Returns short-lived (30min) JWT with `scope=EMERGENCY` + `patientId` claim. Use this token to access the specific patient's data via `/patients/{id}` |
+| GET | `/history` | `?patientId=&audited=0` | View emergency access history — filter by patient or unreviewed (ADMIN only) |
+| PUT | `/{id}/review` | path | Mark emergency access as reviewed — sets `audited=1`, `reviewedBy`, `reviewedAt` (ADMIN only) |
 
 ### Key Management — `/api/v1/admin/keys`
 
