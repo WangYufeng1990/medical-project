@@ -4,6 +4,7 @@ import com.example.medical.module.chat.entity.Message;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +29,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     @Query("SELECT COUNT(m) FROM Message m WHERE m.receiverId = :userId AND m.senderId = :partnerId AND m.isRead = 0")
     int countUnread(@Param("userId") Long userId, @Param("partnerId") Long partnerId);
+
+    @Modifying
+    @Query("UPDATE Message m SET m.isRead = 1 WHERE m.receiverId = :userId AND m.senderId = :partnerId AND m.isRead = 0")
+    int markAsRead(@Param("userId") Long userId, @Param("partnerId") Long partnerId);
 }

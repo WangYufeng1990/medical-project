@@ -48,15 +48,8 @@ public class ChatService {
         var result = messageRepository.findMessagesBetween(
                 currentUserId, partnerId, pageable);
 
-        List<Message> toMark = result.getContent().stream()
-                .filter(m -> m.getReceiverId().equals(currentUserId) && m.getIsRead() == 0)
-                .toList();
-        if (!toMark.isEmpty()) {
-            for (Message m : toMark) {
-                m.setIsRead(1);
-            }
-            messageRepository.saveAll(toMark);
-        }
+        // Use @Modifying UPDATE for reliable persistence
+        messageRepository.markAsRead(currentUserId, partnerId);
 
         List<MessageVO> records = result.getContent().stream()
                 .map(MessageVO::fromEntity).toList();
