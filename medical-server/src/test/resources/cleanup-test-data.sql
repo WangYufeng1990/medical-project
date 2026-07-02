@@ -45,3 +45,4 @@ INSERT INTO prescription_item (id, prescription_id, drug_name, ndc_code, rxnorm_
 (405, 302, 'Albuterol HFA Inhaler', '59310-0579-22', '435', '100mcg', '100mcg', 'INH', 'PRN', 'Inhale 1-2 puffs as needed', 30, 30, 1, 0, 1, 25.00, NOW(), NOW());
 
 UPDATE prescription SET rx_status = 'completed' WHERE id = 300;
+UPDATE sys_user SET real_name='Dr. Mitchell' WHERE id=2 AND real_name IS NULL;

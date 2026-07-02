@@ -17,7 +17,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findMessagesBetween(@Param("userId1") Long userId1, @Param("userId2") Long userId2);
 
     @Query("SELECT m FROM Message m WHERE ((m.senderId = :userId1 AND m.receiverId = :userId2) " +
-            "OR (m.senderId = :userId2 AND m.receiverId = :userId1)) ORDER BY m.createTime ASC")
+            "OR (m.senderId = :userId2 AND m.receiverId = :userId1)) ORDER BY m.createTime DESC")
     Page<Message> findMessagesBetween(@Param("userId1") Long userId1, @Param("userId2") Long userId2,
                                        Pageable pageable);
 

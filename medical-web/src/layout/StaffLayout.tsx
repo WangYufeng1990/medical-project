@@ -35,6 +35,9 @@ export default function StaffLayout() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <aside className={styles.sidebar}>
         <div className={styles.logo}>Medical System</div>
+        <div style={{ padding: '0 16px 8px', fontSize: 12, color: '#9ca3af' }}>
+          {localStorage.getItem('username') || 'Staff'}
+        </div>
         <nav>
           {visibleItems.map((item, i) => {
             if (item.type === 'divider') return <hr key={i} className={styles.divider} />
