@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getConversations, getMessages, sendMessage } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
@@ -8,6 +9,7 @@ interface MessageVO { id: number; senderId: number; receiverId: number; content:
 interface ConversationVO { partnerId: number; partnerName: string; lastMessage: string; lastMessageTime: string; unreadCount: number }
 
 export default function Chat() {
+  const [searchParams] = useSearchParams()
   const [conversations, setConversations] = useState<ConversationVO[]>([])
   const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string } | null>(null)
   const [messages, setMessages] = useState<MessageVO[]>([])
@@ -25,6 +27,16 @@ export default function Chat() {
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
+
+  // Auto-select partner from URL query params (e.g., /chat?partnerId=100&partnerName=James+Anderson)
+  useEffect(() => {
+    const pid = searchParams.get('partnerId')
+    const pname = searchParams.get('partnerName')
+    if (pid && pname) {
+      setSelectedPartner({ id: Number(pid), name: pname })
+      loadMessages(Number(pid), 1)
+    }
+  }, [searchParams])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
     return getMessages(partnerId, page, 50).then((r: any) => {

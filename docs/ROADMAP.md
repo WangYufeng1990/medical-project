@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model three-pillar foundation, through clinical decision support, lab interoperability, ePrescribing, compliance audit remediation, and frontend migration.
 >
-> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration + RBAC Remediation — All Complete (2026-06-30)**
+> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration + RBAC Remediation + Doctor-Patient Messaging — All Complete (2026-07-06)**
 
 ---
 
@@ -752,3 +752,19 @@ PrescriptionService.create()
 17-10 LOW       Permission-based authorization                   ✅ 1fd5d60
 17-11 LOW       FHIR metadata endpoint                           ✅ 07a0f73
 ```
+
+---
+
+# Round 18: "Message Patient" Button on Patient List ✅ Complete
+
+> **Status: Complete (2026-07-06)**
+
+## Goal
+Add a "Message" button to the patient list page so doctors can initiate a chat directly without navigating to the Messages page first.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/views/patients/index.tsx` | Modify | Add "Msg" button navigating to `/chat?partnerId=&partnerName=` |
+| `medical-web/src/views/chat/index.tsx` | Modify | Read `partnerId`/`partnerName` from URL query params, auto-select conversation on mount |

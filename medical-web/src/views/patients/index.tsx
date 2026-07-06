@@ -1,10 +1,12 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', medicalHistory: '', allergies: '', patientStatus: 'active' }
 
 export default function Patients() {
+  const navigate = useNavigate()
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -54,6 +56,7 @@ export default function Patients() {
               <td>{row.id}</td><td>{row.mrn}</td><td>{row.name}</td><td>{row.dateOfBirth}</td>
               <td>{maskPhone(row.phoneMobile)}</td><td>{maskEmail(row.email)}</td>
               <td>
+                <button className={styles.btnSm} onClick={() => navigate(`/chat?partnerId=${row.id}&partnerName=${encodeURIComponent(row.name)}`)}>Msg</button>
                 <button className={styles.btnSm} onClick={() => openForm(row)}>Edit</button>
                 <button className={styles.btnSmDanger} onClick={() => handleDelete(row.id)}>Del</button>
               </td>
