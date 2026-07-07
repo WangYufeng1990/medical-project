@@ -39,6 +39,27 @@ All constraints, stack rules, and project conventions are defined in the root `C
 - Empty form checks: `!== ''` (NOT `? :` — `0` is truthy in ternary)
 - **NEVER use `||` for values that could be `0` or `false`**
 
+## Lessons from Round 21 (CDS Frontend)
+
+### Stale closure in async state updates
+When an async API call (lookup, check, validate) modifies form state in its callback:
+- **ALWAYS use functional `setForm(prev => ...)`** — never reference `form` directly in a `.then()` or after `await`
+- **Add stale-response guards**: if the user may have changed the triggering value during the async call, verify `prev.items[idx].field === originalValue` before applying the response
+- **Round 21 bug**: `lookupDrug` response set drugName using `form.items` from closure — user's next keystroke was overwritten
+
+### RxNorm/drug auto-lookup pattern
+- Fire-and-forget `.then()` with functional setForm (not `await` in change handler)
+- Guard against stale response: check `prev.items[idx].rxnormCode` still matches the code that was looked up
+
+### Vite HMR cache
+- If code changes don't appear in the browser, the Vite dev server may be serving cached modules
+- Kill all vite processes and restart with `--force` flag to clear dependency optimization cache
+
+### `|| null` on numeric form fields — RECURRING BUG
+- `Number(it.duration) || null` silently drops `0` because `0 || null` → `null`
+- **Correct pattern**: `it.duration !== '' ? Number(it.duration) : null`
+- This bug has shipped multiple times. The review agent should flag it every time.
+
 ## Constraints (from CLAUDE.md)
 - No new npm dependencies
 - Match existing code style: no comments on self-explanatory code, same indentation, same naming

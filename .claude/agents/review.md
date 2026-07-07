@@ -53,6 +53,30 @@ All constraints and patterns are defined in the root `CLAUDE.md` and the agent c
 
 **Important**: `r.data.data.` in patient portal views is CORRECT (raw axios, no interceptor). Do NOT flag patient views for this pattern.
 
+## Lessons from Round 21 (CDS Frontend)
+
+### Data contract mismatch — CRITICAL priority
+- The **#1 finding** of Round 21: frontend sent `rxnormCode: ''` because the form had no RxNorm input, but CDS requires the code to detect interactions. The entire feature was silently a no-op.
+- **New checklist item**: trace every field in every API request body to verify (a) it exists in the form, (b) it's not a hardcoded empty/default that silently disables the feature.
+- **Flag any** `field: ''` in API payloads where the backend uses that field for lookups/filtering.
+
+### No-op by default
+- If a feature depends on optional user input and the default is empty/missing, the feature is silently disabled.
+- **Check**: "If the user changes nothing from defaults, does this feature still do something useful?"
+
+### Vite cache check
+- If the served module (fetched via `curl http://localhost:5173/src/views/...`) does not contain expected changes, the Vite cache is stale.
+- **Recommendation**: `pkill -f vite && ./node_modules/.bin/vite --force`
+
+### Recurring bug: `|| null` on numeric inputs
+- `Number(x) || null` drops `0`. Flag this EVERY time.
+- **Correct**: `x !== '' ? Number(x) : null`
+
+### Recurring bug: stale closure in async React handlers
+- `setForm({ ...form, items })` inside `.then()` or after `await` uses potentially stale `form` reference.
+- **Flag any** non-functional setState inside async callbacks.
+- **Correct**: `setForm(prev => { ... })`
+
 ## Output Format
 ```
 [severity] file:line — issue

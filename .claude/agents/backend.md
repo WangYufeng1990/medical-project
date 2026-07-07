@@ -50,6 +50,17 @@ Layers: `controller/`, `service/`, `dto/`, `entity/`, `repository/`. Every busin
 - `throw new BusinessException(ResultCode.X, "message")`
 - Common codes: `NOT_FOUND`, `BAD_REQUEST`, `CONFLICT`, `FORBIDDEN`, `UNAUTHORIZED`
 
+## Lessons from Round 21 (CDS Frontend)
+
+### Lookup endpoint design
+- Simple `GET` with query param is sufficient for single-field lookups (e.g., `GET /cds/drugs?rxnorm=6809`)
+- Return `{rxnormCode, drugName}` — include the input param in the response so the frontend can verify the result matches the request
+- Query existing tables where possible; the `prescription_item` table already contained drug names mapped to RxNorm codes from seed data
+
+### Noise tolerance
+- CDS endpoints should be fail-open: if the CDS check throws, the prescription should still save
+- The `@Valid` annotation on `CdsCheckRequest.items` requires `@NotNull rxnormCode` — but empty strings pass validation while silently disabling CDS. Consider `@NotBlank` if the field is truly required.
+
 ## Constraints (from CLAUDE.md)
 - Java 17, Spring Boot 3.x, Spring Data JPA only (no MyBatis)
 - No new dependencies without concrete justification

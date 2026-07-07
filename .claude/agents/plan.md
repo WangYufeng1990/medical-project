@@ -50,9 +50,22 @@ Module internals: `controller/`, `service/`, `dto/`, `entity/`, `repository/` �
 - No microservices, no message queues, no GraphQL, no gRPC
 - No cyclic references between modules
 
+## Lessons from Round 21 (CDS Frontend)
+
+### Data contract traceability
+When bridging frontend form data to backend API requests, trace EVERY field end-to-end:
+- **Round 21 bug**: CDS check requires `rxnormCode`, but prescription form had no RxNorm input. Plan assumed `rxnormCode: ''` was acceptable — backend silently skipped items with empty codes, making CDS a no-op. Fix: added RxNorm field to form + auto-lookup.
+- **Rule**: before finalizing a plan, verify that every field the backend API needs either (a) exists in the form data model, or (b) is explicitly added as a new form field. Do not assume empty/default values are safe.
+
+### Async state management
+When the plan involves async API calls that modify form state, specify the state update strategy:
+- Functional `setForm(prev => ...)` for operations triggered by user input that may overlap
+- Stale-response guards (e.g., check that the current form value matches the request parameter before applying the response)
+
 ## Output Format
 1. **Summary** — 1-2 sentences what we're building
 2. **Files to Create** — table: file path + what goes in it
 3. **Files to Modify** — table: file path + what changes + why
 4. **Execution Order** — numbered list with dependencies noted
-5. **Risks / Trade-offs** — what could go wrong, alternatives considered
+5. **Data Contract Trace** — for each API call: list every field and verify it exists in the form or is added
+6. **Risks / Trade-offs** — what could go wrong, alternatives considered
