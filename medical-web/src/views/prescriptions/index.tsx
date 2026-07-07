@@ -2,9 +2,11 @@ import { useState, useEffect, FormEvent } from 'react'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
+import { checkCds } from '../../api/cds'
+import CdsWarningModal from './CdsWarningModal'
 import styles from '../shared.module.css'
 
-const emptyItem = { drugName: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
+const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
 const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: '', prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
@@ -18,6 +20,9 @@ export default function Prescriptions() {
   const [transmitId, setTransmitId] = useState<number | null>(null)
   const [pharmacies, setPharmacies] = useState<any[]>([])
   const [selectedPharmacy, setSelectedPharmacy] = useState('')
+  const [cdsWarnings, setCdsWarnings] = useState<any[]>([])
+  const [showCdsModal, setShowCdsModal] = useState(false)
+  const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
 
   useEffect(() => { getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
 
@@ -50,8 +55,9 @@ export default function Prescriptions() {
         prescriptionType: detail.prescriptionType ?? 'MEDICATION',
         rxStatus: detail.rxStatus ?? 'active',
         items: detail.items?.length ? detail.items.map((i: any) => ({
-          drugName: i.drugName ?? '', dosage: i.dosage ?? '', frequency: i.frequency ?? '',
-          duration: i.duration ?? '', quantity: i.quantity ?? '', refills: i.refills ?? '', notes: i.notes ?? ''
+          drugName: i.drugName ?? '', rxnormCode: i.rxnormCode ?? '', dosage: i.dosage ?? '',
+          frequency: i.frequency ?? '', duration: i.duration ?? '', quantity: i.quantity ?? '',
+          refills: i.refills ?? '', notes: i.notes ?? ''
         })) : [{ ...emptyItem }]
       })
     } else {
@@ -59,6 +65,14 @@ export default function Prescriptions() {
       setForm({ ...emptyForm })
     }
     setShowForm(true)
+  }
+
+  const doSave = async (payload: any) => {
+    editId ? await updatePrescription(editId, payload) : await createPrescription(payload)
+    getPrescriptionPage({ page, size: 10 }).then(r => {
+      setData(r.records); setTotal(r.total)
+      setShowForm(false)
+    })
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -72,9 +86,29 @@ export default function Prescriptions() {
         ...it, duration: Number(it.duration) || null, quantity: Number(it.quantity) || null, refills: Number(it.refills) || null
       }))
     }
-    editId ? await updatePrescription(editId, payload) : await createPrescription(payload)
-    setShowForm(false)
-    getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) })
+    try {
+      const cdsItems = form.items.filter((it: any) => it.drugName).map((it: any) => ({
+        rxnormCode: it.rxnormCode || '', drugName: it.drugName
+      }))
+      const cdsResult = await checkCds({ patientId: payload.patientId, items: cdsItems })
+      if (cdsResult.passed === true) {
+        await doSave(payload)
+      } else {
+        setPendingCdsPayload(payload)
+        setCdsWarnings(cdsResult.warnings ?? [])
+        setShowCdsModal(true)
+      }
+    } catch {
+      await doSave(payload)
+    }
+  }
+
+  const handleOverrideSave = async () => {
+    if (!pendingCdsPayload) return
+    setShowCdsModal(false)
+    setCdsWarnings([])
+    setPendingCdsPayload(null)
+    await doSave(pendingCdsPayload)
   }
 
   const addItem = () => setForm({ ...form, items: [...form.items, { ...emptyItem }] })
@@ -133,11 +167,12 @@ export default function Prescriptions() {
 
           <h4 style={{ marginTop: 20, marginBottom: 8 }}>Items</h4>
           {form.items.map((it: any, idx: number) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 80px 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
               <div className={styles.formGroup}><label>Drug</label><input value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
+              <div className={styles.formGroup}><label>RxNorm</label><input value={it.rxnormCode} onChange={e => updateItem(idx, 'rxnormCode', e.target.value)} placeholder="e.g. 6809" /></div>
               <div className={styles.formGroup}><label>Dosage</label><input value={it.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} placeholder="e.g. 500mg" /></div>
               <div className={styles.formGroup}><label>Frequency</label><input value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
-              <div className={styles.formGroup}><label>Duration (days)</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="e.g. 7" /></div>
+              <div className={styles.formGroup}><label>Duration</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="days" /></div>
               <div className={styles.formGroup}><label>Qty</label><input value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="30" /></div>
               <div className={styles.formGroup}><label>Refills</label><input value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
               <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 2 }}>
@@ -161,6 +196,14 @@ export default function Prescriptions() {
         </div>
         <div className={styles.formActions}><button className={styles.btnSm} onClick={() => setTransmitId(null)}>Cancel</button><button className={styles.btnPrimary} onClick={handleTransmit} disabled={!selectedPharmacy}>Transmit (NCPDP SCRIPT)</button></div>
       </div></div>}
+
+      {showCdsModal && (
+        <CdsWarningModal
+          warnings={cdsWarnings}
+          onOverride={handleOverrideSave}
+          onCancel={() => { setShowCdsModal(false); setCdsWarnings([]); setPendingCdsPayload(null) }}
+        />
+      )}
     </div>
   )
 }
