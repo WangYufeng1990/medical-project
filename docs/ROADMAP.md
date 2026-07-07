@@ -878,4 +878,14 @@ RxNorm auto-lookup:
   → returns {rxnormCode: "6809", drugName: "Metformin HCl"}
   → drug name field auto-filled
   → stale response guard: ignores result if code has changed since request
-```
+
+## Post-Release Fixes
+- **Stale closure bug**: `handleRxnormChange` used captured `form` in async callback → 4th digit of RxNorm code disappeared. Fixed with functional `setForm(prev => ...)` + stale-response guard.
+- **Agent configs updated**: all 4 agent files now include Round 21 lessons (data contract traceability, no-op detection, Vite `--force`, `|| null` bug pattern, stale closure detection).
+
+## Verified
+- RxNorm lookup: 6 codes all return correct drug names (tested)
+- CDS drug-drug interaction: Metformin(6809) + Ibuprofen(5640) → moderate warning (tested)
+- CDS drug-allergy: Amoxicillin(308191) + Penicillin allergy → contraindicated (tested)
+- Full combo 3 drugs: 4 warnings across 2 types (tested)
+- Frontend modules served correctly (checked via Vite proxy)
