@@ -34,9 +34,9 @@ export default function Appointments() {
       <h2 style={{ marginBottom: 20 }}>Appointments</h2>
       <button className={styles.btnPrimary} onClick={() => openForm()} style={{ marginBottom: 16 }}>+ Add</button>
       <table className={styles.table}>
-        <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Time</th><th>Type</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Time</th><th>Duration</th><th>Type</th><th>Status</th><th></th></tr></thead>
         <tbody>{data.map(r => (
-          <tr key={r.id}><td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.visitType}</td>
+          <tr key={r.id}><td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.duration}m</td><td>{r.visitType}</td>
             <td><span style={{ color: statusColor(r.status), fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
             <td><button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
               <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteAppointment(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button></td></tr>

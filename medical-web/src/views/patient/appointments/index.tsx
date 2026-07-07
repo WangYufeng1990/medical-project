@@ -15,8 +15,8 @@ export default function PatientAppointments() {
 
   return (<div>
     <h2>My Appointments</h2>
-    <table className={styles.table}><thead><tr><th>Date</th><th>Doctor</th><th>Visit Type</th><th>Department</th><th>Status</th></tr></thead>
-      <tbody>{data.map(r => (<tr key={r.id}><td>{r.appointmentTime}</td><td>{r.doctorName}</td><td>{r.visitType}</td><td>{r.department}</td>
+    <table className={styles.table}><thead><tr><th>Date</th><th>Doctor</th><th>Duration</th><th>Visit Type</th><th>Department</th><th>Status</th></tr></thead>
+      <tbody>{data.map(r => (<tr key={r.id}><td>{r.appointmentTime}</td><td>{r.doctorName}</td><td>{r.duration}m</td><td>{r.visitType}</td><td>{r.department}</td>
         <td><span style={{ color: statusColor(r.status), fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td></tr>))}</tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*10>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
   </div>)
