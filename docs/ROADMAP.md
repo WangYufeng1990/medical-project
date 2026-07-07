@@ -858,7 +858,9 @@ Integrate Clinical Decision Support (drug-drug interaction + drug-allergy contra
 |------|--------|-------------|
 | `medical-web/src/api/cds.ts` | **New** | `checkCds(data)` → `POST /api/v1/cds/check` |
 | `medical-web/src/views/prescriptions/CdsWarningModal.tsx` | **New** | Modal: severity-colored badges, type labels, drugs involved, description, recommendation, "I understand" checkbox, Override & Save / Cancel |
-| `medical-web/src/views/prescriptions/index.tsx` | Modify | CDS check before save (try/catch fallback), rxnormCode field in items form, `doSave()` helper, deferred `setShowForm(false)` |
+| `medical-web/src/views/prescriptions/index.tsx` | Modify | CDS check before save (try/catch fallback), rxnormCode field in items form, RxNorm auto-lookup (functional setForm to avoid stale closure), `doSave()` helper, deferred `setShowForm(false)` |
+| `medical-server/.../prescription/controller/CdsController.java` | Modify | Add `GET /api/v1/cds/drugs?rxnorm=` — lookup drug name by RxNorm code from prescription_item table |
+| `medical-server/.../prescription/repository/PrescriptionItemRepository.java` | Modify | Add `findDrugNamesByRxnormCode()` query |
 
 ## CDS Flow
 ```
@@ -869,7 +871,11 @@ User clicks Save
       → Override & Save → save despite warnings
       → Cancel → stay on form, edit prescription
   → CDS error → save anyway (fail-open)
-```
 
-## Next Round
-Round 21: CDS frontend integration — first Workflow-driven round using the agent configs.
+RxNorm auto-lookup:
+  User types RxNorm code (e.g. 6809)
+  → GET /api/v1/cds/drugs?rxnorm=6809
+  → returns {rxnormCode: "6809", drugName: "Metformin HCl"}
+  → drug name field auto-filled
+  → stale response guard: ignores result if code has changed since request
+```
