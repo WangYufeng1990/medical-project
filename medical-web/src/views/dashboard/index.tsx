@@ -16,7 +16,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     getDashboardStats().then(stats => {
-      setValues([stats.totalPatients, stats.todayAppointments, stats.scheduledAppointments, stats.monthlyPrescriptions])
+      setValues([stats.totalPatients, stats.todayAppointments, stats.pendingBills, stats.monthlyPrescriptions])
     }).catch(() => {})
   }, [])
 

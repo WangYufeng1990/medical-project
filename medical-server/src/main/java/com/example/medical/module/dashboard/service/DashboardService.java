@@ -40,13 +40,17 @@ public class DashboardService {
                 "SELECT COUNT(*) FROM prescription WHERE prescription_date >= ? AND is_deleted = 0",
                 Long.class, LocalDate.now().withDayOfMonth(1).toString());
 
+        long pendingBills = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM bill WHERE claim_status = 'PENDING' AND is_deleted = 0", Long.class);
+
         List<Map<String, Object>> appointmentStatusDist = jdbcTemplate.queryForList(
                 "SELECT status, COUNT(*) AS count FROM appointment WHERE is_deleted = 0 GROUP BY status");
 
         List<Map<String, Object>> revenueTrend = computeRevenueTrend();
 
         return DashboardStats.of(totalPatients, todayAppointments, scheduledAppointments,
-                monthlyRevenue, monthlyPrescriptions, appointmentStatusDist, revenueTrend);
+                monthlyRevenue, monthlyPrescriptions, pendingBills,
+                appointmentStatusDist, revenueTrend);
     }
 
     private List<Map<String, Object>> computeRevenueTrend() {
