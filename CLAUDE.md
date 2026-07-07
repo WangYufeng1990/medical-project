@@ -162,3 +162,10 @@ medical-project/
 - Be concise. State what you are about to do, do it, report the result.
 - No summaries, no emojis, no markdown tables unless data comparison requires it.
 - If you hit a blocker or ambiguity, ask — don't guess.
+
+### 11. Documentation Discipline
+- **After every completed feature/round, update `docs/ROADMAP.md`** with the round summary, files changed, and verification results.
+- **After every API surface change, update `docs/API-LAYOUT.md`** — new endpoints, modified auth roles, new request/response fields.
+- Doc updates are part of the feature — commit them together with the code, not as a separate "docs" commit unless explicitly separated for review.
+- If a round includes infrastructure work (agent configs, build changes, patterns), document it in `docs/ROADMAP.md` so the project timeline stays complete.
+- Doc-only commits are fine for post-release fixes, verification notes, or lessons-learned additions to existing rounds.

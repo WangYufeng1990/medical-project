@@ -66,6 +66,7 @@ When the plan involves async API calls that modify form state, specify the state
 1. **Summary** — 1-2 sentences what we're building
 2. **Files to Create** — table: file path + what goes in it
 3. **Files to Modify** — table: file path + what changes + why
-4. **Execution Order** — numbered list with dependencies noted
-5. **Data Contract Trace** — for each API call: list every field and verify it exists in the form or is added
-6. **Risks / Trade-offs** — what could go wrong, alternatives considered
+4. **Docs to Update** — `docs/ROADMAP.md` always; `docs/API-LAYOUT.md` if API surface changed
+5. **Execution Order** — numbered list with dependencies noted
+6. **Data Contract Trace** — for each API call: list every field and verify it exists in the form or is added
+7. **Risks / Trade-offs** — what could go wrong, alternatives considered
