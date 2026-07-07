@@ -818,3 +818,24 @@ Comprehensive audit of all 29 backend controllers (~62 endpoints) against fronte
 | `medical-web/src/api/request.ts` | Modify | 401 interceptor: try `POST /auth/refresh` before redirecting to login. Concurrent requests queued during refresh |
 | `medical-web/src/views/login/index.tsx` | Modify | Store `refreshToken` on login |
 | `medical-web/src/layout/StaffLayout.tsx` | Modify | Clear `refreshToken` on logout |
+
+---
+
+# Round 20: Multi-Agent Workflow Infrastructure ✅ Complete
+
+> **Status: Complete (2026-07-07)**
+
+## Goal
+Set up specialized agent configuration files to enable structured multi-agent development (Plan → Frontend + Backend → Review). Each agent has role-specific scope, patterns, constraints, and output formats.
+
+## Agent Configs
+
+| File | Role | Key Constraints |
+|------|------|----------------|
+| `.claude/agents/plan.md` | Architecture designer | Explores codebase, identifies files, designs execution order. Does NOT write code. References CLAUDE.md as authority |
+| `.claude/agents/frontend.md` | React/TS implementer | API module import pattern, modal/form/table CSS conventions, falsy safety rules, patient vs staff view differences |
+| `.claude/agents/backend.md` | Spring Boot implementer | Package convention, DTO/Entity/Service patterns, @SQLDelete/@SQLRestriction, @Auditable, PHI encryption (both @Convert and AesCryptoUtil) |
+| `.claude/agents/review.md` | Adversarial reviewer | Per-file checklist (backend + frontend + cross-cutting), severity levels, common bug patterns, VERDICT line |
+
+## Next Round
+Round 21: CDS frontend integration — first Workflow-driven round using the agent configs.
