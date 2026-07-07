@@ -83,7 +83,7 @@ export default function PatientProfile() {
         FIELDS.map(f => (
           <div key={f.key} style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}>
             <span style={{ color: '#909399', fontSize: 12 }}>{f.label}</span><br />
-            <span>{profile[f.key] || '-'}</span>
+            <span>{profile[f.key] ?? '-'}</span>
           </div>
         ))
       )}

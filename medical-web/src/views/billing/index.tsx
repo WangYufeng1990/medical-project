@@ -25,7 +25,7 @@ export default function Billing() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
-    await createBill({ ...form, patientId: Number(form.patientId), totalCharge: Number(form.totalCharge), copayAmount: form.copayAmount ? Number(form.copayAmount) : undefined })
+    await createBill({ ...form, patientId: Number(form.patientId), totalCharge: Number(form.totalCharge), copayAmount: form.copayAmount !== '' ? Number(form.copayAmount) : undefined })
     setShowForm(false); refresh()
   }
 
