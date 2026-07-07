@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from 'react'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
-import { checkCds } from '../../api/cds'
+import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
 import styles from '../shared.module.css'
 
@@ -119,6 +119,20 @@ export default function Prescriptions() {
     setForm({ ...form, items })
   }
 
+  const handleRxnormChange = async (idx: number, code: string) => {
+    updateItem(idx, 'rxnormCode', code)
+    if (code && code.trim()) {
+      try {
+        const result = await lookupDrug(code.trim())
+        if (result.drugName) {
+          const items = [...form.items]
+          items[idx] = { ...items[idx], drugName: result.drugName }
+          setForm({ ...form, items })
+        }
+      } catch { /* lookup failed, user types manually */ }
+    }
+  }
+
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>Prescriptions</h2>
@@ -169,7 +183,7 @@ export default function Prescriptions() {
           {form.items.map((it: any, idx: number) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 80px 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
               <div className={styles.formGroup}><label>Drug</label><input value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
-              <div className={styles.formGroup}><label>RxNorm</label><input value={it.rxnormCode} onChange={e => updateItem(idx, 'rxnormCode', e.target.value)} placeholder="e.g. 6809" /></div>
+              <div className={styles.formGroup}><label>RxNorm</label><input value={it.rxnormCode} onChange={e => handleRxnormChange(idx, e.target.value)} placeholder="e.g. 6809" /></div>
               <div className={styles.formGroup}><label>Dosage</label><input value={it.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} placeholder="e.g. 500mg" /></div>
               <div className={styles.formGroup}><label>Frequency</label><input value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
               <div className={styles.formGroup}><label>Duration</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="days" /></div>

@@ -3,6 +3,7 @@ package com.example.medical.module.prescription.controller;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.prescription.dto.CdsWarning;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
+import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
 import com.example.medical.module.prescription.service.CdsService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -13,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/cds")
@@ -21,6 +23,14 @@ import java.util.List;
 public class CdsController {
 
     private final CdsService cdsService;
+    private final PrescriptionItemRepository prescriptionItemRepository;
+
+    @GetMapping("/drugs")
+    public Result<Map<String, String>> lookupDrug(@RequestParam String rxnorm) {
+        List<String> names = prescriptionItemRepository.findDrugNamesByRxnormCode(rxnorm);
+        String drugName = names.isEmpty() ? null : names.get(0);
+        return Result.ok(Map.of("rxnormCode", rxnorm, "drugName", drugName != null ? drugName : ""));
+    }
 
     @PostMapping("/check")
     public Result<CdsCheckResponse> check(@Valid @RequestBody CdsCheckRequest request) {

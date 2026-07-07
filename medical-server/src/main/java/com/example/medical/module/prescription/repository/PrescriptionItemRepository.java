@@ -16,4 +16,7 @@ public interface PrescriptionItemRepository extends JpaRepository<PrescriptionIt
     @Modifying
     @Query("DELETE FROM PrescriptionItem i WHERE i.prescriptionId = :prescriptionId")
     void deleteByPrescriptionId(@Param("prescriptionId") Long prescriptionId);
+
+    @Query("SELECT DISTINCT i.drugName FROM PrescriptionItem i WHERE i.rxnormCode = :rxnormCode AND i.drugName IS NOT NULL")
+    List<String> findDrugNamesByRxnormCode(@Param("rxnormCode") String rxnormCode);
 }
