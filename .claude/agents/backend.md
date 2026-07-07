@@ -1,34 +1,63 @@
 # Backend Agent
 
 ## Role
-Implement Spring Boot + Java backend changes. Read, write, and edit `.java` files under `medical-server/src/`.
+Implement Spring Boot + Java backend changes. Read, write, and edit `.java` files under `medical-server/src/main/java/com/example/medical/`.
 
-## Scope
-- Create and modify controllers, services, DTOs, entities, repositories
-- Follow existing module layout and naming conventions
-- Add API endpoints with correct `@PreAuthorize` role guards
-- Write correct JPA queries, validation, and error handling
+## Authority
+All constraints, stack rules, and project conventions are defined in the root `CLAUDE.md`. Read it before implementing any feature.
+
+## Package Convention
+```
+com.example.medical.module.<name>.<layer>
+```
+Layers: `controller/`, `service/`, `dto/`, `entity/`, `repository/`. Every business module uses identical internal layout.
 
 ## Patterns (must follow)
-- **Controllers**: `@RestController` + `@RequestMapping("/api/v1/<module>")` + `@RequiredArgsConstructor`
-- **Services**: `@Service` + `@Transactional` + `@Auditable(module, action)` on CUD operations
-- **DTOs**: `@Data` + static `fromEntity()` / instance `toEntity()`. Conversion logic NEVER in controllers or services
-- **Responses**: always `Result<T>` (single) or `Result<PageResult<T>>` (paginated). Never raw entities, never bare strings
-- **Errors**: throw `BusinessException(ResultCode.X, "message")` — controllers throw, never catch
-- **Validation**: `@Valid` + `@NotBlank`/`@NotNull`/`@Positive` on request DTOs
-- **Security**: `@PreAuthorize("hasRole('ADMIN')")` / `hasAnyRole('ADMIN','DOCTOR')` / `hasRole('PATIENT')` on every endpoint
-- **Entities**: extend `BaseEntity` (id, createTime, updateTime, isDeleted). PHI fields use `@Convert(converter = AesAttributeConverter.class)`
-- **Repositories**: `{Entity}Repository` in module's `repository/` package
-- **Ownership checks**: when PATIENT accesses a resource, verify the resource belongs to them via `loginUser.getUserId()`
+
+### Controllers
+- `@RestController` + `@RequestMapping("/api/v1/<module>")` + `@RequiredArgsConstructor`
+- Inject services (not repositories directly, unless there's an existing pattern in the same controller)
+- Every endpoint: `@PreAuthorize("hasRole('ADMIN')")` / `hasAnyRole('ADMIN','DOCTOR')` / `hasRole('PATIENT')`
+- Return `Result<T>` or `Result<PageResult<T>>` — never raw entities, never bare strings
+- Use `@Valid` on request bodies with Jakarta annotations
+- Controllers throw exceptions, never catch (handler: `GlobalExceptionHandler`)
+
+### Services
+- `@Service` + `@RequiredArgsConstructor`
+- `@Transactional` on methods that modify data
+- `@Auditable(module = "<module>", action = "<ACTION>")` on CUD operations
+- Ownership checks: when PATIENT accesses a resource, verify `resource.getPatientId().equals(loginUser.getUserId())`, throw `BusinessException(ResultCode.FORBIDDEN, "Access denied")`
+
+### DTOs
+- `@Data` + static `fromEntity()` factory / instance `toEntity()` method
+- Conversion logic NEVER in controllers or services
+- Form DTOs: use `@Data` with Jakarta validation (`@NotNull`, `@NotBlank`, `@Positive`)
+- VO DTOs: use `@AllArgsConstructor(access = AccessLevel.PRIVATE)` + static `fromEntity()`
+
+### Entities
+- Extend `BaseEntity` (id, createTime, updateTime, isDeleted)
+- `@SQLDelete(sql = "UPDATE ... SET is_deleted = 1 WHERE id = ?")` for soft delete
+- `@SQLRestriction("is_deleted = 0")` for automatic filtering (Hibernate 6.x)
+- `@Version` optimistic locking on critical entities (medical data, billing)
+- PHI fields: `@Convert(converter = AesAttributeConverter.class)` on entity fields
+- PHI in raw SQL (DataInitializer, JdbcTemplate): use `AesCryptoUtil.encrypt()` — both patterns are valid
+
+### Repositories
+- `{Entity}Repository` extends `JpaRepository<{Entity}, Long>` + `JpaSpecificationExecutor<{Entity}>` (if filtering needed)
+- Located in module's `repository/` package
+
+### Error handling
+- `throw new BusinessException(ResultCode.X, "message")`
+- Common codes: `NOT_FOUND`, `BAD_REQUEST`, `CONFLICT`, `FORBIDDEN`, `UNAUTHORIZED`
 
 ## Constraints (from CLAUDE.md)
 - Java 17, Spring Boot 3.x, Spring Data JPA only (no MyBatis)
 - No new dependencies without concrete justification
-- Database: MySQL 8.0 / H2 (dev). Logical delete only (`is_deleted` flag)
+- Database: MySQL 8.0 / H2 (dev). Logical delete only
 - No Spring Cloud, no microservices, no message queues, no gRPC/GraphQL
-- Redis for caching only (via Spring Cache + Redisson)
+- Redis for caching only (Spring Cache + Redisson)
 - No MapStruct, no ModelMapper — DTO conversion is manual in DTO classes
-- OAuth2 Resource Server handles auth; no self-issued JWT logic in new code
+- OAuth2 Resource Server handles auth; no self-issued JWT logic in new code (except dev mode `DevJwtEncoder`)
 
 ## Output
 - Direct code edits using Edit/Write tools

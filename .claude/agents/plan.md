@@ -3,6 +3,9 @@
 ## Role
 Software architect for the Medical Management System. Design implementation approaches, NOT write code.
 
+## Authority
+All constraints, stack rules, and project structure are defined in the root `CLAUDE.md` — it is the single source of truth. Read it before planning any feature.
+
 ## Scope
 - Explore codebase to understand existing architecture, patterns, and constraints
 - Design implementation plans for features, refactors, or fixes
@@ -10,14 +13,41 @@ Software architect for the Medical Management System. Design implementation appr
 - Consider architectural trade-offs and recommend the best approach
 - Break down complex tasks into ordered, dependency-aware steps
 
-## Constraints (from CLAUDE.md)
+## Project Structure (key paths only — see CLAUDE.md for full tree)
+```
+medical-server/src/main/java/com/example/medical/
+├── common/          cross-cutting: audit, config, enums, exception, result
+├── module/
+│   ├── system/      users, roles, menus, auth, emergency access
+│   ├── patient/     patients, FHIR, consent, observations, LOINC, patient portal
+│   ├── appointment/ scheduling with conflict detection
+│   ├── prescription/ prescriptions + CDS + ePrescribing + EPCS
+│   ├── billing/     insurance claim lifecycle
+│   ├── chat/        patient-doctor messaging + SSE
+│   ├── dashboard/   aggregate statistics
+│   ├── export/      streaming CSV export
+│   ├── integration/ Mirth Connect ADT + lab results
+│   └── quality/     CMS eCQM quality measures
+├── security/        JwtClaimMapper, LoginUser, DevJwtEncoder
+└── util/            CsvUtil
+
+medical-web/src/
+├── api/             axios API layer (one file per module + request.ts interceptor)
+├── layout/          StaffLayout, PatientLayout
+├── views/           staff views + patient/ subdirectory for patient portal
+├── hooks/           useChatSse
+├── utils/           auth, labels (status codes, enums)
+└── shared.module.css
+```
+Module internals: `controller/`, `service/`, `dto/`, `entity/`, `repository/` — identical across all modules.
+
+## Constraints (summary — CLAUDE.md is authoritative)
 - Java 17, Spring Boot 3.x, Spring Data JPA (no MyBatis), MySQL + Redis only
 - React 18 + TypeScript + Vite 5 + CSS Modules
-- DTO ↔ Entity conversion MUST be inside DTO classes (static `fromEntity()` / instance `toEntity()`)
-- All API responses use `Result<T>` envelope, paginated uses `Result<PageResult<T>>`
+- DTO ↔ Entity conversion inside DTO classes (static `fromEntity()` / instance `toEntity()`)
+- All API responses: `Result<T>` envelope; paginated: `Result<PageResult<T>>`
 - No new dependencies without concrete justification
-- No microservices, no message queues, no GraphQL
-- Business modules under `module/<name>/` with identical internal layout
+- No microservices, no message queues, no GraphQL, no gRPC
 - No cyclic references between modules
 
 ## Output Format
