@@ -27,6 +27,8 @@ export default function PatientProfile() {
   const [profile, setProfile] = useState<any>({})
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<any>({})
+  const [showPwd, setShowPwd] = useState(false)
+  const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '' })
   const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
   useEffect(() => {
@@ -44,9 +46,22 @@ export default function PatientProfile() {
     alert('Profile updated')
   }
 
+  const handlePasswordChange = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await axios.put('/api/v1/patient/me/password', pwdForm, { headers })
+      setShowPwd(false)
+      setPwdForm({ oldPassword: '', newPassword: '' })
+      alert('Password changed')
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Password change failed')
+    }
+  }
+
   return (<div>
     <h2 style={{ marginBottom: 20 }}>My Profile
       {!editing && <button className={styles.btnPrimary} style={{ marginLeft: 16 }} onClick={() => setEditing(true)}>Edit</button>}
+      {!editing && <button className={styles.btnSm} style={{ marginLeft: 8 }} onClick={() => setShowPwd(!showPwd)}>Change Password</button>}
     </h2>
     <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 700, marginTop: 16 }}>
       {editing ? (
@@ -73,5 +88,17 @@ export default function PatientProfile() {
         ))
       )}
     </div>
+
+    {showPwd && <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 500, marginTop: 16 }}>
+      <h3 style={{ marginBottom: 16 }}>Change Password</h3>
+      <form onSubmit={handlePasswordChange} className={styles.formGrid}>
+        <div className={styles.formGroup}><label>Current Password</label><input type="password" value={pwdForm.oldPassword} onChange={e => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} /></div>
+        <div className={styles.formGroup}><label>New Password</label><input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({ ...pwdForm, newPassword: e.target.value })} /></div>
+        <div className={styles.formActions}>
+          <button type="button" className={styles.btnSm} onClick={() => setShowPwd(false)}>Cancel</button>
+          <button type="submit" className={styles.btnPrimary}>Save</button>
+        </div>
+      </form>
+    </div>}
   </div>)
 }

@@ -4,3 +4,4 @@ export const getPrescriptionById = (id: number) => request.get(`/prescriptions/$
 export const createPrescription = (data: any) => request.post('/prescriptions', data)
 export const updatePrescription = (id: number, data: any) => request.put(`/prescriptions/${id}`, data)
 export const deletePrescription = (id: number) => request.delete(`/prescriptions/${id}`)
+export const transmitPrescription = (id: number, pharmacyId: number) => request.put(`/prescriptions/${id}/transmit`, null, { params: { pharmacyId } })

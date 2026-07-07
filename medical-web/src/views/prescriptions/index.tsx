@@ -1,25 +1,166 @@
-import { useState, useEffect } from 'react'
-import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription } from '../../api/prescription'
+import { useState, useEffect, FormEvent } from 'react'
+import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription } from '../../api/prescription'
+import { getPatientPage } from '../../api/patient'
+import { getPharmacies } from '../../api/pharmacy'
 import styles from '../shared.module.css'
+
+const emptyItem = { drugName: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
+const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: '', prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [form, setForm] = useState({ ...emptyForm })
+  const [patients, setPatients] = useState<any[]>([])
+  const [transmitId, setTransmitId] = useState<number | null>(null)
+  const [pharmacies, setPharmacies] = useState<any[]>([])
+  const [selectedPharmacy, setSelectedPharmacy] = useState('')
 
   useEffect(() => { getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+
+  useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
+
+  const openTransmit = async (id: number) => {
+    setTransmitId(id)
+    setSelectedPharmacy('')
+    const ph = await getPharmacies()
+    setPharmacies(ph || [])
+  }
+
+  const handleTransmit = async () => {
+    if (!transmitId || !selectedPharmacy) return
+    await transmitPrescription(transmitId, Number(selectedPharmacy))
+    setTransmitId(null)
+    getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) })
+  }
+
+  const openForm = async (row?: any) => {
+    if (row) {
+      setEditId(row.id)
+      const detail = await getPrescriptionById(row.id)
+      setForm({
+        patientId: detail.patientId ?? '',
+        doctorId: detail.doctorId ?? '',
+        diagnosis: detail.diagnosis ?? '',
+        icd10Codes: detail.icd10Codes ?? '',
+        prescriptionDate: detail.prescriptionDate ?? '',
+        prescriptionType: detail.prescriptionType ?? 'MEDICATION',
+        rxStatus: detail.rxStatus ?? 'active',
+        items: detail.items?.length ? detail.items.map((i: any) => ({
+          drugName: i.drugName ?? '', dosage: i.dosage ?? '', frequency: i.frequency ?? '',
+          duration: i.duration ?? '', quantity: i.quantity ?? '', refills: i.refills ?? '', notes: i.notes ?? ''
+        })) : [{ ...emptyItem }]
+      })
+    } else {
+      setEditId(null)
+      setForm({ ...emptyForm })
+    }
+    setShowForm(true)
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    const payload = {
+      ...form,
+      patientId: Number(form.patientId),
+      doctorId: Number(form.doctorId),
+      prescriptionDate: form.prescriptionDate || undefined,
+      items: form.items.filter((it: any) => it.drugName).map((it: any) => ({
+        ...it, duration: Number(it.duration) || null, quantity: Number(it.quantity) || null, refills: Number(it.refills) || null
+      }))
+    }
+    editId ? await updatePrescription(editId, payload) : await createPrescription(payload)
+    setShowForm(false)
+    getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) })
+  }
+
+  const addItem = () => setForm({ ...form, items: [...form.items, { ...emptyItem }] })
+  const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_: any, i: number) => i !== idx) })
+  const updateItem = (idx: number, field: string, value: string) => {
+    const items = [...form.items]
+    items[idx] = { ...items[idx], [field]: value }
+    setForm({ ...form, items })
+  }
 
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>Prescriptions</h2>
+      <button className={styles.btnPrimary} onClick={() => openForm()} style={{ marginBottom: 16 }}>+ Add Prescription</button>
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Diagnosis</th><th>ICD-10</th><th>Date</th><th>Status</th><th></th></tr></thead>
         <tbody>{data.map(r => (
           <tr key={r.id}><td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
-            <td><button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deletePrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button></td></tr>
+            <td>
+              <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
+              {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
+              <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deletePrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>
+            </td></tr>
         ))}</tbody>
       </table>
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*10>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+
+      {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
+        <h3>{editId ? 'Edit' : 'Add'} Prescription</h3>
+        <form onSubmit={handleSubmit}>
+          <div className={styles.formGrid}>
+            <div className={styles.formGroup}>
+              <label>Patient</label>
+              <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
+                <option value="">-- Select Patient --</option>
+                {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
+              </select>
+            </div>
+            <div className={styles.formGroup}><label>Doctor ID</label><input value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })} /></div>
+            <div className={styles.formGroup}><label>Diagnosis</label><input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} /></div>
+            <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
+            <div className={styles.formGroup}><label>Date</label><input type="date" value={form.prescriptionDate} onChange={e => setForm({ ...form, prescriptionDate: e.target.value })} /></div>
+            <div className={styles.formGroup}>
+              <label>Type</label>
+              <select value={form.prescriptionType} onChange={e => setForm({ ...form, prescriptionType: e.target.value })}>
+                <option value="MEDICATION">Medication</option><option value="CONTROLLED">Controlled</option><option value="COMPOUND">Compound</option>
+              </select>
+            </div>
+            {editId && <div className={styles.formGroup}>
+              <label>Status</label>
+              <select value={form.rxStatus} onChange={e => setForm({ ...form, rxStatus: e.target.value })}>
+                <option value="active">Active</option><option value="transmitted">Transmitted</option><option value="dispensed">Dispensed</option><option value="cancelled">Cancelled</option>
+              </select>
+            </div>}
+          </div>
+
+          <h4 style={{ marginTop: 20, marginBottom: 8 }}>Items</h4>
+          {form.items.map((it: any, idx: number) => (
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+              <div className={styles.formGroup}><label>Drug</label><input value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
+              <div className={styles.formGroup}><label>Dosage</label><input value={it.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} placeholder="e.g. 500mg" /></div>
+              <div className={styles.formGroup}><label>Frequency</label><input value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
+              <div className={styles.formGroup}><label>Duration (days)</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="e.g. 7" /></div>
+              <div className={styles.formGroup}><label>Qty</label><input value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="30" /></div>
+              <div className={styles.formGroup}><label>Refills</label><input value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
+              <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 2 }}>
+                {form.items.length > 1 && <button type="button" className={styles.btnSmDanger} style={{ margin: 0 }} onClick={() => removeItem(idx)}>✕</button>}
+              </div>
+            </div>
+          ))}
+          <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>
+
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
+        </form>
+      </div></div>}
+
+      {transmitId && <div className={styles.modalOverlay} onClick={() => setTransmitId(null)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Transmit Prescription #{transmitId}</h3>
+        <div className={styles.formGroup} style={{ marginBottom: 16 }}>
+          <label>Pharmacy</label>
+          <select value={selectedPharmacy} onChange={e => setSelectedPharmacy(e.target.value)}>
+            <option value="">-- Select Pharmacy --</option>
+            {pharmacies.map((p: any) => <option key={p.id} value={p.id}>{p.name} — {p.city}, {p.state} {p.zip}</option>)}
+          </select>
+        </div>
+        <div className={styles.formActions}><button className={styles.btnSm} onClick={() => setTransmitId(null)}>Cancel</button><button className={styles.btnPrimary} onClick={handleTransmit} disabled={!selectedPharmacy}>Transmit (NCPDP SCRIPT)</button></div>
+      </div></div>}
     </div>
   )
 }

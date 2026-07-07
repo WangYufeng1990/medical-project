@@ -12,6 +12,7 @@ import com.example.medical.module.appointment.repository.AppointmentRepository;
 import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.repository.BillRepository;
+import com.example.medical.module.billing.service.BillService;
 import com.example.medical.module.patient.dto.PatientDataExport;
 import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.entity.Patient;
@@ -31,6 +32,7 @@ import com.example.medical.module.system.repository.SysUserRepository;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -40,6 +42,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -57,6 +60,7 @@ public class PatientPortalController {
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final BillRepository billRepository;
+    private final BillService billService;
     private final SysUserRepository sysUserRepository;
     private final PasswordHistoryRepository passwordHistoryRepository;
     private final PasswordEncoder passwordEncoder;
@@ -163,6 +167,19 @@ public class PatientPortalController {
                 result.getContent().stream().map(this::toBillVO).toList()));
     }
 
+    @PutMapping("/bills/{id}/pay")
+    public Result<Void> payMyBill(@AuthenticationPrincipal LoginUser loginUser,
+                                   @PathVariable Long id,
+                                   @Valid @RequestBody PatientPayRequest request) {
+        Bill bill = billRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
+        if (!bill.getPatientId().equals(loginUser.getUserId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
+        }
+        billService.pay(id, request.getPaymentAmount(), request.getPaymentMethod());
+        return Result.ok();
+    }
+
     @PutMapping("/password")
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PatientPasswordChangeRequest request) {
@@ -194,6 +211,14 @@ public class PatientPortalController {
         List<PasswordHistory> recent = passwordHistoryRepository
                 .findTop3ByUserTypeAndUserIdOrderByChangedAtDesc(userType, userId);
         return recent.stream().anyMatch(h -> passwordEncoder.matches(plainPassword, h.getPasswordHash()));
+    }
+
+    @Data
+    static class PatientPayRequest {
+        @Positive(message = "Payment amount must be positive")
+        private BigDecimal paymentAmount;
+        @NotBlank(message = "Payment method is required")
+        private String paymentMethod;
     }
 
     @Data

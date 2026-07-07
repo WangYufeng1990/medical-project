@@ -14,6 +14,7 @@ export default function Login() {
     try {
       const data = await login({ username, password })
       localStorage.setItem('token', data.token)
+      localStorage.setItem('refreshToken', data.refreshToken || '')
       localStorage.setItem('username', data.username)
       navigate('/dashboard')
     } catch (err: any) {
