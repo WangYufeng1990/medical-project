@@ -837,5 +837,39 @@ Set up specialized agent configuration files to enable structured multi-agent de
 | `.claude/agents/backend.md` | Spring Boot implementer | Package convention, DTO/Entity/Service patterns, @SQLDelete/@SQLRestriction, @Auditable, PHI encryption (both @Convert and AesCryptoUtil) |
 | `.claude/agents/review.md` | Adversarial reviewer | Per-file checklist (backend + frontend + cross-cutting), severity levels, common bug patterns, VERDICT line |
 
+---
+
+# Round 21: CDS Frontend Integration ✅ Complete
+
+> **Status: Complete (2026-07-07)**
+> **Method: First Workflow-driven multi-agent round (Plan → Implement → Review)**
+
+## Goal
+Integrate Clinical Decision Support (drug-drug interaction + drug-allergy contraindication) checks into the prescription create/edit flow. When a provider prescribes medication, the frontend calls `POST /api/v1/cds/check` before saving. Warnings are displayed in a modal with severity colors; the provider can override with a risk-acknowledgment checkbox or cancel to edit.
+
+## Workflow Stats
+- **3 agents**: Plan (architecture design), Implement (frontend code), Review (adversarial checklist)
+- **44 tool calls**, **~84K tokens**, **115s**
+- **Review found 1 CRITICAL** (rxnormCode always `''` → CDS no-op) — fixed before commit
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/api/cds.ts` | **New** | `checkCds(data)` → `POST /api/v1/cds/check` |
+| `medical-web/src/views/prescriptions/CdsWarningModal.tsx` | **New** | Modal: severity-colored badges, type labels, drugs involved, description, recommendation, "I understand" checkbox, Override & Save / Cancel |
+| `medical-web/src/views/prescriptions/index.tsx` | Modify | CDS check before save (try/catch fallback), rxnormCode field in items form, `doSave()` helper, deferred `setShowForm(false)` |
+
+## CDS Flow
+```
+User clicks Save
+  → POST /api/v1/cds/check {patientId, items[{rxnormCode, drugName}]}
+  → passed=true → save normally
+  → warnings → show CdsWarningModal
+      → Override & Save → save despite warnings
+      → Cancel → stay on form, edit prescription
+  → CDS error → save anyway (fail-open)
+```
+
 ## Next Round
 Round 21: CDS frontend integration — first Workflow-driven round using the agent configs.
