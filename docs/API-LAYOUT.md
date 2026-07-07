@@ -147,6 +147,7 @@ All require `PATIENT` role.
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
 | GET | `/consent` | — | My consent records |
+| PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING/DRAFT → PAID). Ownership verified — cannot pay another patient's bill |
 | PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
 
 ### Appointments — `/api/v1/appointments`
@@ -175,13 +176,15 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
-| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&status=` | Paginated list |
+| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&claimStatus=` | Paginated list |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Bill detail |
-| POST | `/` | ADMIN,DOCTOR | body: BillFormDTO | Create bill |
-| PUT | `/{id}/pay` | ADMIN | path | Mark as paid |
+| POST | `/` | ADMIN,DOCTOR | body: BillFormDTO | Create bill (DRAFT) |
+| PUT | `/{id}/submit` | ADMIN,DOCTOR | path | Submit claim (DRAFT → SUBMITTED) |
+| PUT | `/{id}/adjudicate` | ADMIN | body: {insurancePayment, adjustment, claimNumber, adjudicationDate} | Adjudicate (SUBMITTED → PENDING/PAID) |
+| PUT | `/{id}/deny` | ADMIN | body: {reason} | Deny claim (PENDING → DENIED) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
-Claim lifecycle: DRAFT → SUBMITTED → PENDING → PAID / DENIED → APPEALED.
+Claim lifecycle: DRAFT → SUBMITTED → (adjudicate) → PENDING → (patient pays) PAID / (staff deny) DENIED.
 
 ### Chat (Staff) — `/api/v1/messages`
 

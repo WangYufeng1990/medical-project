@@ -768,3 +768,53 @@ Add a "Message" button to the patient list page so doctors can initiate a chat d
 |------|--------|-------------|
 | `medical-web/src/views/patients/index.tsx` | Modify | Add "Msg" button navigating to `/chat?partnerId=&partnerName=` |
 | `medical-web/src/views/chat/index.tsx` | Modify | Read `partnerId`/`partnerName` from URL query params, auto-select conversation on mount |
+
+---
+
+# Round 19: Frontend-Backend Alignment + Patient Payment ✅ Complete
+
+> **Status: Complete (2026-07-06)**
+
+## Goal
+Comprehensive audit of all 29 backend controllers (~62 endpoints) against frontend API layer and UI views. Fix clinical workflow gaps: prescriptions (no create/edit), billing (list-only, no workflow), dashboard (hardcoded data), token refresh (never called), patient portal (missing password change + export + bill payment).
+
+## Changes
+
+### Prescriptions — Full CRUD + Transmit
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/views/prescriptions/index.tsx` | Modify | Add +Add Prescription button, Edit per row, modal form (patient dropdown, dynamic items list), Transmit button with pharmacy picker |
+| `medical-web/src/api/prescription.ts` | Modify | Add `transmitPrescription(id, pharmacyId)` → `PUT /prescriptions/{id}/transmit` |
+| `medical-web/src/api/pharmacy.ts` | **New** | `getPharmacies(params?)` → `GET /pharmacies` |
+
+### Billing — Full Claim Lifecycle
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/views/billing/index.tsx` | Modify | Add +Create Bill form, Submit (DRAFT→SUBMITTED), Adjudicate modal (insurance/adjustment/claim#), Deny. Pay removed from staff page (patient function) |
+| `medical-web/src/api/bill.ts` | Modify | Add `submitBill`, `adjudicateBill`, `payBill`, `denyBill` |
+| `medical-server/.../PatientPortalController.java` | Modify | Add `PUT /patient/me/bills/{id}/pay` — patient self-payment with ownership check |
+
+### Patient Portal — Password + Export + Pay Bills
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/views/patient/bills/index.tsx` | Modify | Add Pay Now button, payment modal (amount auto-filled, method picker) |
+| `medical-web/src/views/patient/profile/index.tsx` | Modify | Add Change Password section |
+| `medical-web/src/views/patient/layout/PatientLayout.tsx` | Modify | Add Export My Data sidebar link |
+
+### Dashboard — Real Stats Endpoint
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/views/dashboard/index.tsx` | Modify | Use `GET /dashboard/stats` instead of 3 separate API calls. Prescriptions card fixed from hardcoded "-" |
+| `medical-web/src/api/dashboard.ts` | **New** | `getDashboardStats()` → `GET /dashboard/stats` |
+
+### Auth — Token Auto-Refresh
+
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/api/request.ts` | Modify | 401 interceptor: try `POST /auth/refresh` before redirecting to login. Concurrent requests queued during refresh |
+| `medical-web/src/views/login/index.tsx` | Modify | Store `refreshToken` on login |
+| `medical-web/src/layout/StaffLayout.tsx` | Modify | Clear `refreshToken` on logout |
