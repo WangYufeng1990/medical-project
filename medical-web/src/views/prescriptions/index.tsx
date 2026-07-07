@@ -114,23 +114,30 @@ export default function Prescriptions() {
   const addItem = () => setForm({ ...form, items: [...form.items, { ...emptyItem }] })
   const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_: any, i: number) => i !== idx) })
   const updateItem = (idx: number, field: string, value: string) => {
-    const items = [...form.items]
-    items[idx] = { ...items[idx], [field]: value }
-    setForm({ ...form, items })
+    setForm(prev => {
+      const items = [...prev.items]
+      items[idx] = { ...items[idx], [field]: value }
+      return { ...prev, items }
+    })
   }
 
-  const handleRxnormChange = async (idx: number, code: string) => {
-    updateItem(idx, 'rxnormCode', code)
-    if (code && code.trim()) {
-      try {
-        const result = await lookupDrug(code.trim())
-        if (result.drugName) {
-          const items = [...form.items]
+  const handleRxnormChange = (idx: number, code: string) => {
+    setForm(prev => {
+      const items = [...prev.items]
+      items[idx] = { ...items[idx], rxnormCode: code }
+      return { ...prev, items }
+    })
+    if (!code || !code.trim()) return
+    lookupDrug(code.trim()).then(result => {
+      if (result.drugName) {
+        setForm(prev => {
+          if (prev.items[idx]?.rxnormCode !== code.trim()) return prev
+          const items = [...prev.items]
           items[idx] = { ...items[idx], drugName: result.drugName }
-          setForm({ ...form, items })
-        }
-      } catch { /* lookup failed, user types manually */ }
-    }
+          return { ...prev, items }
+        })
+      }
+    }).catch(() => {})
   }
 
   return (
