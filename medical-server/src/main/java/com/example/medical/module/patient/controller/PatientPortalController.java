@@ -32,7 +32,6 @@ import com.example.medical.module.system.repository.SysUserRepository;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -110,24 +109,6 @@ public class PatientPortalController {
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1,
                 result.getContent().stream().map(this::toAppointmentVO).toList()));
-    }
-
-    @PostMapping("/appointments")
-    @Transactional
-    @com.example.medical.common.audit.Auditable(module = "appointment", action = "BOOK")
-    public Result<Void> bookAppointment(@AuthenticationPrincipal LoginUser loginUser,
-                                         @Valid @RequestBody PatientBookRequest request) {
-        Appointment appt = new Appointment();
-        appt.setPatientId(loginUser.getUserId());
-        appt.setDoctorId(request.getDoctorId());
-        appt.setAppointmentTime(request.getAppointmentTime());
-        appt.setVisitType(request.getVisitType() != null ? request.getVisitType() : "FOLLOW_UP");
-        appt.setChiefComplaint(request.getChiefComplaint());
-        appt.setDepartment(request.getDepartment());
-        appt.setDuration(request.getDuration() != null ? request.getDuration() : 30);
-        appt.setStatus(0);
-        appointmentRepository.save(appt);
-        return Result.ok();
     }
 
     @PutMapping("/appointments/{id}/cancel")
@@ -249,18 +230,6 @@ public class PatientPortalController {
         List<PasswordHistory> recent = passwordHistoryRepository
                 .findTop3ByUserTypeAndUserIdOrderByChangedAtDesc(userType, userId);
         return recent.stream().anyMatch(h -> passwordEncoder.matches(plainPassword, h.getPasswordHash()));
-    }
-
-    @Data
-    static class PatientBookRequest {
-        @NotNull(message = "Doctor is required")
-        private Long doctorId;
-        @NotNull(message = "Appointment time is required")
-        private LocalDateTime appointmentTime;
-        private String visitType;
-        private String chiefComplaint;
-        private String department;
-        private Integer duration;
     }
 
     @Data
