@@ -982,6 +982,40 @@ All paginated views use `size: 10` and `page*10>=total`. Extract to `utils/const
 
 ---
 
+# Round 23.1: Patient Appointment Self-Service ✅ Complete
+
+> **Status: Complete (2026-07-08)**
+> **Note: Skipped Workflow process (small change) — corrected with post-commit review agent**
+
+## Goal
+Patients can cancel their own appointments and book new ones. Previously the patient appointments page was read-only.
+
+## Backend
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /api/v1/patient/me/appointments` | PATIENT | Book appointment (auto-sets patientId, defaults visitType=FOLLOW_UP, duration=30, status=0) |
+| `PUT /api/v1/patient/me/appointments/{id}/cancel` | PATIENT | Cancel own appointment (ownership check, rejects already cancelled/completed) |
+
+## Frontend
+| File | Action | Description |
+|------|--------|-------------|
+| `views/patient/appointments/index.tsx` | Modify | +Book button → booking modal (doctorId, datetime, visit type, department, chief complaint). Cancel button per row (hidden for cancelled/completed). try/catch error handling, page reset to 1 after action |
+
+## Post-Commit Review Findings
+| Severity | Issue | Fix |
+|----------|-------|-----|
+| HIGH | `handleBook` no try/catch — modal closed on failure | Wrapped in try/catch with alert |
+| MEDIUM | Missing `@Transactional` + `@Auditable` on both endpoints | Added annotations |
+| MEDIUM | `refresh` stale closure on `page` variable | Changed to `fetchAppointments(p?)` |
+
+## Verified
+- Cancel appointment #202: status 0→2 (Scheduled→Cancelled) ✅
+- Book new appointment: created #205, status=0, doctor=Dr. Sarah Mitchell ✅
+- Cancel already-completed appointment: 409 error ✅
+- Cross-patient cancel: 403 error ✅
+
+---
+
 # Round 24: Consent Management UI [PLANNED]
 
 > **Status: Plan written (2026-07-08) — implementation pending**
