@@ -878,6 +878,7 @@ RxNorm auto-lookup:
   → returns {rxnormCode: "6809", drugName: "Metformin HCl"}
   → drug name field auto-filled
   → stale response guard: ignores result if code has changed since request
+```
 
 ### Post-Release Fixes
 - **Stale closure bug**: `handleRxnormChange` used captured `form` in async callback → 4th digit of RxNorm code disappeared. Fixed with functional `setForm(prev => ...)` + stale-response guard.
