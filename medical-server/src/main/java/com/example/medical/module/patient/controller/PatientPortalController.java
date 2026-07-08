@@ -41,6 +41,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -112,6 +113,8 @@ public class PatientPortalController {
     }
 
     @PostMapping("/appointments")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "appointment", action = "BOOK")
     public Result<Void> bookAppointment(@AuthenticationPrincipal LoginUser loginUser,
                                          @Valid @RequestBody PatientBookRequest request) {
         Appointment appt = new Appointment();
@@ -128,6 +131,8 @@ public class PatientPortalController {
     }
 
     @PutMapping("/appointments/{id}/cancel")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "appointment", action = "CANCEL")
     public Result<Void> cancelMyAppointment(@AuthenticationPrincipal LoginUser loginUser,
                                              @PathVariable Long id) {
         Appointment appt = appointmentRepository.findById(id)

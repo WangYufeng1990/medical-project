@@ -14,9 +14,9 @@ export default function PatientAppointments() {
   const [cancelling, setCancelling] = useState<number | null>(null)
   const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
-  const refresh = () => axios.get(`/api/v1/patient/me/appointments?page=${page}&size=${PAGE_SIZE}`, { headers }).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
+  const fetchAppointments = (p?: number) => axios.get(`/api/v1/patient/me/appointments?page=${p ?? page}&size=${PAGE_SIZE}`, { headers }).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
 
-  useEffect(() => { refresh() }, [page])
+  useEffect(() => { fetchAppointments() }, [page])
 
   const canCancel = (s: number) => s !== 2 && s !== 3
 
@@ -24,7 +24,8 @@ export default function PatientAppointments() {
     setCancelling(id)
     try {
       await axios.put(`/api/v1/patient/me/appointments/${id}/cancel`, {}, { headers })
-      refresh()
+      fetchAppointments(1)
+      setPage(1)
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Cancel failed')
     } finally {
@@ -34,16 +35,21 @@ export default function PatientAppointments() {
 
   const handleBook = async (e: FormEvent) => {
     e.preventDefault()
-    await axios.post('/api/v1/patient/me/appointments', {
-      doctorId: Number(form.doctorId),
-      appointmentTime: form.appointmentTime,
-      visitType: form.visitType,
-      chiefComplaint: form.chiefComplaint,
-      department: form.department
-    }, { headers })
-    setShowForm(false)
-    setForm({ ...emptyForm })
-    refresh()
+    try {
+      await axios.post('/api/v1/patient/me/appointments', {
+        doctorId: Number(form.doctorId),
+        appointmentTime: form.appointmentTime,
+        visitType: form.visitType,
+        chiefComplaint: form.chiefComplaint,
+        department: form.department
+      }, { headers })
+      setShowForm(false)
+      setForm({ ...emptyForm })
+      fetchAppointments(1)
+      setPage(1)
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Booking failed')
+    }
   }
 
   return (<div>
