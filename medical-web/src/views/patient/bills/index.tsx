@@ -17,7 +17,7 @@ export default function PatientBills() {
 
   const openPay = (bill: any) => {
     setPayId(bill.id)
-    const amount = bill.patientResponsibility != null ? bill.patientResponsibility : (bill.totalCharge || '')
+    const amount = bill.patientResponsibility != null ? bill.patientResponsibility : (bill.totalCharge != null ? bill.totalCharge : '')
     setPayForm({ paymentAmount: amount, paymentMethod: 'CREDIT_CARD' })
   }
 

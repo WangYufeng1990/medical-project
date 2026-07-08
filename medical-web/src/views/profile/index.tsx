@@ -28,7 +28,7 @@ export default function Profile() {
           {['realName','phone','email','gender','npi','licenseState','taxonomyCode','credentials','specialty'].map(f => (
             <div key={f} className={styles.formGroup}>
               <label>{f}</label>
-              <input value={profile[f] || ''} onChange={e => setProfile({ ...profile, [f]: e.target.value })} />
+              <input value={profile[f] ?? ''} onChange={e => setProfile({ ...profile, [f]: e.target.value })} />
             </div>
           ))}
         </div>

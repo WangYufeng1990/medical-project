@@ -69,7 +69,7 @@ export default function PatientProfile() {
           {FIELDS.map(f => (
             <div key={f.key} className={styles.formGroup}>
               <label>{f.label}</label>
-              <input value={form[f.key] || ''} disabled={f.readonly}
+              <input value={form[f.key] ?? ''} disabled={f.readonly}
                 onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
               {f.note && <span style={{ fontSize: 11, color: '#e6a23c' }}>{f.note}</span>}
             </div>
