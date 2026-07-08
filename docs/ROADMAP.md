@@ -993,24 +993,28 @@ Patients can cancel their own appointments and book new ones. Previously the pat
 ## Backend
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `POST /api/v1/patient/me/appointments` | PATIENT | Book appointment (auto-sets patientId, defaults visitType=FOLLOW_UP, duration=30, status=0) |
 | `PUT /api/v1/patient/me/appointments/{id}/cancel` | PATIENT | Cancel own appointment (ownership check, rejects already cancelled/completed) |
 
 ## Frontend
 | File | Action | Description |
 |------|--------|-------------|
-| `views/patient/appointments/index.tsx` | Modify | +Book button → booking modal (doctorId, datetime, visit type, department, chief complaint). Cancel button per row (hidden for cancelled/completed). try/catch error handling, page reset to 1 after action |
+| `views/patient/appointments/index.tsx` | Modify | Cancel button per row (hidden for cancelled/completed). try/catch error handling, page reset to 1 after action |
+
+## Design Decision: Self-Booking Removed
+Patient self-booking (`POST /patient/me/appointments`) was implemented then removed after clinical review:
+- Patients cannot determine the appropriate doctor, visit type, slot duration, or insurance network
+- Booking is a staff function requiring clinical triage and slot management
+- Cancel is retained — patients should be able to cancel their own appointments
 
 ## Post-Commit Review Findings
 | Severity | Issue | Fix |
 |----------|-------|-----|
-| HIGH | `handleBook` no try/catch — modal closed on failure | Wrapped in try/catch with alert |
-| MEDIUM | Missing `@Transactional` + `@Auditable` on both endpoints | Added annotations |
-| MEDIUM | `refresh` stale closure on `page` variable | Changed to `fetchAppointments(p?)` |
+| HIGH | `handleBook` no try/catch — modal closed on failure | Wrapped in try/catch with alert (then removed with book feature) |
+| MEDIUM | Missing `@Transactional` + `@Auditable` on cancel endpoint | Added annotations (retained) |
+| MEDIUM | `refresh` stale closure on `page` variable | Changed to `fetchAppointments(p?)` (retained) |
 
 ## Verified
 - Cancel appointment #202: status 0→2 (Scheduled→Cancelled) ✅
-- Book new appointment: created #205, status=0, doctor=Dr. Sarah Mitchell ✅
 - Cancel already-completed appointment: 409 error ✅
 - Cross-patient cancel: 403 error ✅
 
