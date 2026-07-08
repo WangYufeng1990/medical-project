@@ -889,3 +889,210 @@ RxNorm auto-lookup:
 - CDS drug-allergy: Amoxicillin(308191) + Penicillin allergy → contraindicated (tested)
 - Full combo 3 drugs: 4 warnings across 2 types (tested)
 - Frontend modules served correctly (checked via Vite proxy)
+
+---
+
+# Round 22: Patient Portal Token Auto-Refresh [PLANNED]
+
+> **Status: Plan written (2026-07-08) — implementation pending**
+
+## Goal
+Patient portal views use raw `axios` without an interceptor — no token refresh, no automatic 401 redirect. Staff side already has this in `api/request.ts` (Round 19). Replicate the pattern for patient views.
+
+## Current State
+- **7 patient views** use `import axios from 'axios'` with manual `Authorization: Bearer <patientToken>`
+- **Backend**: `PatientAuthController` login response has `refreshToken: null` — no patient refresh endpoint exists
+- **Staff pattern**: `api/request.ts` (67 lines) — axios instance with request interceptor (inject token) + response interceptor (unwrap Result<T>, 401 → refresh queue → retry or redirect)
+
+## Plan
+
+### Backend
+| File | Action | Description |
+|------|--------|-------------|
+| `PatientAuthController.java` | Modify | Add `POST /api/v1/patient/refresh` — validate refresh token, return new access token. Issue refresh tokens at login (currently `null`) |
+| `PatientPortalController.java` | Modify | Verify refresh endpoint behavior with patient token |
+
+### Frontend
+| File | Action | Description |
+|------|--------|-------------|
+| `medical-web/src/api/patientRequest.ts` | **New** | Axios instance for patient portal — same interceptor pattern as `request.ts` but reads `patientToken`/`patientRefreshToken` from localStorage, refresh calls `POST /api/v1/patient/refresh` |
+| `medical-web/src/views/patient/login/index.tsx` | Modify | Store `refreshToken` from login response |
+| `medical-web/src/views/patient/layout/PatientLayout.tsx` | Modify | Clear `patientRefreshToken` on logout |
+| 7 patient views (`*.tsx`) | Modify | Replace `import axios from 'axios'` → `import request from '../../api/patientRequest'`; remove manual `Authorization` headers |
+
+### Risk
+- Patient token expiry is configurable (default 24h), so refresh is less critical than staff (2h). But long sessions make it relevant.
+- Backend `DevJwtEncoder` generates patient tokens — need to also handle refresh token generation/validation in dev mode.
+
+---
+
+# Round 23: Frontend Quality Cleanup [PLANNED]
+
+> **Status: Plan written (2026-07-08) — implementation pending**
+
+## Goal
+Eliminate duplicated code, fix remaining `|| null` bug, standardize common patterns across all frontend views.
+
+## Findings
+
+### Duplicated constants
+| Pattern | Files | Fix |
+|---------|-------|-----|
+| `STATUS_COLOR` (billing) | `billing/index.tsx:8`, `patient/bills/index.tsx:5` | Extract to `utils/labels.ts` |
+| `statusColor` (appointments) | `appointments/index.tsx:30`, `patient/appointments/index.tsx:14` | Extract to `utils/labels.ts` |
+
+### Lingering bug
+| Pattern | File | Fix |
+|---------|------|-----|
+| `Number(it.duration) \|\| null` drops 0 | `prescriptions/index.tsx:86` | `it.duration !== '' ? Number(it.duration) : null` |
+| `form[f] \|\| ''` drops 0/false | `system/users:40`, `system/roles:34`, `system/menus:29` | `form[f] ?? ''` |
+
+### Native dialogs (7 files, ~9 instances)
+| Pattern | Count | Issue |
+|---------|-------|-------|
+| `confirm('Delete?')` | 6 views | Inaccessible, no custom styling |
+| `prompt('Denial reason:')` | 1 view | No validation |
+
+**Decision**: keep `confirm()`/`prompt()` as project convention (CLAUDE.md-aligned). Only extract the duplicated constants and fix the `||` bugs.
+
+### Hardcoded page size
+All paginated views use `size: 10` and `page*10>=total`. Extract to `utils/constants.ts` as `PAGE_SIZE = 10`.
+
+### Files to Modify
+| File | Change |
+|------|--------|
+| `utils/labels.ts` | Add `BILL_STATUS_COLOR`, `APPOINTMENT_STATUS_COLOR` |
+| `utils/constants.ts` | **New** — `export const PAGE_SIZE = 10` |
+| `billing/index.tsx` | Import STATUS_COLOR from labels, use PAGE_SIZE |
+| `patient/bills/index.tsx` | Import STATUS_COLOR from labels, use PAGE_SIZE |
+| `appointments/index.tsx` | Import color function from labels, use PAGE_SIZE |
+| `patient/appointments/index.tsx` | Import color function from labels, use PAGE_SIZE |
+| `prescriptions/index.tsx` | Fix `\|\| null` → `!== '' ? Number() : null` |
+| `system/users/index.tsx` | Fix `\|\| ''` → `?? ''` |
+| `system/roles/index.tsx` | Fix `\|\| ''` → `?? ''` |
+| `system/menus/index.tsx` | Fix `\|\| ''` → `?? ''` |
+
+---
+
+# Round 24: Consent Management UI [PLANNED]
+
+> **Status: Plan written (2026-07-08) — implementation pending**
+
+## Goal
+HIPAA-compliant consent management. Patients sign consents for data sharing, treatment, and research. Backend complete, frontend zero.
+
+## Backend (already exists)
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /api/v1/consent` | ADMIN | Create consent record `{patientId, consentType, scope}` |
+| `GET /api/v1/consent?patientId=` | ADMIN | List consent records for a patient |
+| `PUT /api/v1/consent/{id}/revoke` | ADMIN | Revoke a consent |
+| `GET /api/v1/patient/me/consent` | PATIENT | View own consent records |
+
+## Plan
+
+### Frontend
+| File | Action | Description |
+|------|--------|-------------|
+| `api/consent.ts` | **New** | `createConsent`, `getConsents(patientId)`, `revokeConsent(id)` |
+| `views/patients/ConsentTab.tsx` | **New** | Consent list + create form inside patient detail (or as a tab) |
+| `views/patient/consent/index.tsx` | **New** | Patient portal: view own consents (read-only) |
+| `App.tsx` | Modify | Add `/patient/consent` route |
+| `PatientLayout.tsx` | Modify | Add Consent nav item |
+
+### Consent Types (from existing Consent entity)
+- `TREATMENT` — consent for treatment
+- `RESEARCH` — consent for research use of data
+- `DATA_SHARING` — consent to share data with other providers
+- `MARKETING` — consent for marketing communications
+
+### Scope
+Small — 3 API functions, 2 simple views (admin + patient), no backend changes. ~4 files.
+
+---
+
+# Round 25: Emergency Access UI [PLANNED]
+
+> **Status: Plan written (2026-07-08) — implementation pending**
+
+## Goal
+Break-glass emergency access for clinical emergencies. A doctor who normally can't access a patient's record can initiate emergency access (30-min JWT), all audited. Backend complete, frontend zero.
+
+## Backend (already exists)
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /api/v1/emergency/access/{patientId}` | ADMIN,DOCTOR | Initiate emergency access → returns 30-min emergency JWT |
+| `GET /api/v1/emergency/history` | ADMIN | List emergency access history, filter by `?patientId=` or `?audited=0` |
+| `PUT /api/v1/emergency/{id}/review` | ADMIN | Mark access as reviewed (audited=1, reviewedBy, reviewedAt) |
+
+## Plan
+
+### Frontend
+| File | Action | Description |
+|------|--------|-------------|
+| `api/emergency.ts` | **New** | `requestEmergencyAccess(patientId)`, `getEmergencyHistory(params)`, `reviewEmergencyAccess(id)` |
+| `views/patients/index.tsx` | Modify | Add "Break Glass" button per row → confirm dialog → call API → redirect with emergency token |
+| `views/system/EmergencyAudit.tsx` | **New** | ADMIN page: list emergency access events, filter by patient/unreviewed, click to review |
+| `App.tsx` | Modify | Add `/system/emergency` route |
+| `StaffLayout.tsx` | Modify | Add Emergency Audit nav item (ADMIN only) |
+
+### Flow
+```
+Patient detail / list
+  → "Break Glass" button
+  → Confirm + reason prompt
+  → POST /emergency/access/{patientId}
+  → Returns 30-min emergency-scoped JWT
+  → Redirect to patient page with emergency token
+  
+Admin audit page
+  → GET /emergency/history?audited=0
+  → List unreviewed accesses
+  → Click "Review" → PUT /emergency/{id}/review
+```
+
+### Scope
+Small-medium — 3 API functions, 1 new view, 2 files modified. ~5 files.
+
+---
+
+# Round 26: Lab Results & LOINC Viewer [PLANNED]
+
+> **Status: Plan written (2026-07-08) — implementation pending**
+
+## Goal
+Patients and doctors can view lab results with historical trends, LOINC-coded reference ranges, and abnormal flagging. Backend complete with 5 endpoints, seed data (7 observations, 29 LOINC codes). Frontend zero.
+
+## Backend (already exists)
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/v1/patients/{patientId}/observations?loinc=` | ADMIN,DOCTOR | Lab trend by patient + LOINC code |
+| `GET /api/v1/loinc/catalog` | ADMIN,DOCTOR | Full LOINC dictionary (29 codes) |
+| `GET /api/v1/loinc/panel/{parentCode}` | ADMIN,DOCTOR | LOINC codes grouped by panel (CBC/BMP/LIPID) |
+| `GET /api/v1/fhir/Observation/{id}` | ADMIN,DOCTOR | Single FHIR Observation |
+| `GET /api/v1/fhir/Observation?patient=` | ADMIN,DOCTOR | Observations by patient (FHIR Bundle) |
+
+### Seed Data
+- **7 observations** for patient 100 (James Anderson): WBC, RBC, HGB, HCT, PLT (CBC) + Glucose, HbA1c (metabolic)
+- **29 LOINC codes** across 6 panels: CBC(8), BMP(8), LIPID(4), DIABETES(1), THYROID(1), UA(8)
+
+## Plan
+
+### Frontend
+| File | Action | Description |
+|------|--------|-------------|
+| `api/observation.ts` | **New** | `getObservations(patientId, loinc)`, `getLoincCatalog()`, `getLoincPanel(parentCode)` |
+| `views/lab/LabResults.tsx` | **New** | Staff view: select patient → select LOINC panel/individual test → show trend table with reference ranges and abnormal flags |
+| `views/patient/lab/index.tsx` | **New** | Patient portal: own lab results (same pattern as patient bills) |
+| `views/lab/LoincCatalog.tsx` | **New** | LOINC catalog browser: panel list → expand → individual tests with ref ranges |
+| `App.tsx` | Modify | Add `/lab` route + `/patient/lab` route |
+| `StaffLayout.tsx` | Modify | Add Lab Results nav item |
+| `PatientLayout.tsx` | Modify | Add Lab Results nav item |
+
+### Trend Display
+- Table: Date | Value | Unit | Reference Range | Flag (N/L/H color-coded)
+- Per-LOINC-code filtering via `?loinc=` param
+- Panel expansion: select "CBC" → shows all 8 CBC tests with most recent values
+
+### Scope
+Medium — 4 API functions, 3 new views, 4 files modified. ~10 files. Largest of the 5 planned rounds.
