@@ -4,6 +4,7 @@ import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
+import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
@@ -24,7 +25,7 @@ export default function Prescriptions() {
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
 
-  useEffect(() => { getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  useEffect(() => { getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
 
   useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
 
@@ -39,7 +40,7 @@ export default function Prescriptions() {
     if (!transmitId || !selectedPharmacy) return
     await transmitPrescription(transmitId, Number(selectedPharmacy))
     setTransmitId(null)
-    getPrescriptionPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) })
+    getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })
   }
 
   const openForm = async (row?: any) => {
@@ -69,7 +70,7 @@ export default function Prescriptions() {
 
   const doSave = async (payload: any) => {
     editId ? await updatePrescription(editId, payload) : await createPrescription(payload)
-    getPrescriptionPage({ page, size: 10 }).then(r => {
+    getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => {
       setData(r.records); setTotal(r.total)
       setShowForm(false)
     })
@@ -83,7 +84,7 @@ export default function Prescriptions() {
       doctorId: Number(form.doctorId),
       prescriptionDate: form.prescriptionDate || undefined,
       items: form.items.filter((it: any) => it.drugName).map((it: any) => ({
-        ...it, duration: Number(it.duration) || null, quantity: Number(it.quantity) || null, refills: Number(it.refills) || null
+        ...it, duration: it.duration !== '' ? Number(it.duration) : null, quantity: it.quantity !== '' ? Number(it.quantity) : null, refills: it.refills !== '' ? Number(it.refills) : null
       }))
     }
     try {
@@ -155,7 +156,7 @@ export default function Prescriptions() {
             </td></tr>
         ))}</tbody>
       </table>
-      <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*10>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+      <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 
       {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
         <h3>{editId ? 'Edit' : 'Add'} Prescription</h3>

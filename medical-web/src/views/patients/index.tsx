@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
+import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', medicalHistory: '', allergies: '', patientStatus: 'active' }
@@ -17,7 +18,7 @@ export default function Patients() {
 
   const fetchData = async () => {
     setLoading(true)
-    try { const r = await getPatientPage({ page, size: 10 }); setData(r.records); setTotal(r.total) } finally { setLoading(false) }
+    try { const r = await getPatientPage({ page, size: PAGE_SIZE }); setData(r.records); setTotal(r.total) } finally { setLoading(false) }
   }
   useEffect(() => { fetchData() }, [page])
 
@@ -68,7 +69,7 @@ export default function Patients() {
         <span>Total: {total}</span>
         <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</button>
         <span>Page {page}</span>
-        <button disabled={page * 10 >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+        <button disabled={page * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</button>
       </div>
 
       {showForm && (
@@ -82,7 +83,7 @@ export default function Patients() {
                 'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider','medicalHistory','allergies'].map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] || ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                  <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
                 </div>
               ))}
               <div className={styles.formActions}>

@@ -26,7 +26,7 @@ export default function Menus() {
           <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteMenu(r.id); getMenuTree().then(setData) } }}>Del</button></td></tr>))}</tbody></table>
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>{editId ? 'Edit' : 'Add'} Menu</h3>
       <form onSubmit={handleSubmit}>
-        {['menuName','path','component','icon','permission'].map(f => (<div key={f} className={styles.formGroup} style={{marginBottom:8}}><label>{f}</label><input value={form[f]||''} onChange={e=>setForm({...form,[f]:e.target.value})} /></div>))}
+        {['menuName','path','component','icon','permission'].map(f => (<div key={f} className={styles.formGroup} style={{marginBottom:8}}><label>{f}</label><input value={form[f] ?? ''} onChange={e=>setForm({...form,[f]:e.target.value})} /></div>))}
         <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={()=>setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div></form></div></div>}
   </div>)
 }

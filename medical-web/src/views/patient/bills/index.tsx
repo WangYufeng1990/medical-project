@@ -1,8 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import axios from 'axios'
+import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
-
-const STATUS_COLOR: Record<string, string> = { DRAFT: '#909399', SUBMITTED: '#409EFF', PENDING: '#E6A23C', PAID: '#67C23A', DENIED: '#F56C6C' }
 
 export default function PatientBills() {
   const [data, setData] = useState<any[]>([])
@@ -12,7 +11,7 @@ export default function PatientBills() {
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CREDIT_CARD' })
   const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
-  const refresh = () => axios.get(`/api/v1/patient/me/bills?page=${page}&size=10`, { headers }).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
+  const refresh = () => axios.get(`/api/v1/patient/me/bills?page=${page}&size=${PAGE_SIZE}`, { headers }).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
 
   useEffect(() => { refresh() }, [page])
 
@@ -37,7 +36,7 @@ export default function PatientBills() {
       <tbody>{data.map(r => (
         <tr key={r.id}>
           <td>{r.id}</td><td>{r.billType}</td>
-          <td><span style={{ color: STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
+          <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
           <td>${r.totalCharge}</td><td>${r.insurancePayment}</td><td>${r.patientResponsibility}</td>
           <td>
             {(r.claimStatus === 'PENDING' || r.claimStatus === 'DRAFT') && <button className={styles.btnPrimary} onClick={() => openPay(r)}>Pay Now</button>}
@@ -45,7 +44,7 @@ export default function PatientBills() {
         </tr>
       ))}</tbody>
     </table>
-    <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*10>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+    <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 
     {payId && <div className={styles.modalOverlay} onClick={() => setPayId(null)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Pay Bill #{payId}</h3>
       <form onSubmit={handlePay} className={styles.formGrid}>

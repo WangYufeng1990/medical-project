@@ -28,3 +28,13 @@ export const MARITAL_STATUS_OPTIONS = ['Single', 'Married', 'Divorced', 'Widowed
 export const LANGUAGE_OPTIONS = ['en', 'es', 'zh']
 
 export const EMERGENCY_RELATION_OPTIONS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Other']
+
+export const PAGE_SIZE = 10
+
+export const BILL_STATUS_COLOR: Record<string, string> = {
+  DRAFT: '#909399', SUBMITTED: '#409EFF', PENDING: '#E6A23C', PAID: '#67C23A', DENIED: '#F56C6C',
+}
+
+export const APPOINTMENT_STATUS_COLOR: Record<number, string> = {
+  0: '#409EFF', 1: '#67C23A', 2: '#909399', 3: '#67C23A', 4: '#E6A23C', 5: '#E6A23C', 6: '#409EFF',
+}

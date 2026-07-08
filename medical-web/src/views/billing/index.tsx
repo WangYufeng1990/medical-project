@@ -1,11 +1,10 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { getBillPage, createBill, submitBill, adjudicateBill, denyBill, deleteBill } from '../../api/bill'
 import { getPatientPage } from '../../api/patient'
+import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
-
-const STATUS_COLOR: Record<string, string> = { DRAFT: '#909399', SUBMITTED: '#409EFF', PENDING: '#E6A23C', PAID: '#67C23A', DENIED: '#F56C6C' }
 
 export default function Billing() {
   const [data, setData] = useState<any[]>([])
@@ -18,10 +17,10 @@ export default function Billing() {
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
   const [adjForm, setAdjForm] = useState({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
 
-  useEffect(() => { getBillPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  useEffect(() => { getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
   useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
 
-  const refresh = () => getBillPage({ page, size: 10 }).then(r => { setData(r.records); setTotal(r.total) })
+  const refresh = () => getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
@@ -45,7 +44,7 @@ export default function Billing() {
         <tbody>{data.map(r => (
           <tr key={r.id}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.billType}</td>
-            <td><span style={{ color: STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
+            <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
             <td>
               {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (confirm('Submit claim?')) { await submitBill(r.id); refresh() } }}>Submit</button>}
@@ -55,7 +54,7 @@ export default function Billing() {
             </td></tr>
         ))}</tbody>
       </table>
-      <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*10>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+      <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 
       {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Create Bill</h3>
         <form onSubmit={handleCreate} className={styles.formGrid}>
