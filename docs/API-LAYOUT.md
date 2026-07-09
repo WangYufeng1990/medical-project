@@ -239,7 +239,7 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 
 ### Consent — `/api/v1/consent`
 
-Requires `ADMIN`.
+Requires `ADMIN` or `DOCTOR`.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
