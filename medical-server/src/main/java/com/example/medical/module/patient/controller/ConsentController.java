@@ -27,13 +27,13 @@ public class ConsentController {
     private final ConsentRepository consentRepository;
 
     @GetMapping("/consent")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<Consent>> listByPatient(@RequestParam Long patientId) {
         return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(patientId));
     }
 
     @PostMapping("/consent")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "consent", action = "CREATE")
     public Result<Void> create(@Valid @RequestBody ConsentRequest request) {
@@ -48,7 +48,7 @@ public class ConsentController {
     }
 
     @PutMapping("/consent/{id}/revoke")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "consent", action = "REVOKE")
     public Result<Void> revoke(@PathVariable Long id) {
