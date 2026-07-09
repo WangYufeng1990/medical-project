@@ -1030,9 +1030,9 @@ HIPAA-compliant consent management. Patients sign consents for data sharing, tre
 ## Backend (already exists)
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `POST /api/v1/consent` | ADMIN | Create consent record `{patientId, consentType, scope}` |
-| `GET /api/v1/consent?patientId=` | ADMIN | List consent records for a patient |
-| `PUT /api/v1/consent/{id}/revoke` | ADMIN | Revoke a consent |
+| `POST /api/v1/consent` | ADMIN,DOCTOR | Create consent record `{patientId, consentType, scope}` — originally ADMIN-only, opened to DOCTOR after review |
+| `GET /api/v1/consent?patientId=` | ADMIN,DOCTOR | List consent records for a patient |
+| `PUT /api/v1/consent/{id}/revoke` | ADMIN,DOCTOR | Revoke a consent |
 | `GET /api/v1/patient/me/consent` | PATIENT | View own consent records |
 
 ## Plan
@@ -1053,7 +1053,12 @@ HIPAA-compliant consent management. Patients sign consents for data sharing, tre
 - `MARKETING` — consent for marketing communications
 
 ### Scope
-Small — 3 API functions, 2 simple views (admin + patient), no backend changes. ~4 files.
+8 files changed (3 new, 5 modified). Backend fixes: `@Transactional` + `@Auditable` on create/revoke, `@NotNull` on patientId, permissions upgraded to ADMIN+DOCTOR. Patient portal: read-only consent list via `/patient/consent`.
+
+### Post-Release
+- Consent endpoints changed from ADMIN-only to ADMIN+DOCTOR — doctors need consent management for clinical workflows
+- Audit logging confirmed: CREATE and REVOKE actions recorded (audit log table)
+- Consent button visible to both ADMIN and DOCTOR on patient list
 
 ---
 
