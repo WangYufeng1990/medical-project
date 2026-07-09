@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
+import { getUserRoles } from '../../utils/auth'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', medicalHistory: '', allergies: '', patientStatus: 'active' }
@@ -16,6 +17,7 @@ export default function Patients() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
+  const isAdmin = getUserRoles().includes('ADMIN')
   const [consentPatient, setConsentPatient] = useState<{ id: number; name: string } | null>(null)
   const [consents, setConsents] = useState<any[]>([])
   const [newConsentType, setNewConsentType] = useState('TREATMENT')
@@ -106,7 +108,7 @@ export default function Patients() {
               <td>
                 <button className={styles.btnSm} onClick={() => navigate(`/chat?partnerId=${row.id}&partnerName=${encodeURIComponent(row.name)}`)}>Msg</button>
                 <button className={styles.btnSm} onClick={() => openForm(row)}>Edit</button>
-                <button className={styles.btnSm} onClick={() => openConsent(row)}>Consent</button>
+                {isAdmin && <button className={styles.btnSm} onClick={() => openConsent(row)}>Consent</button>}
                 <button className={styles.btnSmDanger} onClick={() => handleDelete(row.id)}>Del</button>
               </td>
             </tr>
