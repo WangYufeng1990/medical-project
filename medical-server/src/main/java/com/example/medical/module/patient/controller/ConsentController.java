@@ -8,10 +8,12 @@ import com.example.medical.module.patient.repository.ConsentRepository;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -32,6 +34,8 @@ public class ConsentController {
 
     @PostMapping("/consent")
     @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "consent", action = "CREATE")
     public Result<Void> create(@Valid @RequestBody ConsentRequest request) {
         Consent c = new Consent();
         c.setPatientId(request.getPatientId());
@@ -45,6 +49,8 @@ public class ConsentController {
 
     @PutMapping("/consent/{id}/revoke")
     @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "consent", action = "REVOKE")
     public Result<Void> revoke(@PathVariable Long id) {
         Consent c = consentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Consent not found"));
@@ -63,6 +69,7 @@ public class ConsentController {
     static class ConsentRequest {
         @NotBlank private String consentType;
         private String scope;
+        @NotNull(message = "Patient ID is required")
         private Long patientId;
     }
 }

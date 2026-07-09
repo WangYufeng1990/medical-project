@@ -20,6 +20,7 @@ import PatientAppointments from './views/patient/appointments'
 import PatientPrescriptions from './views/patient/prescriptions'
 import PatientBills from './views/patient/bills'
 import PatientChat from './views/patient/chat'
+import PatientConsent from './views/patient/consent'
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="prescriptions" element={<PatientPrescriptions />} />
         <Route path="bills" element={<PatientBills />} />
         <Route path="chat" element={<PatientChat />} />
+        <Route path="consent" element={<PatientConsent />} />
       </Route>
     </Routes>
   )

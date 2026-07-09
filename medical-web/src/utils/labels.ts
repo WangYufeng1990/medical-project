@@ -38,3 +38,12 @@ export const BILL_STATUS_COLOR: Record<string, string> = {
 export const APPOINTMENT_STATUS_COLOR: Record<number, string> = {
   0: '#409EFF', 1: '#67C23A', 2: '#909399', 3: '#67C23A', 4: '#E6A23C', 5: '#E6A23C', 6: '#409EFF',
 }
+
+export const CONSENT_TYPES = ['TREATMENT', 'RESEARCH', 'DATA_SHARING', 'MARKETING']
+
+export const CONSENT_STATUS = ['active', 'revoked']
+
+export const CONSENT_STATUS_COLOR: Record<string, string> = {
+  active: '#67C23A',
+  revoked: '#909399',
+}

@@ -1020,9 +1020,9 @@ Patient self-booking (`POST /patient/me/appointments`) was implemented then remo
 
 ---
 
-# Round 24: Consent Management UI [PLANNED]
+# Round 24: Consent Management UI ✅ Complete
 
-> **Status: Plan written (2026-07-08) — implementation pending**
+> **Status: Complete (2026-07-09)**
 
 ## Goal
 HIPAA-compliant consent management. Patients sign consents for data sharing, treatment, and research. Backend complete, frontend zero.
