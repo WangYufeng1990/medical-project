@@ -26,6 +26,7 @@ export default function Patients() {
   const [emergencyPatientId, setEmergencyPatientId] = useState<number | null>(null)
   const [emergencyReason, setEmergencyReason] = useState('')
   const [emergencySubmitting, setEmergencySubmitting] = useState(false)
+  const [emergencyPrescriptions, setEmergencyPrescriptions] = useState<any[] | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -34,13 +35,19 @@ export default function Patients() {
   useEffect(() => { fetchData() }, [page])
 
   const openForm = async (row?: any) => {
+    setEmergencyPrescriptions(null)
     if (row) {
       setEditId(row.id)
       const emToken = sessionStorage.getItem('emergencyToken')
       const emPid = sessionStorage.getItem('emergencyPatientId')
       if (emToken && emPid && String(row.id) === emPid) {
-        const res = await axios.get(`/api/v1/patients/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
-        setForm({ ...emptyForm, ...res.data.data })
+        const [patientRes, rxRes] = await Promise.all([
+          axios.get(`/api/v1/patients/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } }),
+          axios.get(`/api/v1/prescriptions/by-patient/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
+        ])
+        setForm({ ...emptyForm, ...patientRes.data.data })
+        const rxs = rxRes.data.data || []
+        setEmergencyPrescriptions(rxs)
         sessionStorage.removeItem('emergencyToken')
         sessionStorage.removeItem('emergencyPatientId')
       } else {
@@ -243,6 +250,50 @@ export default function Patients() {
                   <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
                 </div>
               ))}
+              {emergencyPrescriptions != null && (
+                <div style={{ gridColumn: 'span 2', borderTop: '1px solid #f56c6c', paddingTop: 16, marginTop: 8 }}>
+                  <h4 style={{ color: '#f56c6c', marginBottom: 12 }}>Emergency Access — Active Prescriptions</h4>
+                  {emergencyPrescriptions.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#909399' }}>No active prescriptions found.</p>
+                  ) : (
+                    emergencyPrescriptions.map((rx: any) => (
+                      <div key={rx.id} style={{ marginBottom: 12, padding: '10px 14px', border: '1px solid #ebeef5', borderRadius: 6, background: '#fafafa' }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+                          {rx.diagnosis} <span style={{ color: '#909399', fontWeight: 400 }}>({rx.icd10Codes || 'N/A'})</span>
+                          <span style={{ marginLeft: 12, fontSize: 12, color: rx.rxStatus === 'active' ? '#67C23A' : '#E6A23C' }}>{rx.rxStatus}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#606266' }}>
+                          Prescribed by {rx.doctorName} on {rx.prescriptionDate}
+                        </div>
+                        {rx.items && (
+                          <table style={{ width: '100%', marginTop: 8, fontSize: 12, borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ background: '#f5f7fa' }}>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '1px solid #ebeef5' }}>Drug</th>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '1px solid #ebeef5' }}>Dosage</th>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '1px solid #ebeef5' }}>Frequency</th>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '1px solid #ebeef5' }}>Duration</th>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '1px solid #ebeef5' }}>Qty</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rx.items.map((item: any) => (
+                                <tr key={item.id}>
+                                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.drugName}</td>
+                                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.dosage}</td>
+                                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.frequency}</td>
+                                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.duration}d</td>
+                                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.quantity}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
               <div className={styles.formActions}>
                 <button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>
                 <button type="submit" className={styles.btnPrimary}>{editId ? 'Update' : 'Create'}</button>

@@ -49,6 +49,12 @@ public class PrescriptionController {
         return Result.ok(prescriptionService.getById(id));
     }
 
+    @GetMapping("/by-patient/{patientId}")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    public Result<List<PrescriptionVO>> getByPatientId(@PathVariable Long patientId) {
+        return Result.ok(prescriptionService.getByPatientId(patientId));
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<Void> create(@Valid @RequestBody PrescriptionFormDTO dto) {

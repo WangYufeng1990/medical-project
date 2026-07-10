@@ -47,6 +47,14 @@ public class PrescriptionService {
         return toVO(p);
     }
 
+    public List<PrescriptionVO> getByPatientId(Long patientId) {
+        return prescriptionRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "prescriptionDate"))
+                .stream().map(this::toVO).toList();
+    }
+
     @Transactional
     @Auditable(module = "prescription", action = "CREATE")
     public void create(PrescriptionFormDTO dto) {
