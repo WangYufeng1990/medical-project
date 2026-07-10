@@ -12,6 +12,7 @@ import Chat from './views/chat'
 import Users from './views/system/users'
 import Roles from './views/system/roles'
 import Menus from './views/system/menus'
+import EmergencyAudit from './views/system/EmergencyAudit'
 import PatientLogin from './views/patient/login'
 import PatientLayout from './views/patient/layout/PatientLayout'
 import PatientDashboard from './views/patient/dashboard'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="chat" element={<Chat />} />
         <Route path="billing" element={<Billing />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="emergency" element={<AdminGuard><EmergencyAudit /></AdminGuard>} />
         <Route path="system/users" element={<AdminGuard><Users /></AdminGuard>} />
         <Route path="system/roles" element={<AdminGuard><Roles /></AdminGuard>} />
         <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />

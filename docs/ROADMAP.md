@@ -1062,9 +1062,9 @@ HIPAA-compliant consent management. Patients sign consents for data sharing, tre
 
 ---
 
-# Round 25: Emergency Access UI [PLANNED]
+# Round 25: Emergency Access UI ✅ Complete
 
-> **Status: Plan written (2026-07-08) — implementation pending**
+> **Status: Complete (2026-07-10)**
 
 ## Goal
 Break-glass emergency access for clinical emergencies. A doctor who normally can't access a patient's record can initiate emergency access (30-min JWT), all audited. Backend complete, frontend zero.
@@ -1078,25 +1078,30 @@ Break-glass emergency access for clinical emergencies. A doctor who normally can
 
 ## Plan
 
-### Frontend
+### Changes
+
 | File | Action | Description |
 |------|--------|-------------|
-| `api/emergency.ts` | **New** | `requestEmergencyAccess(patientId)`, `getEmergencyHistory(params)`, `reviewEmergencyAccess(id)` |
-| `views/patients/index.tsx` | Modify | Add "Break Glass" button per row → confirm dialog → call API → redirect with emergency token |
+| `api/emergency.ts` | **New** | `initiateEmergencyAccess(patientId, reason)`, `getEmergencyHistory(params)`, `reviewEmergencyAccess(id)` |
+| `views/patients/index.tsx` | Modify | Add "Break Glass" button per row → reason prompt modal → call API → show result modal with emergency token |
 | `views/system/EmergencyAudit.tsx` | **New** | ADMIN page: list emergency access events, filter by patient/unreviewed, click to review |
-| `App.tsx` | Modify | Add `/system/emergency` route |
+| `App.tsx` | Modify | Add `/emergency` route with AdminGuard |
 | `StaffLayout.tsx` | Modify | Add Emergency Audit nav item (ADMIN only) |
 
 ### Flow
 ```
-Patient detail / list
-  → "Break Glass" button
-  → Confirm + reason prompt
-  → POST /emergency/access/{patientId}
-  → Returns 30-min emergency-scoped JWT
-  → Redirect to patient page with emergency token
+Patient list
+  → "Break Glass" button per row
+  → Modal: enter reason for emergency access
+  → POST /emergency/access/{patientId} {reason}
+  → Result modal: shows token (copyable), patientId, expiresInMinutes
+  → Close modal, user copies the emergency-scoped JWT manually
   
-Admin audit page
+Admin audit page (/emergency)
+  → Table: id, userId, patientId, reason, accessedAt, expiresAt, audited, reviewedBy, reviewedAt
+  → Filter: patientId input, audited dropdown (All/Unreviewed/Reviewed)
+  → "Review" button per row (disabled if already reviewed)
+  → PUT /emergency/{id}/review, refreshes table
   → GET /emergency/history?audited=0
   → List unreviewed accesses
   → Click "Review" → PUT /emergency/{id}/review

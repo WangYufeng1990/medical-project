@@ -11,6 +11,7 @@ const menuItems = [
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
   { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
   { type: 'divider' } as any,
+  { path: '/emergency', label: 'Emergency Access', icon: '🚨', roles: ['ADMIN'] },
   { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
   { path: '/system/menus', label: 'Menus', icon: '📋', roles: ['ADMIN'] },
