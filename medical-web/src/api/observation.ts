@@ -1,7 +1,7 @@
 import request from './request'
 
-export const getObservations = (patientId: number, loinc: string) =>
-  request.get(`/patients/${patientId}/observations`, { params: { loinc } })
+export const getObservations = (patientId: number, loinc?: string) =>
+  request.get(`/patients/${patientId}/observations`, { params: loinc ? { loinc } : {} })
 
 export const getLoincCatalog = () => request.get('/loinc/catalog')
 

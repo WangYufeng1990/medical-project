@@ -23,7 +23,7 @@ public class LabResultController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<Observation>> getTrend(
             @PathVariable Long patientId,
-            @RequestParam String loinc) {
+            @RequestParam(required = false) String loinc) {
         return Result.ok(labAnalysisService.getTrend(patientId, loinc));
     }
 

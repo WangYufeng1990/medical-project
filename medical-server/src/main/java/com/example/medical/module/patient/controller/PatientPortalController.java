@@ -73,7 +73,7 @@ public class PatientPortalController {
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
     public Result<List<Observation>> myObservations(
             @AuthenticationPrincipal LoginUser loginUser,
-            @RequestParam @jakarta.validation.constraints.NotBlank(message = "LOINC code is required") String loinc) {
+            @RequestParam(required = false) String loinc) {
         return Result.ok(labAnalysisService.getTrend(loginUser.getUserId(), loinc));
     }
 

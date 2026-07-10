@@ -18,6 +18,9 @@ public class LabAnalysisService {
     private final LoincCatalogRepository loincCatalogRepository;
 
     public List<Observation> getTrend(Long patientId, String loincCode) {
+        if (loincCode == null || loincCode.isBlank()) {
+            return observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId);
+        }
         return observationRepository
                 .findByPatientIdAndLoincCodeOrderByEffectiveDateDesc(patientId, loincCode);
     }
