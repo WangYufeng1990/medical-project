@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { initiateEmergencyAccess } from '../../api/emergency'
@@ -24,7 +25,6 @@ export default function Patients() {
   const [creating, setCreating] = useState(false)
   const [emergencyPatientId, setEmergencyPatientId] = useState<number | null>(null)
   const [emergencyReason, setEmergencyReason] = useState('')
-  const [emergencyResult, setEmergencyResult] = useState<{ token: string; expiresInMinutes: number; patientId: number } | null>(null)
   const [emergencySubmitting, setEmergencySubmitting] = useState(false)
 
   const fetchData = async () => {
@@ -34,8 +34,22 @@ export default function Patients() {
   useEffect(() => { fetchData() }, [page])
 
   const openForm = async (row?: any) => {
-    if (row) { setEditId(row.id); const d = await getPatientById(row.id); setForm({ ...emptyForm, ...d }) }
-    else { setEditId(null); setForm({ ...emptyForm }) }
+    if (row) {
+      setEditId(row.id)
+      const emToken = sessionStorage.getItem('emergencyToken')
+      const emPid = sessionStorage.getItem('emergencyPatientId')
+      if (emToken && emPid && String(row.id) === emPid) {
+        const res = await axios.get(`/api/v1/patients/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
+        setForm({ ...emptyForm, ...res.data.data })
+        sessionStorage.removeItem('emergencyToken')
+        sessionStorage.removeItem('emergencyPatientId')
+      } else {
+        const d = await getPatientById(row.id)
+        setForm({ ...emptyForm, ...d })
+      }
+    } else {
+      setEditId(null); setForm({ ...emptyForm })
+    }
     setShowForm(true)
   }
 
@@ -92,10 +106,17 @@ export default function Patients() {
     setEmergencySubmitting(true)
     try {
       const r = await initiateEmergencyAccess(emergencyPatientId, emergencyReason)
-      setEmergencyResult(r)
+      sessionStorage.setItem('emergencyToken', r.token)
+      sessionStorage.setItem('emergencyPatientId', String(r.patientId))
+      setEmergencyPatientId(null)
+      setEmergencyReason('')
+      const row = data.find(p => p.id === emergencyPatientId)
+      if (row) {
+        setEmergencySubmitting(false)
+        openForm(row)
+      }
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Failed to initiate emergency access')
-    } finally {
       setEmergencySubmitting(false)
     }
   }
@@ -187,12 +208,12 @@ export default function Patients() {
         </div>
       )}
 
-      {emergencyPatientId != null && !emergencyResult && (
-        <div className={styles.modalOverlay} onClick={() => { setEmergencyPatientId(null); setEmergencyResult(null) }}>
+      {emergencyPatientId != null && (
+        <div className={styles.modalOverlay} onClick={() => setEmergencyPatientId(null)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <h3>Emergency Access (Break Glass)</h3>
             <p style={{ fontSize: 13, color: '#909399', marginBottom: 16 }}>
-              This will generate a time-limited emergency token granting access to patient #{emergencyPatientId}'s data. Enter the reason for this access.
+              This grants temporary access to patient #{emergencyPatientId}'s full record. All access is audited. Enter the clinical reason for this emergency access.
             </p>
             <div className={styles.formGroup}>
               <label>Reason</label>
@@ -200,37 +221,9 @@ export default function Patients() {
                 style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, minHeight: 80, resize: 'vertical' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button className={styles.btnSm} onClick={() => { setEmergencyPatientId(null); setEmergencyResult(null) }}>Cancel</button>
+              <button className={styles.btnSm} onClick={() => setEmergencyPatientId(null)}>Cancel</button>
               <button className={styles.btnPrimary} disabled={emergencySubmitting || !emergencyReason.trim()}
-                onClick={handleInitiateEmergency}>{emergencySubmitting ? '...' : 'Generate Token'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {emergencyResult && (
-        <div className={styles.modalOverlay} onClick={() => { setEmergencyPatientId(null); setEmergencyResult(null) }}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
-            <h3>Emergency Token Generated</h3>
-            <p style={{ fontSize: 13, color: '#909399', marginBottom: 16 }}>
-              Copy this token and use it in the Authorization header (Bearer {emergencyResult.token.slice(0, 20)}...) to access patient data. The token expires in {emergencyResult.expiresInMinutes} minutes.
-            </p>
-            <div className={styles.formGroup}>
-              <label>Patient ID</label>
-              <div style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, background: '#f5f7fa' }}>{emergencyResult.patientId}</div>
-            </div>
-            <div className={styles.formGroup} style={{ marginTop: 12 }}>
-              <label>Expires In</label>
-              <div style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, background: '#f5f7fa' }}>{emergencyResult.expiresInMinutes} minutes</div>
-            </div>
-            <div className={styles.formGroup} style={{ marginTop: 12 }}>
-              <label>Token</label>
-              <textarea readOnly value={emergencyResult.token}
-                style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 12, minHeight: 100, resize: 'vertical', background: '#f5f7fa', fontFamily: 'monospace' }}
-                onClick={e => (e.target as HTMLTextAreaElement).select()} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button className={styles.btnPrimary} onClick={() => { setEmergencyPatientId(null); setEmergencyResult(null) }}>Close</button>
+                onClick={handleInitiateEmergency}>{emergencySubmitting ? 'Accessing...' : 'Access Patient Record'}</button>
             </div>
           </div>
         </div>
