@@ -1086,11 +1086,15 @@ Break-glass emergency access for clinical emergencies. A doctor who normally can
 | `App.tsx` | Modify | `/emergency` route with AdminGuard |
 | `StaffLayout.tsx` | Modify | Emergency Access nav item (ADMIN only) |
 
+## Revisions
+- **Auto-redirect**: Token display removed — break-glass now auto-opens patient form via sessionStorage token injection. Medical staff never see a JWT.
+- **Emergency prescriptions**: `GET /api/v1/prescriptions/by-patient/{patientId}` added. During break-glass, patient's active prescriptions (with items) are displayed in the form. Critical for unconscious/coma patients who cannot self-report medications.
+
 ## Results
-- **6 files changed** (2 new, 4 modified), 194 insertions
+- **8 files changed** (2 new, 6 modified), ~262 insertions
 - **Workflow**: 3 agents, 124K tokens, 258s
-- **Review verdict**: Ready to merge — zero findings. Break-glass token stored in React state, not persisted.
-- **Security**: Emergency-access JWT displayed in copyable textarea, cleared on close; audit page behind AdminGuard
+- **Review verdict**: Ready to merge
+- **Security**: Emergency token in sessionStorage (cleared after single use), audit page behind AdminGuard
   → "Review" button per row (disabled if already reviewed)
   → PUT /emergency/{id}/review, refreshes table
   → GET /emergency/history?audited=0

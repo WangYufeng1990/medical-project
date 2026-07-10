@@ -168,6 +168,7 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 |--------|------|------|--------|-------------|
 | GET | `/` | ADMIN,DOCTOR | `?page=1&size=10` | Paginated list |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Prescription detail with items |
+| GET | `/by-patient/{patientId}` | ADMIN,DOCTOR | path | All prescriptions for a patient (used by emergency break-glass) |
 | POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO | Create + items |
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body: PrescriptionUpdateFormDTO | Update header + replace items |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete + items |
