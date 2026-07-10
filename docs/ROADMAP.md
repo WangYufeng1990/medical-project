@@ -1098,83 +1098,63 @@ Break-glass emergency access for clinical emergencies. A doctor who normally can
 
 ---
 
-# Round 27: Audit Log Viewer ✅ Complete
-
-> **Status: Complete (2026-07-10)**
-
-## Goal
-Admin-only audit log viewer. Backend `GET /api/v1/audit-logs` already exists with filtering by module, action, userId, patientId, fromDate, toDate. Frontend zero.
-
-## Backend (already exists)
-| Endpoint | Auth | Description |
-|----------|------|-------------|
-| `GET /api/v1/audit-logs` | ADMIN | Paginated audit log with optional filters: `?module=&action=&userId=&patientId=&fromDate=&toDate=&page=1&size=20` |
-
-## Plan
-| File | Action | Description |
-|------|--------|-------------|
-| `api/audit.ts` | **New** | `getAuditLogs(params)` → `GET /audit-logs` |
-| `views/system/AuditLogs.tsx` | **New** | Admin page: filter bar (module/action/userId/patientId/date range) + paginated table (id, module, action, userId, username, patientId, targetId, ip, createTime) |
-| `App.tsx` | Modify | Add `/audit-logs` route with AdminGuard |
-| `StaffLayout.tsx` | Modify | Add Audit Logs nav item (ADMIN only) |
-  → "Review" button per row (disabled if already reviewed)
-  → PUT /emergency/{id}/review, refreshes table
-  → GET /emergency/history?audited=0
-  → List unreviewed accesses
-  → Click "Review" → PUT /emergency/{id}/review
-```
-
-### Scope
-Small-medium — 3 API functions, 1 new view, 2 files modified. ~5 files.
-
----
-
 # Round 26: Lab Results & LOINC Viewer ✅ Complete
 
 > **Status: Complete (2026-07-10)**
 > **Method: Workflow (Plan → Implement → Review), 3 agents, 115K tokens, 278s**
 
 ## Goal
-Patients and doctors can view lab results with historical trends, LOINC-coded reference ranges, and abnormal flagging. Backend complete with 5 endpoints, seed data (7 observations, 29 LOINC codes). Frontend zero.
+Patients and doctors can view lab results with historical trends, LOINC-coded reference ranges, and abnormal flagging. Backend complete with 5 endpoints, seed data (7 observations, 29 LOINC codes).
 
-## Backend (already exists)
-| Endpoint | Auth | Description |
-|----------|------|-------------|
-| `GET /api/v1/patients/{patientId}/observations?loinc=` | ADMIN,DOCTOR | Lab trend by patient + LOINC code |
-| `GET /api/v1/loinc/catalog` | ADMIN,DOCTOR | Full LOINC dictionary (29 codes) |
-| `GET /api/v1/loinc/panel/{parentCode}` | ADMIN,DOCTOR | LOINC codes grouped by panel (CBC/BMP/LIPID) |
-| `GET /api/v1/fhir/Observation/{id}` | ADMIN,DOCTOR | Single FHIR Observation |
-| `GET /api/v1/fhir/Observation?patient=` | ADMIN,DOCTOR | Observations by patient (FHIR Bundle) |
+## Changes
 
-### Seed Data
-- **7 observations** for patient 100 (James Anderson): WBC, RBC, HGB, HCT, PLT (CBC) + Glucose, HbA1c (metabolic)
-- **29 LOINC codes** across 6 panels: CBC(8), BMP(8), LIPID(4), DIABETES(1), THYROID(1), UA(8)
-
-## Plan
-
-### Frontend
 | File | Action | Description |
 |------|--------|-------------|
-| `api/observation.ts` | **New** | `getObservations(patientId, loinc)`, `getLoincCatalog()`, `getLoincPanel(parentCode)` |
-| `views/lab/LabResults.tsx` | **New** | Staff view: select patient → select LOINC panel/individual test → show trend table with reference ranges and abnormal flags |
-| `views/patient/lab/index.tsx` | **New** | Patient portal: own lab results (same pattern as patient bills) |
+| `api/observation.ts` | **New** | `getObservations(patientId, loinc?)`, `getLoincCatalog()`, `getLoincPanel(parentCode)` |
+| `views/lab/LabResults.tsx` | **New** | Staff view: select patient → single summary table grouped by collection date (Test, Value, Unit, Ref Range, Flag with color) |
 | `views/lab/LoincCatalog.tsx` | **New** | LOINC catalog browser: panel list → expand → individual tests with ref ranges |
-| `App.tsx` | Modify | Add `/lab` route + `/patient/lab` route |
-| `StaffLayout.tsx` | Modify | Add Lab Results nav item |
-| `PatientLayout.tsx` | Modify | Add Lab Results nav item |
+| `views/patient/lab/index.tsx` | **New** | Patient portal: auto-loads all results, same table layout |
+| `App.tsx` | Modify | `/lab`, `/loinc`, `/patient/lab` routes |
+| `StaffLayout.tsx` | Modify | Lab Results + LOINC Catalog nav items (ADMIN,DOCTOR) |
+| `PatientLayout.tsx` | Modify | Lab Results nav item |
+| `PatientPortalController.java` | Modify | `GET /patient/me/observations?loinc=` (patient-accessible, loinc optional) |
+| `Observation.java` | Modify | Extend BaseEntity (+soft delete, +@Version) |
+| `schema.sql` | Modify | Add is_deleted, version, update_time to observation table |
 
 ## Results
 - **10 files changed** (4 new, 6 modified), 401 insertions
-- **Backend**: Observation extends BaseEntity (+soft delete, +@Version), patient observation endpoint with @Auditable(phiAccess=true)
 - **Review**: Blocked initially — Observation entity didn't extend BaseEntity. Fixed before merge.
-- **Post-release**: Redesigned from multi-tier drill-down (panel→test→trend) to single summary table grouped by collection date
+- **Post-release**: Redesigned from multi-tier drill-down to single summary table
 
 ---
 
-## Post-Round 26 Fixes
+# Round 27: Audit Log Viewer ✅ Complete
 
-### Audit Log Username Capture
-`AuditLogAspect` now extracts username from request body via reflection when SecurityContext is null (e.g. login). Previously `auth/LOGIN_SUCCESS` had `username=NULL` — impossible to trace which account was targeted.
+> **Status: Complete (2026-07-10)**
+> **Method: Workflow (Plan → Implement → Review), 3 agents, 118K tokens, 133s**
+
+## Goal
+Admin-only audit log viewer with filtering by module, action, userId, patientId, and date range.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `api/audit.ts` | **New** | `getAuditLogs(params)` → `GET /audit-logs` with all filter params |
+| `views/system/AuditLogs.tsx` | **New** | Filter bar (module, action, userId, patientId, fromDate, toDate) + paginated table (10 columns + PageInfo total) |
+| `App.tsx` | Modify | `/audit-logs` route with AdminGuard |
+| `StaffLayout.tsx` | Modify | Audit Logs nav item (ADMIN only) |
+
+### Post-release: Audit Log Username Fix
+`AuditLogAspect` now extracts username from request body via reflection when SecurityContext is null (e.g. login). Previously `auth/LOGIN_SUCCESS` had `username=NULL`.
+
+## Results
+- **5 files changed** (2 new, 3 modified), 166 insertions
+- **Review**: Ready to merge
+
+---
+
+## Post-Round 27 Fixes
 
 ### Menus Page Read-Only
 Removed create/edit/delete from `/system/menus`. Menu structure is defined in code (`StaffLayout.tsx` + routes), not driven by database. Page now shows tree with indentation, type, and sort order.
