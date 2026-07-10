@@ -18,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -39,6 +40,8 @@ public class EmergencyAccessController {
     private final JwtEncoder jwtEncoder;
 
     @PostMapping("/access/{patientId}")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "emergency", action = "ACCESS")
     public Result<Map<String, Object>> emergencyAccess(@AuthenticationPrincipal LoginUser loginUser,
                                                         @PathVariable Long patientId,
                                                         @Valid @RequestBody EmergencyAccessRequest request) {
@@ -93,6 +96,8 @@ public class EmergencyAccessController {
 
     @PutMapping("/{id}/review")
     @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "emergency", action = "REVIEW")
     public Result<Void> review(@PathVariable Long id, @AuthenticationPrincipal LoginUser loginUser) {
         EmergencyAccess ea = emergencyAccessRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Emergency access record not found"));

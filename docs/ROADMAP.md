@@ -1076,30 +1076,21 @@ Break-glass emergency access for clinical emergencies. A doctor who normally can
 | `GET /api/v1/emergency/history` | ADMIN | List emergency access history, filter by `?patientId=` or `?audited=0` |
 | `PUT /api/v1/emergency/{id}/review` | ADMIN | Mark access as reviewed (audited=1, reviewedBy, reviewedAt) |
 
-## Plan
-
-### Changes
+## Changes
 
 | File | Action | Description |
 |------|--------|-------------|
-| `api/emergency.ts` | **New** | `initiateEmergencyAccess(patientId, reason)`, `getEmergencyHistory(params)`, `reviewEmergencyAccess(id)` |
-| `views/patients/index.tsx` | Modify | Add "Break Glass" button per row → reason prompt modal → call API → show result modal with emergency token |
-| `views/system/EmergencyAudit.tsx` | **New** | ADMIN page: list emergency access events, filter by patient/unreviewed, click to review |
-| `App.tsx` | Modify | Add `/emergency` route with AdminGuard |
-| `StaffLayout.tsx` | Modify | Add Emergency Audit nav item (ADMIN only) |
+| `api/emergency.ts` | **New** | `initiateEmergencyAccess`, `getEmergencyHistory`, `reviewEmergencyAccess` |
+| `views/system/EmergencyAudit.tsx` | **New** | ADMIN audit page: table (id, userId, patientId, reason, accessedAt, expiresAt, audited, reviewedBy, reviewedAt), patientId filter, audited dropdown, Review button per row |
+| `views/patients/index.tsx` | Modify | Break Glass button per row → reason prompt modal → POST → result modal (copyable token, expiresIn) |
+| `App.tsx` | Modify | `/emergency` route with AdminGuard |
+| `StaffLayout.tsx` | Modify | Emergency Access nav item (ADMIN only) |
 
-### Flow
-```
-Patient list
-  → "Break Glass" button per row
-  → Modal: enter reason for emergency access
-  → POST /emergency/access/{patientId} {reason}
-  → Result modal: shows token (copyable), patientId, expiresInMinutes
-  → Close modal, user copies the emergency-scoped JWT manually
-  
-Admin audit page (/emergency)
-  → Table: id, userId, patientId, reason, accessedAt, expiresAt, audited, reviewedBy, reviewedAt
-  → Filter: patientId input, audited dropdown (All/Unreviewed/Reviewed)
+## Results
+- **6 files changed** (2 new, 4 modified), 194 insertions
+- **Workflow**: 3 agents, 124K tokens, 258s
+- **Review verdict**: Ready to merge — zero findings. Break-glass token stored in React state, not persisted.
+- **Security**: Emergency-access JWT displayed in copyable textarea, cleared on close; audit page behind AdminGuard
   → "Review" button per row (disabled if already reviewed)
   → PUT /emergency/{id}/review, refreshes table
   → GET /emergency/history?audited=0
