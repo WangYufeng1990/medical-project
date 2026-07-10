@@ -1095,6 +1095,28 @@ Break-glass emergency access for clinical emergencies. A doctor who normally can
 - **Workflow**: 3 agents, 124K tokens, 258s
 - **Review verdict**: Ready to merge
 - **Security**: Emergency token in sessionStorage (cleared after single use), audit page behind AdminGuard
+
+---
+
+# Round 27: Audit Log Viewer ✅ Complete
+
+> **Status: Complete (2026-07-10)**
+
+## Goal
+Admin-only audit log viewer. Backend `GET /api/v1/audit-logs` already exists with filtering by module, action, userId, patientId, fromDate, toDate. Frontend zero.
+
+## Backend (already exists)
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/v1/audit-logs` | ADMIN | Paginated audit log with optional filters: `?module=&action=&userId=&patientId=&fromDate=&toDate=&page=1&size=20` |
+
+## Plan
+| File | Action | Description |
+|------|--------|-------------|
+| `api/audit.ts` | **New** | `getAuditLogs(params)` → `GET /audit-logs` |
+| `views/system/AuditLogs.tsx` | **New** | Admin page: filter bar (module/action/userId/patientId/date range) + paginated table (id, module, action, userId, username, patientId, targetId, ip, createTime) |
+| `App.tsx` | Modify | Add `/audit-logs` route with AdminGuard |
+| `StaffLayout.tsx` | Modify | Add Audit Logs nav item (ADMIN only) |
   → "Review" button per row (disabled if already reviewed)
   → PUT /emergency/{id}/review, refreshes table
   → GET /emergency/history?audited=0
