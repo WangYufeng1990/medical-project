@@ -1129,9 +1129,10 @@ Small-medium — 3 API functions, 1 new view, 2 files modified. ~5 files.
 
 ---
 
-# Round 26: Lab Results & LOINC Viewer [PLANNED]
+# Round 26: Lab Results & LOINC Viewer ✅ Complete
 
-> **Status: Plan written (2026-07-08) — implementation pending**
+> **Status: Complete (2026-07-10)**
+> **Method: Workflow (Plan → Implement → Review), 3 agents, 115K tokens, 278s**
 
 ## Goal
 Patients and doctors can view lab results with historical trends, LOINC-coded reference ranges, and abnormal flagging. Backend complete with 5 endpoints, seed data (7 observations, 29 LOINC codes). Frontend zero.
@@ -1162,10 +1163,7 @@ Patients and doctors can view lab results with historical trends, LOINC-coded re
 | `StaffLayout.tsx` | Modify | Add Lab Results nav item |
 | `PatientLayout.tsx` | Modify | Add Lab Results nav item |
 
-### Trend Display
-- Table: Date | Value | Unit | Reference Range | Flag (N/L/H color-coded)
-- Per-LOINC-code filtering via `?loinc=` param
-- Panel expansion: select "CBC" → shows all 8 CBC tests with most recent values
-
-### Scope
-Medium — 4 API functions, 3 new views, 4 files modified. ~10 files. Largest of the 5 planned rounds.
+## Results
+- **10 files changed** (4 new, 6 modified), 401 insertions
+- **Backend**: Observation extends BaseEntity (+soft delete, +@Version), patient observation endpoint with @Auditable(phiAccess=true)
+- **Review**: Blocked initially — Observation entity didn't extend BaseEntity. Fixed before merge.
