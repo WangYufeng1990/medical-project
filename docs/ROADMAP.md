@@ -1167,3 +1167,14 @@ Patients and doctors can view lab results with historical trends, LOINC-coded re
 - **10 files changed** (4 new, 6 modified), 401 insertions
 - **Backend**: Observation extends BaseEntity (+soft delete, +@Version), patient observation endpoint with @Auditable(phiAccess=true)
 - **Review**: Blocked initially — Observation entity didn't extend BaseEntity. Fixed before merge.
+- **Post-release**: Redesigned from multi-tier drill-down (panel→test→trend) to single summary table grouped by collection date
+
+---
+
+## Post-Round 26 Fixes
+
+### Audit Log Username Capture
+`AuditLogAspect` now extracts username from request body via reflection when SecurityContext is null (e.g. login). Previously `auth/LOGIN_SUCCESS` had `username=NULL` — impossible to trace which account was targeted.
+
+### Menus Page Read-Only
+Removed create/edit/delete from `/system/menus`. Menu structure is defined in code (`StaffLayout.tsx` + routes), not driven by database. Page now shows tree with indentation, type, and sort order.

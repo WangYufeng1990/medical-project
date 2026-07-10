@@ -146,6 +146,7 @@ All require `PATIENT` role.
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
+| GET | `/observations` | `?loinc=` (optional) | My lab results. Without `?loinc=` returns all; with param returns trend for specific test |
 | GET | `/consent` | — | My consent records |
 | PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING/DRAFT → PAID). Ownership verified — cannot pay another patient's bill |
 | PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
@@ -291,7 +292,7 @@ Requires `ADMIN` or `DOCTOR`. Lab trend analysis and LOINC catalog.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/patients/{id}/observations` | `?loinc=` | Lab trend by patient + LOINC code |
+| GET | `/patients/{id}/observations` | `?loinc=` (optional) | Lab results by patient. With `?loinc=` returns trend for specific test; without returns all results |
 | GET | `/loinc/catalog` | — | Full LOINC dictionary |
 | GET | `/loinc/panel/{parentCode}` | path | LOINC codes grouped by panel (CBC/BMP/LIPID) |
 
