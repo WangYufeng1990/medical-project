@@ -15,10 +15,12 @@ import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.service.BillService;
 import com.example.medical.module.patient.dto.PatientDataExport;
 import com.example.medical.module.patient.dto.PatientVO;
+import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.patient.service.LabAnalysisService;
 import com.example.medical.module.prescription.dto.PrescriptionItemVO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
 import com.example.medical.module.prescription.entity.Prescription;
@@ -65,6 +67,15 @@ public class PatientPortalController {
     private final SysUserRepository sysUserRepository;
     private final PasswordHistoryRepository passwordHistoryRepository;
     private final PasswordEncoder passwordEncoder;
+    private final LabAnalysisService labAnalysisService;
+
+    @GetMapping("/observations")
+    @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
+    public Result<List<Observation>> myObservations(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam @jakarta.validation.constraints.NotBlank(message = "LOINC code is required") String loinc) {
+        return Result.ok(labAnalysisService.getTrend(loginUser.getUserId(), loinc));
+    }
 
     @GetMapping
     public Result<PatientVO> profile(@AuthenticationPrincipal LoginUser loginUser) {

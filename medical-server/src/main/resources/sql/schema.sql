@@ -408,7 +408,10 @@ CREATE TABLE IF NOT EXISTS observation (
     status VARCHAR(20) DEFAULT 'final',
     source_message_id VARCHAR(100) DEFAULT NULL,
     effective_date TIMESTAMP NULL DEFAULT NULL,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_obs_patient_loinc (patient_id, loinc_code),
     UNIQUE KEY uk_source_message (source_message_id)

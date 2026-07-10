@@ -1,18 +1,21 @@
 package com.example.medical.module.patient.entity;
 
+import com.example.medical.common.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "observation")
-public class Observation {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@SQLDelete(sql = "UPDATE observation SET is_deleted = 1 WHERE id = ? AND version = ?")
+@SQLRestriction("is_deleted = 0")
+public class Observation extends BaseEntity {
 
     @Column(name = "patient_id")
     private Long patientId;
@@ -43,12 +46,4 @@ public class Observation {
 
     @Column(name = "effective_date")
     private LocalDateTime effectiveDate;
-
-    @Column(name = "create_time")
-    private LocalDateTime createTime;
-
-    @PrePersist
-    protected void onCreate() {
-        if (createTime == null) createTime = LocalDateTime.now();
-    }
 }

@@ -23,6 +23,9 @@ import PatientPrescriptions from './views/patient/prescriptions'
 import PatientBills from './views/patient/bills'
 import PatientChat from './views/patient/chat'
 import PatientConsent from './views/patient/consent'
+import LabResults from './views/lab/LabResults'
+import LoincCatalog from './views/lab/LoincCatalog'
+import PatientLab from './views/patient/lab'
 
 export default function App() {
   return (
@@ -40,6 +43,8 @@ export default function App() {
         <Route path="emergency" element={<AdminGuard><EmergencyAudit /></AdminGuard>} />
         <Route path="audit-logs" element={<AdminGuard><AuditLogs /></AdminGuard>} />
         <Route path="system/users" element={<AdminGuard><Users /></AdminGuard>} />
+        <Route path="lab" element={<LabResults />} />
+        <Route path="loinc" element={<LoincCatalog />} />
         <Route path="system/roles" element={<AdminGuard><Roles /></AdminGuard>} />
         <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />
       </Route>
@@ -52,6 +57,7 @@ export default function App() {
         <Route path="prescriptions" element={<PatientPrescriptions />} />
         <Route path="bills" element={<PatientBills />} />
         <Route path="chat" element={<PatientChat />} />
+        <Route path="lab" element={<PatientLab />} />
         <Route path="consent" element={<PatientConsent />} />
       </Route>
     </Routes>

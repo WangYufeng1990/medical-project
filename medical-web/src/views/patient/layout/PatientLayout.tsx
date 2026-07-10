@@ -5,6 +5,7 @@ const items = [
   { path: '/patient/profile', label: 'Profile' },
   { path: '/patient/appointments', label: 'Appointments' },
   { path: '/patient/prescriptions', label: 'Prescriptions' },
+  { path: '/patient/lab', label: 'Lab Results' },
   { path: '/patient/bills', label: 'Bills' },
   { path: '/patient/chat', label: 'Messages' },
   { path: '/patient/consent', label: 'Consent' },
