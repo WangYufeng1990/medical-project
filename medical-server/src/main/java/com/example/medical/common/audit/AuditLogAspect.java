@@ -45,14 +45,9 @@ public class AuditLogAspect {
         Object result = joinPoint.proceed();
 
         try {
-            String username = null;
-            Long userId = null;
             Long patientId = resolvePatientId(joinPoint, auditable.module());
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getPrincipal() instanceof LoginUser lu) {
-                userId = lu.getUserId();
-                username = lu.getUsername();
-            }
+            Long userId = resolveUserId(joinPoint);
+            String username = resolveUsername(joinPoint);
 
             String targetId = resolveTargetId(joinPoint);
             String detail = buildDetail(joinPoint, auditable.phiAccess());
@@ -104,6 +99,38 @@ public class AuditLogAspect {
                     return n.longValue();
                 }
             }
+        }
+        return null;
+    }
+
+    private Long resolveUserId(ProceedingJoinPoint joinPoint) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser lu) {
+            return lu.getUserId();
+        }
+        return null;
+    }
+
+    private String resolveUsername(ProceedingJoinPoint joinPoint) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser lu) {
+            return lu.getUsername();
+        }
+        Object[] args = joinPoint.getArgs();
+        for (Object arg : args) {
+            if (arg == null) continue;
+            try {
+                var m = arg.getClass().getMethod("getUsername");
+                Object result = m.invoke(arg);
+                if (result != null) return result.toString();
+            } catch (Exception ignored) {}
+            // Check for nested "username" field via getter pattern
+            try {
+                var f = arg.getClass().getDeclaredField("username");
+                f.setAccessible(true);
+                Object val = f.get(arg);
+                if (val != null) return val.toString();
+            } catch (Exception ignored) {}
         }
         return null;
     }
