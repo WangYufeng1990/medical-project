@@ -17,6 +17,7 @@ export default function Patients() {
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
   const [consentPatient, setConsentPatient] = useState<{ id: number; name: string } | null>(null)
   const [consents, setConsents] = useState<any[]>([])
@@ -38,7 +39,8 @@ export default function Patients() {
   }
   useEffect(() => { fetchData() }, [page])
 
-  const openForm = async (row?: any) => {
+  const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
+    setViewOnly(viewOnlyParam)
     setEmergencyPrescriptions(null)
     setHistoryEntries([])
     setAllergyEntries([])
@@ -166,6 +168,7 @@ export default function Patients() {
               <td>{maskPhone(row.phoneMobile)}</td><td>{maskEmail(row.email)}</td>
               <td>
                 <button className={styles.btnSm} onClick={() => navigate(`/chat?partnerId=${row.id}&partnerName=${encodeURIComponent(row.name)}`)}>Msg</button>
+                <button className={styles.btnSm} onClick={() => openForm(row, true)}>View</button>
                 <button className={styles.btnSm} onClick={() => openForm(row)}>Edit</button>
                 <button className={styles.btnSm} onClick={() => openConsent(row)}>Consent</button>
                 <button className={styles.btnSm} onClick={() => openEmergencyPrompt(row.id)}>Break Glass</button>
@@ -248,12 +251,12 @@ export default function Patients() {
       {showForm && (
         <div className={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>{editId ? 'Edit Patient' : 'Add Patient'}</h3>
+            <h3>{editId ? (viewOnly ? 'View Patient' : 'Edit Patient') : 'Add Patient'}</h3>
             <form onSubmit={handleSubmit} className={styles.formGrid}>
               {['name','mrn','ssn','dateOfBirth','sexAtBirth'].map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] ?? ''} disabled={!!editId} style={{ background: editId ? '#f5f7fa' : undefined }} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                  <input value={form[f] ?? ''} disabled={!!editId || viewOnly} style={{ background: (editId || viewOnly) ? '#f5f7fa' : undefined }} onChange={e => setForm({ ...form, [f]: e.target.value })} />
                 </div>
               ))}
               {['genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
@@ -262,7 +265,7 @@ export default function Patients() {
                 'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider'].map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                  <input value={form[f] ?? ''} disabled={viewOnly} onChange={e => setForm({ ...form, [f]: e.target.value })} />
                 </div>
               ))}
               {emergencyPrescriptions != null && (
@@ -372,7 +375,7 @@ export default function Patients() {
               )}
               <div className={styles.formActions}>
                 <button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary}>{editId ? 'Update' : 'Create'}</button>
+                {!viewOnly && <button type="submit" className={styles.btnPrimary}>{editId ? 'Update' : 'Create'}</button>}
               </div>
             </form>
           </div>
