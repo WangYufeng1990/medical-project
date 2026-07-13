@@ -137,7 +137,7 @@ All require `ADMIN` role.
 | POST | `/{patientId}/history` | ADMIN,DOCTOR | body: {description} | Add medical history entry (recordedBy captured from auth) |
 | GET | `/{patientId}/allergies` | ADMIN,DOCTOR | path | List allergy entries (append-only) |
 | POST | `/{patientId}/allergies` | ADMIN,DOCTOR | body: {allergen, reaction?, severity?} | Add allergy entry |
-| DELETE | `/{patientId}/allergies/{id}` | ADMIN,DOCTOR | path | Remove allergy entry (soft-delete, with ownership check) |
+| PUT | `/{patientId}/allergies/{id}/resolve` | ADMIN,DOCTOR | path | Resolve allergy entry (status → resolved, records resolvedBy + resolvedAt). Rejects if already resolved (409) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete patient |
 
 ### Patient Portal — `/api/v1/patient/me`
