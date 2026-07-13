@@ -76,7 +76,8 @@ expired tokens require re-login.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/login` | public | Patient login — local BCrypt verification, returns locally-signed JWT |
+| POST | `/login` | public | Patient login — local BCrypt verification, returns locally-signed JWT + refresh token |
+| POST | `/refresh` | public | Patient token refresh — validate refresh JWT (scp=refresh, role=PATIENT), returns new access+refresh token pair |
 
 ### User Management — `/api/v1/users`
 

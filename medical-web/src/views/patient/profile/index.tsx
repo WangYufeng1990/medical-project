@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import axios from 'axios'
+import patientRequest from '../../../api/patientRequest'
 import styles from '../../shared.module.css'
 
 const FIELDS = [
@@ -29,10 +29,9 @@ export default function PatientProfile() {
   const [form, setForm] = useState<any>({})
   const [showPwd, setShowPwd] = useState(false)
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '' })
-  const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
   useEffect(() => {
-    axios.get('/api/v1/patient/me', { headers }).then(r => {
+    patientRequest.get('/patient/me').then(r => {
       setProfile(r.data.data)
       setForm(r.data.data)
     })
@@ -40,7 +39,7 @@ export default function PatientProfile() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    await axios.put('/api/v1/patient/me', form, { headers })
+    await patientRequest.put('/patient/me', form)
     setProfile({ ...form })
     setEditing(false)
     alert('Profile updated')
@@ -49,7 +48,7 @@ export default function PatientProfile() {
   const handlePasswordChange = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      await axios.put('/api/v1/patient/me/password', pwdForm, { headers })
+      await patientRequest.put('/patient/me/password', pwdForm)
       setShowPwd(false)
       setPwdForm({ oldPassword: '', newPassword: '' })
       alert('Password changed')

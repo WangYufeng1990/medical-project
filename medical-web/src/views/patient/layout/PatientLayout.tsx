@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import patientRequest from '../../../api/patientRequest'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -26,16 +27,15 @@ export default function PatientLayout() {
         ))}
         <div style={{ marginTop: 24, padding: '8px 0', color: '#93c5fd', cursor: 'pointer', fontSize: 14 }}
           onClick={async () => {
-            const token = localStorage.getItem('patientToken')
             try {
-              const res = await fetch('/api/v1/patient/me/export', { headers: { Authorization: `Bearer ${token}` } })
-              const blob = await res.blob()
+              const res = await patientRequest.get('/patient/me/export', { responseType: 'blob' })
+              const blob = new Blob([res.data])
               const url = URL.createObjectURL(blob)
               const a = document.createElement('a'); a.href = url; a.download = 'my-health-data.json'; a.click()
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
-        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={() => { localStorage.removeItem('patientToken'); navigate('/patient/login') }}>
+        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={() => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); navigate('/patient/login') }}>
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>

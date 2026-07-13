@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
+import patientRequest from '../../../api/patientRequest'
 import { useChatSse } from '../../../hooks/useChatSse'
 import chatStyles from '../../chat/style.module.css'
 
 interface MessageVO { id: number; senderId: number; receiverId: number; content: string; isRead: boolean; createTime: string }
 interface ConversationVO { partnerId: number; partnerName: string; lastMessage: string; lastMessageTime: string; unreadCount: number }
-
-const BASE = '/api/v1/patient/me/messages'
 
 export default function PatientChat() {
   const [conversations, setConversations] = useState<ConversationVO[]>([])
@@ -18,20 +16,19 @@ export default function PatientChat() {
   const messageListRef = useRef<HTMLDivElement>(null)
 
   const token = localStorage.getItem('patientToken')
-  const auth = (h: any) => ({ ...h, Authorization: `Bearer ${token}` })
 
   const raw = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])) } catch { return {} } })() : {}
   const currentUserId = Number((raw as any).uid ?? (raw as any).jti ?? 0)
 
   const loadConversations = useCallback(() => {
-    axios.get(`${BASE}/conversations`, { params: { page: 1, size: 20 }, headers: auth({}) })
+    patientRequest.get('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
       .then(r => setConversations(r.data.data.records ?? []))
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
-    return axios.get(`${BASE}/${partnerId}`, { params: { page, size: 50 }, headers: auth({}) })
+    return patientRequest.get(`/patient/me/messages/${partnerId}`, { params: { page, size: 50 } })
       .then(r => {
         const batch = (r.data.data.records ?? []).reverse()
         setMessages(prev => page === 1 ? batch : [...batch, ...prev])
@@ -52,7 +49,7 @@ export default function PatientChat() {
     setInput('')
     const msg = { id: Date.now(), senderId: currentUserId, receiverId: selectedPartner.id, content, isRead: false, createTime: new Date().toISOString() }
     setMessages(prev => [...prev, msg])
-    await axios.post(BASE, { receiverId: selectedPartner.id, content }, { headers: auth({}) })
+    await patientRequest.post('/patient/me/messages', { receiverId: selectedPartner.id, content })
       .catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
     setTimeout(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })

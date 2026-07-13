@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model three-pillar foundation, through clinical decision support, lab interoperability, ePrescribing, compliance audit remediation, and frontend migration.
 >
-> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration + RBAC Remediation + Doctor-Patient Messaging — All Complete (2026-07-06)**
+> **Status: 9 Rounds + 3 Compliance Rounds + Frontend Migration + RBAC Remediation + Doctor-Patient Messaging + Patient Token Refresh — All Complete (2026-07-13)**
 
 ---
 
@@ -893,37 +893,33 @@ RxNorm auto-lookup:
 
 ---
 
-# Round 22: Patient Portal Token Auto-Refresh [PLANNED]
+# Round 22: Patient Portal Token Auto-Refresh ✅ Complete
 
-> **Status: Plan written (2026-07-08) — implementation pending**
+> **Status: Complete (2026-07-13)**
 
 ## Goal
 Patient portal views use raw `axios` without an interceptor — no token refresh, no automatic 401 redirect. Staff side already has this in `api/request.ts` (Round 19). Replicate the pattern for patient views.
 
-## Current State
-- **7 patient views** use `import axios from 'axios'` with manual `Authorization: Bearer <patientToken>`
-- **Backend**: `PatientAuthController` login response has `refreshToken: null` — no patient refresh endpoint exists
-- **Staff pattern**: `api/request.ts` (67 lines) — axios instance with request interceptor (inject token) + response interceptor (unwrap Result<T>, 401 → refresh queue → retry or redirect)
-
-## Plan
+## Changes
 
 ### Backend
 | File | Action | Description |
 |------|--------|-------------|
-| `PatientAuthController.java` | Modify | Add `POST /api/v1/patient/refresh` — validate refresh token, return new access token. Issue refresh tokens at login (currently `null`) |
-| `PatientPortalController.java` | Modify | Verify refresh endpoint behavior with patient token |
+| `PatientAuthController.java` | Modify | Add `generateRefreshToken()` method (30-day expiry, `scp: ["refresh"]`, separate issuer). Populate `refreshToken` at login (was `null`). Add `POST /api/v1/patient/refresh` endpoint — validates refresh token (Nimbus JWT parsing, scp/roles checks, expiry), returns new access+refresh token pair (rotation). Reuses `PatientLoginResponse` DTO |
+| `SecurityConfig.java` | Modify | Add `/api/v1/patient/refresh` to permitAll chain alongside `/api/v1/patient/login` |
 
 ### Frontend
 | File | Action | Description |
 |------|--------|-------------|
-| `medical-web/src/api/patientRequest.ts` | **New** | Axios instance for patient portal — same interceptor pattern as `request.ts` but reads `patientToken`/`patientRefreshToken` from localStorage, refresh calls `POST /api/v1/patient/refresh` |
-| `medical-web/src/views/patient/login/index.tsx` | Modify | Store `refreshToken` from login response |
-| `medical-web/src/views/patient/layout/PatientLayout.tsx` | Modify | Clear `patientRefreshToken` on logout |
-| 7 patient views (`*.tsx`) | Modify | Replace `import axios from 'axios'` → `import request from '../../api/patientRequest'`; remove manual `Authorization` headers |
+| `api/patientRequest.ts` | **New** | Axios instance with `baseURL: '/api/v1'`. Request interceptor injects `Authorization: Bearer <patientToken>`. Response interceptor: on 401, POST `/api/v1/patient/refresh`, retry, queue concurrent requests. On failure, clear both tokens, redirect to `/patient/login`. **Does NOT unwrap `Result<T>`** — returns raw response so existing `r.data.data.xxx` patterns work unchanged |
+| `patient/login/index.tsx` | Modify | Store `patientRefreshToken` from login response |
+| `patient/layout/PatientLayout.tsx` | Modify | Clear `patientRefreshToken` on logout. Export download uses `patientRequest` instead of raw fetch |
+| 7 patient views (`*.tsx`) | Modify | Replace `import axios` → `import patientRequest`, remove manual `Authorization` headers. Chat view keeps `token` variable for SSE and JWT parsing (not API calls) |
 
-### Risk
-- Patient token expiry is configurable (default 24h), so refresh is less critical than staff (2h). But long sessions make it relevant.
-- Backend `DevJwtEncoder` generates patient tokens — need to also handle refresh token generation/validation in dev mode.
+## Risk & Mitigations
+- Refresh token rotation: each refresh invalidates the previous token. If a refresh succeeds but frontend crashes before persisting new tokens, the user logs out — same as staff pattern
+- SSE token expiry: `useChatSse` uses the raw token for EventSource. If token expires mid-session, SSE reconnects with expired token (pre-existing limitation, out of scope)
+- Staff `JwtClaimMapper` force-logout doesn't apply to patient tokens (pre-existing gap, out of scope)
 
 ---
 

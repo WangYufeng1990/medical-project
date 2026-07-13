@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import patientRequest from '../../../api/patientRequest'
 import styles from '../../shared.module.css'
 
 const FLAG_COLOR: Record<string, string> = {
@@ -9,11 +9,10 @@ const FLAG_COLOR: Record<string, string> = {
 export default function PatientLab() {
   const [observations, setObservations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
 
   useEffect(() => {
-    axios.get('/api/v1/patient/me/observations', { headers })
+    patientRequest.get('/patient/me/observations')
       .then(r => setObservations(r.data.data || []))
       .catch(() => setObservations([]))
       .finally(() => setLoading(false))

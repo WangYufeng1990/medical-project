@@ -15,6 +15,7 @@ export default function PatientLogin() {
       const res = await axios.post('/api/v1/patient/login', { username, password })
       const data = res.data.data
       localStorage.setItem('patientToken', data.token)
+      if (data.refreshToken) localStorage.setItem('patientRefreshToken', data.refreshToken)
       localStorage.setItem('patientInfo', JSON.stringify({ patientId: data.patientId, name: data.name, username: data.username }))
       navigate('/patient/dashboard')
     } catch (err: any) {

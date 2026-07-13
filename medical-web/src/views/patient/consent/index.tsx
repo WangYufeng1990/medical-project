@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-import { CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../../utils/labels'
+import patientRequest from '../../../api/patientRequest'
+import { CONSENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientConsent() {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
   useEffect(() => {
     setLoading(true)
-    axios.get('/api/v1/patient/me/consent', { headers })
+    patientRequest.get('/patient/me/consent')
       .then(r => setData(r.data.data ?? []))
       .catch(() => setData([]))
       .finally(() => setLoading(false))

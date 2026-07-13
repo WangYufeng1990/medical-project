@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import axios from 'axios'
+import patientRequest from '../../../api/patientRequest'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
@@ -9,9 +9,8 @@ export default function PatientBills() {
   const [page, setPage] = useState(1)
   const [payId, setPayId] = useState<number | null>(null)
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CREDIT_CARD' })
-  const headers = { Authorization: `Bearer ${localStorage.getItem('patientToken')}` }
 
-  const refresh = () => axios.get(`/api/v1/patient/me/bills?page=${page}&size=${PAGE_SIZE}`, { headers }).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
+  const refresh = () => patientRequest.get(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
 
   useEffect(() => { refresh() }, [page])
 
@@ -24,7 +23,7 @@ export default function PatientBills() {
   const handlePay = async (e: FormEvent) => {
     e.preventDefault()
     if (!payId) return
-    await axios.put(`/api/v1/patient/me/bills/${payId}/pay`, { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod }, { headers })
+    await patientRequest.put(`/patient/me/bills/${payId}/pay`, { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod })
     setPayId(null)
     refresh()
   }

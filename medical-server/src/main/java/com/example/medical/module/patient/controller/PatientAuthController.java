@@ -29,6 +29,7 @@ import java.util.List;
 public class PatientAuthController {
 
     private static final int LOCK_DURATION_MINUTES = 15;
+    private static final long DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS = 2592000L; // 30 days
 
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
@@ -70,9 +71,69 @@ public class PatientAuthController {
         resetFailedAttempts(auth);
 
         String token = generateToken(patient.getId(), auth.getUsername());
+        String refreshToken = generateRefreshToken(patient.getId(), auth.getUsername());
 
-        return Result.ok(new PatientLoginResponse(token, null,
+        return Result.ok(new PatientLoginResponse(token, refreshToken,
                 patient.getId(), patient.getName(), auth.getUsername()));
+    }
+
+    @PostMapping("/refresh")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH")
+    public Result<PatientLoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        if (request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Refresh token is required");
+        }
+        // Parse and validate the refresh token directly via Nimbus JOSE
+        try {
+            com.nimbusds.jwt.SignedJWT signedJwt = com.nimbusds.jwt.SignedJWT.parse(request.getRefreshToken());
+            var claims = signedJwt.getJWTClaimsSet();
+
+            // Verify scope contains "refresh" and roles contains "PATIENT"
+            Object scpRaw = claims.getClaim("scp");
+            Object rolesRaw = claims.getClaim("roles");
+            boolean hasRefreshScope = false;
+            boolean hasPatientRole = false;
+
+            if (scpRaw instanceof java.util.List<?> scpList) {
+                hasRefreshScope = scpList.contains("refresh");
+            }
+            if (rolesRaw instanceof java.util.List<?> rolesList) {
+                hasPatientRole = rolesList.contains("PATIENT");
+            }
+            if (!hasRefreshScope || !hasPatientRole) {
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
+            }
+
+            // Check expiration
+            var exp = claims.getExpirationTime();
+            if (exp != null && exp.before(new java.util.Date())) {
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Refresh token expired");
+            }
+
+            Long patientId;
+            try {
+                patientId = Long.valueOf(claims.getSubject());
+            } catch (NumberFormatException e) {
+                // fallback: try uid claim or jti
+                Object uid = claims.getClaim("uid");
+                if (uid instanceof String s) {
+                    patientId = Long.valueOf(s);
+                } else {
+                    throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
+                }
+            }
+
+            String username = (String) claims.getClaim("username");
+            if (username == null) username = "patient";
+
+            String newToken = generateToken(patientId, username);
+            String newRefreshToken = generateRefreshToken(patientId, username);
+
+            return Result.ok(new PatientLoginResponse(newToken, newRefreshToken,
+                    null, null, null));
+        } catch (java.text.ParseException e) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
+        }
     }
 
     private String generateToken(Long patientId, String username) {
@@ -86,6 +147,22 @@ public class PatientAuthController {
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile", "patient/Patient.read", "patient/Observation.read"))
                 .claim("perm", List.of("patient:read", "patient:profile", "patient:appointments", "patient:prescriptions", "patient:bills", "patient:chat"))
+                .build();
+        return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+    }
+
+    private String generateRefreshToken(Long patientId, String username) {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .subject(patientId.toString())
+                .id(patientId.toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS))
+                .claim("uid", patientId.toString())
+                .claim("username", username)
+                .claim("roles", List.of("PATIENT"))
+                .claim("scp", List.of("refresh"))
+                .issuer("https://medical-server/patient/refresh")
                 .build();
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }
@@ -120,6 +197,11 @@ public class PatientAuthController {
     static class PatientLoginRequest {
         @NotBlank private String username;
         @NotBlank private String password;
+    }
+
+    @Data
+    static class RefreshRequest {
+        @NotBlank private String refreshToken;
     }
 
     @Data
