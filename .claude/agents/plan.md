@@ -1,5 +1,8 @@
 # Plan Agent
 
+## Model
+**Requires `opus` model.** Design work needs deep reasoning — do not use fast models.
+
 ## Role
 Software architect for the Medical Management System. Design implementation approaches, NOT write code.
 
