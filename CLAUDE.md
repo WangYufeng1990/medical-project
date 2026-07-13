@@ -169,3 +169,72 @@ medical-project/
 - Doc updates are part of the feature — commit them together with the code, not as a separate "docs" commit unless explicitly separated for review.
 - If a round includes infrastructure work (agent configs, build changes, patterns), document it in `docs/ROADMAP.md` so the project timeline stays complete.
 - Doc-only commits are fine for post-release fixes, verification notes, or lessons-learned additions to existing rounds.
+
+---
+
+## Agent Roles (Plan → Implement → Review)
+
+Every feature/round follows a three-phase workflow. These sections define the scope, patterns, and constraints for each role. **Plan and Review must NOT be done by subagents — use your own context for these phases.** Implement can use subagents for mechanical edits.
+
+### Plan Agent
+
+**You perform this phase.** Explore codebase, verify data contracts (trace every form field → API request → backend validation), identify all files to create/modify, design execution order. Do NOT write code. Output:
+
+1. **Summary** — 1-2 sentences
+2. **Files to Create / Modify** — path + what + why
+3. **Docs to Update** — ROADMAP always, API-LAYOUT if endpoints change
+4. **Data Contract Trace** — every field in every API request: where does it come from? Is it in the form?
+5. **Execution Order** — numbered with dependencies
+6. **Risks / Trade-offs**
+
+Key rules:
+- Trace every field from UI form → API payload. If the backend needs a field the form doesn't collect, you MUST add it to the form. Never assume empty defaults are safe.
+- When async calls modify form state, specify the state update strategy (functional `setForm(prev => ...)`, stale-response guards).
+
+### Frontend Agent (Implement)
+
+**Subagent, or you directly for small changes.** React 18 + TypeScript + Vite 5 + CSS Modules. Follow these patterns:
+
+**API calls**: Staff views import from `api/<module>.ts` (uses `request` interceptor — auto-injects token, unwraps `Result<T>`). Patient views use `patientRequest` from `api/patientRequest.ts` (auto-injects patientToken but does NOT unwrap response — keep `r.data.data.xxx`).
+
+**UI patterns**: Modals: `<div className={styles.modalOverlay} onClick={close}>` + `<div className={styles.modal} onClick={e => e.stopPropagation()}>`. Forms: `<form className={styles.formGrid}>` with `<div className={styles.formGroup}>`. Tables: `<table className={styles.table}>`. Buttons: `btnPrimary` (save), `btnSm` (secondary), `btnSmDanger` (delete). CSS: `../shared.module.css` (staff), `../../shared.module.css` (patient).
+
+**Falsy safety (CRITICAL)**: `!= null` for numeric checks, `?? '-'` for display fallback, `!== ''` for empty form checks. **NEVER use `||` for values that could be `0` or `false`.** `Number(x) || null` drops zero — use `x !== '' ? Number(x) : null`. `profile[f] || ''` drops 0/false — use `?? ''`.
+
+**Common patterns**: Patient dropdowns: `getPatientPage({ page: 1, size: 999 })`. Delete confirmation: `confirm('Delete?')`. Simple input: `prompt('reason:')`. Pagination: `page*PAGE_SIZE>=total`. Import order: react → API modules → CSS → utils.
+
+**Vite cache**: If changes don't appear, kill all vite processes and restart with `--force`.
+
+### Backend Agent (Implement)
+
+**Subagent, or you directly for small changes.** Java 17 + Spring Boot 3.x + Spring Data JPA. Follow these patterns:
+
+**Controllers**: `@RestController` + `@RequestMapping("/api/v1/<module>")` + `@RequiredArgsConstructor`. Every endpoint: `@PreAuthorize("hasRole('ADMIN')")` / `hasAnyRole('ADMIN','DOCTOR')` / `hasRole('PATIENT')`. Return `Result<T>` or `Result<PageResult<T>>`. `@Valid` on request bodies. Controllers throw, never catch.
+
+**Services**: `@Service` + `@RequiredArgsConstructor`. `@Transactional` on methods that modify data. `@Auditable(module, action)` on CUD operations. Ownership checks: `resource.getPatientId().equals(loginUser.getUserId())` for patient-owned resources.
+
+**DTOs**: `@Data` + static `fromEntity()` / instance `toEntity()`. Conversion logic NEVER in controllers or services.
+
+**Entities**: Extend `BaseEntity`. `@SQLDelete(sql = "UPDATE ... SET is_deleted = 1 WHERE id = ? AND version = ?")`. `@SQLRestriction("is_deleted = 0")`. `@Version` on critical entities. PHI: `@Convert(converter = AesAttributeConverter.class)` on entity fields, OR `AesCryptoUtil.encrypt()` in raw SQL — both valid.
+
+**Errors**: `throw new BusinessException(ResultCode.X, "message")`.
+
+### Review Agent
+
+**You perform this phase.** Do NOT write code — only report findings. Run the full checklist:
+
+**Backend checklist**: @PreAuthorize on every endpoint, patient-owned resources verify loginUser, DTO↔Entity in DTO class (not controller/service), Result<T> wrapper, @Valid on request bodies, PHI encryption, @Auditable on CUD, @Transactional on mutations, no raw SQL with user input, new entity extends BaseEntity with @SQLDelete/@SQLRestriction, @Version on critical entities.
+
+**Frontend checklist**: No `||` on numeric values, form numeric fields use `!== ''` check, staff views use `api/` module (not raw axios), patient views use `patientRequest` or axios with `patientToken`, modal e.stopPropagation(), CSS from shared.module.css, no new npm imports, no commented-out code.
+
+**Cross-cutting**: No new deps, file naming, cyclic refs, hardcoded creds. Both staff and patient logout clear their tokens.
+
+**Severity**: 🔴 CRITICAL (security/data loss) / 🟡 HIGH (bug) / 🟠 MEDIUM (consistency) / ⚪ LOW (style). End with **VERDICT: Ready to merge** or **Blocked: N critical issues**.
+
+**Recurring bug patterns to flag**:
+- `|| null` on numbers → should be `!== '' ? Number(x) : null`
+- `|| fallback` on display values where 0 is valid → should be `??`
+- `.catch(() => {})` with no error state → user sees nothing on failure
+- Raw axios in staff views → should use `api/` module
+- Data contract mismatch: frontend sends hardcoded empty string for a field the backend needs → feature silently no-op
+- Stale closure: `setForm({ ...form, items })` inside async callback → should be `setForm(prev => ...)`
