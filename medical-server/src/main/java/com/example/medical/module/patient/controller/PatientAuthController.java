@@ -31,7 +31,6 @@ import java.util.List;
 public class PatientAuthController {
 
     private static final int LOCK_DURATION_MINUTES = 15;
-    private static final long DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS = 2592000L; // 30 days
 
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
@@ -43,6 +42,9 @@ public class PatientAuthController {
 
     @Value("${app.security.patient-token-expiry-seconds:86400}")
     private long patientTokenExpirySeconds;
+
+    @Value("${app.security.patient-refresh-token-expiry-seconds:2592000}")
+    private long patientRefreshTokenExpirySeconds;
 
     @PostMapping("/login")
     @Transactional
@@ -144,7 +146,7 @@ public class PatientAuthController {
                 .subject(patientId.toString())
                 .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS))
+                .expiresAt(now.plusSeconds(patientRefreshTokenExpirySeconds))
                 .claim("uid", patientId.toString())
                 .claim("username", username)
                 .claim("roles", List.of("PATIENT"))

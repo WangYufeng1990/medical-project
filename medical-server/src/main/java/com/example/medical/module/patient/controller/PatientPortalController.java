@@ -84,6 +84,7 @@ public class PatientPortalController {
     }
 
     @PutMapping
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "UPDATE_PROFILE", phiAccess = true)
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                        @RequestBody Map<String, Object> body) {
         Patient patient = patientRepository.findById(loginUser.getUserId())
@@ -212,6 +213,7 @@ public class PatientPortalController {
 
     @PutMapping("/password")
     @Transactional
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_CHANGE")
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PatientPasswordChangeRequest request) {
         PatientAuth auth = patientAuthRepository.findByPatientId(loginUser.getUserId())
