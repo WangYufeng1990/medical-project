@@ -1154,3 +1154,45 @@ Admin-only audit log viewer with filtering by module, action, userId, patientId,
 
 ### Menus Page Read-Only
 Removed create/edit/delete from `/system/menus`. Menu structure is defined in code (`StaffLayout.tsx` + routes), not driven by database. Page now shows tree with indentation, type, and sort order.
+
+---
+
+# Round 28: Clinical Data Immutability — Appointment & Prescription Edit Restrictions [PLANNED]
+
+> **Status: Plan written (2026-07-13) — executing now**
+
+## Part A: Appointments — Terminal State Edit Protection
+
+### Analysis
+Currently all appointment states are editable. This is clinically invalid:
+- **Completed (3)**: The visit happened. Diagnosis, time, doctor are part of the medico-legal record. Editing after the fact destroys clinical audit trail.
+- **Cancelled (2)**: Patient/staff cancelled. Should not be retroactively changed to "arrived" — this is fraud-relevant.
+- **No-Show (4)**: Patient didn't show up. Same as above — a factual record.
+
+Only these states are valid for editing: Scheduled (0), Arrived (1), Rescheduled (5), In Progress (6).
+These are transitional states where changes still reflect reality (patient ran late, wrong room assigned, etc.).
+
+### Fix
+| Layer | File | Change |
+|-------|------|--------|
+| Backend | `AppointmentService.update()` | Add status guard: if status in {2, 3, 4} → throw `BusinessException(CONFLICT, "Terminal appointments cannot be modified")` |
+| Frontend | `appointments/index.tsx` | Hide Edit button when status ∈ {2, 3, 4} |
+
+## Part B: Prescriptions — Remove Edit, Cancel-Reissue Workflow
+
+### Analysis
+A prescription is a legal medical order — once signed and issued:
+- Modifying drug name/dosage/quantity after the fact destroys the original order
+- If the wrong drug was prescribed, the correct clinical workflow is: **cancel** the erroneous prescription (status → cancelled) + **create** a new one
+- This preserves a clean audit trail: original order → cancelled → corrected order
+- The Edit button enables modification that bypasses CDS re-check (drug interactions, allergy warnings)
+- Current delete (ADMIN only) is also problematic — prescriptions should never be deleted, only cancelled
+
+Only status changes (active → transmitted → cancelled) via explicit transmit/cancel actions, and the transmit button are valid modifications. Full edit of header + items is NOT.
+
+### Fix
+| Layer | File | Change |
+|-------|------|--------|
+| Backend | `PrescriptionController.update()` | No code change — but the endpoint should eventually reject edits to non-active prescriptions, and items modification should force CDS re-check |
+| Frontend | `prescriptions/index.tsx` | Remove Edit button. Keep Transmit (active→transmitted) and Delete (ADMIN only, for seed data cleanup). Add Cancel button for active prescriptions (status→cancelled) |
+| Backend | `PrescriptionController` | Add `PUT /{id}/cancel` — sets rxStatus to "cancelled" (ADMIN,DOCTOR). Controlled substances require additional audit |
