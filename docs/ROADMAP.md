@@ -1150,23 +1150,8 @@ Admin-only audit log viewer with filtering by module, action, userId, patientId,
 
 ---
 
-## Post-Round 27 Fixes
-
-### Menus Page Read-Only
+### Post-Round 27: Menus Page Read-Only
 Removed create/edit/delete from `/system/menus`. Menu structure is defined in code (`StaffLayout.tsx` + routes), not driven by database. Page now shows tree with indentation, type, and sort order.
-
----
-
-## Post-Round 28 Refactoring
-
-### Round 20 Revision: Agent Roles Moved to CLAUDE.md
-Merged 4 `.claude/agents/*.md` files into root `CLAUDE.md` as a dedicated **Agent Roles** section. Key decision: **Plan and Review phases are now done directly (not via subagents)** to ensure deep reasoning quality. Only the Implement phase may use subagents for mechanical edits. This addresses review quality issues observed in earlier rounds (review agents using flashed models, reviewing wrong diffs).
-
-### Round 22 Re-Review Fixes
-Opus-powered re-review found 3 critical/high issues in patient token refresh:
-- **CRITICAL**: refresh endpoint used `SignedJWT.parse()` without cryptographic signature verification → switched to `JwtDecoder.decode()` (forged tokens now rejected)
-- **HIGH**: `changePassword()` lacked `@Transactional` → password history + password update now atomic
-- **HIGH**: JWT `jti` was `patientId.toString()` (same for all tokens) → changed to `UUID.randomUUID()`
 
 ---
 
@@ -1254,3 +1239,17 @@ The patient edit form allows direct overwrite of `medicalHistory` and `allergies
 - `medicalHistory` and `allergies` → separate append-only entities with timestamps and provider attribution
 - Patient demographics → versioned records with effective dates
 - Name/DOB changes → dedicated workflow with audit trail
+
+---
+
+## Post-Round 28: Agent Roles Reorganization + Round 22 Re-Review
+
+### Agent Configs Moved to CLAUDE.md
+Merged 4 `.claude/agents/*.md` files into root `CLAUDE.md` as a dedicated **Agent Roles** section. Plan and Review phases are now done directly (not via subagents) for deep reasoning quality. Only Implement may use subagents for mechanical edits.
+
+### Round 22 Re-Review (Opus)
+Re-reviewed with Opus model. Found and fixed 3 critical/high + 4 medium/low issues:
+- **CRITICAL**: refresh endpoint signature verification (forged tokens now rejected)
+- **HIGH**: `changePassword()` @Transactional, JWT `jti` uniqueness
+- **MEDIUM**: `updateProfile()` + `changePassword()` @Auditable annotations
+- **LOW**: refresh token expiry externalized to configuration
