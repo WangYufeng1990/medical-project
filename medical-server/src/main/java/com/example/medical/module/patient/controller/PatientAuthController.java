@@ -13,7 +13,9 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class PatientAuthController {
     private final PatientAuthRepository patientAuthRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
+    private final JwtDecoder jwtDecoder;
     private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
     private final jakarta.servlet.http.HttpServletRequest httpRequest;
 
@@ -83,47 +86,29 @@ public class PatientAuthController {
         if (request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Refresh token is required");
         }
-        // Parse and validate the refresh token directly via Nimbus JOSE
         try {
-            com.nimbusds.jwt.SignedJWT signedJwt = com.nimbusds.jwt.SignedJWT.parse(request.getRefreshToken());
-            var claims = signedJwt.getJWTClaimsSet();
+            Jwt jwt = jwtDecoder.decode(request.getRefreshToken());
 
-            // Verify scope contains "refresh" and roles contains "PATIENT"
-            Object scpRaw = claims.getClaim("scp");
-            Object rolesRaw = claims.getClaim("roles");
-            boolean hasRefreshScope = false;
-            boolean hasPatientRole = false;
-
-            if (scpRaw instanceof java.util.List<?> scpList) {
-                hasRefreshScope = scpList.contains("refresh");
-            }
-            if (rolesRaw instanceof java.util.List<?> rolesList) {
-                hasPatientRole = rolesList.contains("PATIENT");
-            }
-            if (!hasRefreshScope || !hasPatientRole) {
+            List<String> scp = jwt.getClaimAsStringList("scp");
+            List<String> roles = jwt.getClaimAsStringList("roles");
+            if (scp == null || !scp.contains("refresh")
+                    || roles == null || !roles.contains("PATIENT")) {
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
-            }
-
-            // Check expiration
-            var exp = claims.getExpirationTime();
-            if (exp != null && exp.before(new java.util.Date())) {
-                throw new BusinessException(ResultCode.UNAUTHORIZED, "Refresh token expired");
             }
 
             Long patientId;
             try {
-                patientId = Long.valueOf(claims.getSubject());
+                patientId = Long.valueOf(jwt.getSubject());
             } catch (NumberFormatException e) {
-                // fallback: try uid claim or jti
-                Object uid = claims.getClaim("uid");
-                if (uid instanceof String s) {
-                    patientId = Long.valueOf(s);
+                String uid = jwt.getClaimAsString("uid");
+                if (uid != null) {
+                    patientId = Long.valueOf(uid);
                 } else {
                     throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
                 }
             }
 
-            String username = (String) claims.getClaim("username");
+            String username = jwt.getClaimAsString("username");
             if (username == null) username = "patient";
 
             String newToken = generateToken(patientId, username);
@@ -131,7 +116,9 @@ public class PatientAuthController {
 
             return Result.ok(new PatientLoginResponse(newToken, newRefreshToken,
                     null, null, null));
-        } catch (java.text.ParseException e) {
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
         }
     }
@@ -140,7 +127,7 @@ public class PatientAuthController {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(username)
-                .id(patientId.toString())
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(patientTokenExpirySeconds))
                 .claim("uid", patientId.toString())
@@ -155,7 +142,7 @@ public class PatientAuthController {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(patientId.toString())
-                .id(patientId.toString())
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(DEFAULT_REFRESH_TOKEN_EXPIRY_SECONDS))
                 .claim("uid", patientId.toString())

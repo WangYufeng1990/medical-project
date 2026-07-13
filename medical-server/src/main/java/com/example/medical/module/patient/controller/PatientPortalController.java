@@ -211,6 +211,7 @@ public class PatientPortalController {
     }
 
     @PutMapping("/password")
+    @Transactional
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PatientPasswordChangeRequest request) {
         PatientAuth auth = patientAuthRepository.findByPatientId(loginUser.getUserId())
