@@ -42,11 +42,11 @@ export default function Billing() {
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Type</th><th>Status</th><th>Total</th><th>Ins Pay</th><th>Patient Resp</th><th></th></tr></thead>
         <tbody>{data.map(r => (
-          <tr key={r.id}>
+          <tr key={r.id} className={styles.clickableRow}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.billType}</td>
             <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
-            <td>
+            <td onClick={e => e.stopPropagation()}>
               {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (confirm('Submit claim?')) { await submitBill(r.id); refresh() } }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}
               {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={async () => { const pmt = prompt('Payment amount:'); const pmtMethod = prompt('Payment method (CASH/CARD/CHECK):'); if (pmt && pmtMethod) { await payBill(r.id, { paymentAmount: Number(pmt), paymentMethod: pmtMethod }); refresh() } }}>Pay</button>}

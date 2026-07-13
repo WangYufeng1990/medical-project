@@ -30,8 +30,8 @@ export default function Users() {
     <h2 style={{ marginBottom: 20 }}>Users</h2>
     <button className={styles.btnPrimary} onClick={() => openForm()} style={{ marginBottom: 16 }}>+ Add User</button>
     <table className={styles.table}><thead><tr><th>ID</th><th>Username</th><th>Name</th><th>NPI</th><th>Specialty</th><th></th></tr></thead>
-      <tbody>{data.map(r => (<tr key={r.id}><td>{r.id}</td><td>{r.username}</td><td>{r.realName}</td><td>{r.npi}</td><td>{r.specialty}</td>
-        <td><button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
+      <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.username}</td><td>{r.realName}</td><td>{r.npi}</td><td>{r.specialty}</td>
+        <td onClick={e => e.stopPropagation()}><button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
           <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteUser(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button></td></tr>))}</tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 

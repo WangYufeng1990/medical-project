@@ -148,8 +148,9 @@ export default function Prescriptions() {
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Diagnosis</th><th>ICD-10</th><th>Date</th><th>Status</th><th></th></tr></thead>
         <tbody>{data.map(r => (
-          <tr key={r.id}><td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
-            <td>
+          <tr key={r.id} className={styles.clickableRow}>
+            <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
+            <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
               {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Cancel prescription?')) { await cancelPrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Cancel</button>}
               <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deletePrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>

@@ -99,7 +99,7 @@ export default function AuditLogs() {
         </tr></thead>
         <tbody>
           {data.map((row: any) => (
-            <tr key={row.id}>
+            <tr key={row.id} className={styles.clickableRow}>
               <td>{row.id}</td>
               <td>{row.userId ?? '-'}</td>
               <td>{row.username ?? '-'}</td>
