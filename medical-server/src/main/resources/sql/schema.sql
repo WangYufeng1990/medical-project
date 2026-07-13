@@ -416,3 +416,31 @@ CREATE TABLE IF NOT EXISTS observation (
     INDEX idx_obs_patient_loinc (patient_id, loinc_code),
     UNIQUE KEY uk_source_message (source_message_id)
 );
+
+CREATE TABLE IF NOT EXISTS medical_history_entry (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    recorded_by BIGINT DEFAULT NULL,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_mh_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS allergy_entry (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    allergen VARCHAR(200) NOT NULL,
+    reaction VARCHAR(200) DEFAULT NULL,
+    severity VARCHAR(20) DEFAULT NULL,
+    recorded_by BIGINT DEFAULT NULL,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_ae_patient_id (patient_id)
+);

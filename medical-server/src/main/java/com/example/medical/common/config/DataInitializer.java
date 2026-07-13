@@ -43,6 +43,7 @@ public class DataInitializer implements CommandLineRunner {
         seedQualityMeasures();
         seedCds();
 
+        seedAllergies();
         log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
@@ -474,6 +475,22 @@ public class DataInitializer implements CommandLineRunner {
                 null, 12);
 
         log.info("Quality measure seed data: 3 CMS eCQM definitions (122/125/165)");
+    }
+
+    private void seedAllergies() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM allergy_entry", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO allergy_entry (patient_id, allergen, reaction, severity, recorded_by, create_time) " +
+                     "VALUES (?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, "Penicillin", "Anaphylaxis", "SEVERE", 2L, now);
+        jdbcTemplate.update(sql, 100L, "Shellfish", "Hives, swelling", "MODERATE", 2L, now);
+        jdbcTemplate.update(sql, 101L, "Dust mites", "Rhinitis, asthma exacerbation", "MODERATE", 2L, now);
+        jdbcTemplate.update(sql, 101L, "Pollen", "Seasonal rhinitis", "MILD", 2L, now);
+
+        log.info("Allergy seed data: 4 allergy entries for patients 100 and 101");
     }
 
     private void seedCds() {

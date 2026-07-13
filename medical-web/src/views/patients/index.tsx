@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient } from '../../api/patient'
+import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, removePatientAllergy } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { initiateEmergencyAccess } from '../../api/emergency'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
@@ -27,6 +27,10 @@ export default function Patients() {
   const [emergencyReason, setEmergencyReason] = useState('')
   const [emergencySubmitting, setEmergencySubmitting] = useState(false)
   const [emergencyPrescriptions, setEmergencyPrescriptions] = useState<any[] | null>(null)
+  const [historyEntries, setHistoryEntries] = useState<any[]>([])
+  const [allergyEntries, setAllergyEntries] = useState<any[]>([])
+  const [newHistoryDesc, setNewHistoryDesc] = useState('')
+  const [newAllergy, setNewAllergy] = useState({ allergen: '', reaction: '', severity: 'MODERATE' })
 
   const fetchData = async () => {
     setLoading(true)
@@ -36,6 +40,10 @@ export default function Patients() {
 
   const openForm = async (row?: any) => {
     setEmergencyPrescriptions(null)
+    setHistoryEntries([])
+    setAllergyEntries([])
+    setNewHistoryDesc('')
+    setNewAllergy({ allergen: '', reaction: '', severity: 'MODERATE' })
     if (row) {
       setEditId(row.id)
       const emToken = sessionStorage.getItem('emergencyToken')
@@ -46,13 +54,14 @@ export default function Patients() {
           axios.get(`/api/v1/prescriptions/by-patient/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
         ])
         setForm({ ...emptyForm, ...patientRes.data.data })
-        const rxs = rxRes.data.data || []
-        setEmergencyPrescriptions(rxs)
+        setEmergencyPrescriptions(rxRes.data.data || [])
         sessionStorage.removeItem('emergencyToken')
         sessionStorage.removeItem('emergencyPatientId')
       } else {
         const d = await getPatientById(row.id)
         setForm({ ...emptyForm, ...d })
+        try { setHistoryEntries(await getPatientHistory(row.id) || []) } catch { setHistoryEntries([]) }
+        try { setAllergyEntries(await getPatientAllergies(row.id) || []) } catch { setAllergyEntries([]) }
       }
     } else {
       setEditId(null); setForm({ ...emptyForm })
@@ -241,7 +250,7 @@ export default function Patients() {
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{editId ? 'Edit Patient' : 'Add Patient'}</h3>
             <form onSubmit={handleSubmit} className={styles.formGrid}>
-              {['name','mrn','ssn','dateOfBirth','sexAtBirth','medicalHistory','allergies'].map(f => (
+              {['name','mrn','ssn','dateOfBirth','sexAtBirth'].map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
                   <input value={form[f] ?? ''} disabled={!!editId} style={{ background: editId ? '#f5f7fa' : undefined }} onChange={e => setForm({ ...form, [f]: e.target.value })} />
@@ -299,6 +308,63 @@ export default function Patients() {
                     ))
                   )}
                 </div>
+              )}
+              {editId && (
+                <>
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                    <h4 style={{ marginBottom: 8 }}>Medical History</h4>
+                    {historyEntries.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No history entries.</p>}
+                    {historyEntries.map((e: any) => (
+                      <div key={e.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
+                        {e.description}
+                        <span style={{ color: '#909399', marginLeft: 8 }}>— {e.createTime ? e.createTime.substring(0, 10) : ''}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <input value={newHistoryDesc} onChange={e => setNewHistoryDesc(e.target.value)} placeholder="Add history entry..."
+                        style={{ flex: 1, padding: '4px 8px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 12 }} />
+                      <button type="button" className={styles.btnSm} disabled={!newHistoryDesc.trim()} onClick={async () => {
+                        if (!editId || !newHistoryDesc.trim()) return
+                        await addPatientHistory(editId, newHistoryDesc.trim())
+                        setHistoryEntries(await getPatientHistory(editId))
+                        setNewHistoryDesc('')
+                      }}>Add</button>
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                    <h4 style={{ marginBottom: 8 }}>Allergies</h4>
+                    {allergyEntries.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No known allergies.</p>}
+                    {allergyEntries.map((e: any) => (
+                      <div key={e.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>
+                          <strong>{e.allergen}</strong>
+                          {e.reaction && <span style={{ color: '#E6A23C' }}> — {e.reaction}</span>}
+                          {e.severity && <span style={{ color: e.severity === 'SEVERE' ? '#F56C6C' : '#E6A23C', marginLeft: 8 }}>[{e.severity}]</span>}
+                        </span>
+                        <button type="button" className={styles.btnSmDanger} onClick={async () => {
+                          if (!editId || !confirm('Remove this allergy?')) return
+                          await removePatientAllergy(editId, e.id)
+                          setAllergyEntries(await getPatientAllergies(editId))
+                        }}>✕</button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'end' }}>
+                      <div className={styles.formGroup} style={{ flex: 1 }}><label style={{ fontSize: 11 }}>Allergen</label><input value={newAllergy.allergen} onChange={e => setNewAllergy({ ...newAllergy, allergen: e.target.value })} placeholder="e.g. Penicillin" style={{ padding: '4px 8px', fontSize: 12 }} /></div>
+                      <div className={styles.formGroup} style={{ flex: 1 }}><label style={{ fontSize: 11 }}>Reaction</label><input value={newAllergy.reaction} onChange={e => setNewAllergy({ ...newAllergy, reaction: e.target.value })} placeholder="e.g. Anaphylaxis" style={{ padding: '4px 8px', fontSize: 12 }} /></div>
+                      <div className={styles.formGroup} style={{ width: 100 }}><label style={{ fontSize: 11 }}>Severity</label>
+                        <select value={newAllergy.severity} onChange={e => setNewAllergy({ ...newAllergy, severity: e.target.value })} style={{ padding: '4px 6px', fontSize: 12 }}>
+                          <option value="MILD">Mild</option><option value="MODERATE">Moderate</option><option value="SEVERE">Severe</option>
+                        </select>
+                      </div>
+                      <button type="button" className={styles.btnSm} disabled={!newAllergy.allergen.trim()} onClick={async () => {
+                        if (!editId || !newAllergy.allergen.trim()) return
+                        await addPatientAllergy(editId, { allergen: newAllergy.allergen.trim(), reaction: newAllergy.reaction.trim() || null, severity: newAllergy.severity })
+                        setAllergyEntries(await getPatientAllergies(editId))
+                        setNewAllergy({ allergen: '', reaction: '', severity: 'MODERATE' })
+                      }}>+</button>
+                    </div>
+                  </div>
+                </>
               )}
               <div className={styles.formActions}>
                 <button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>
