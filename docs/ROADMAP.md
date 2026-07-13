@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 28 Rounds — All Complete (2026-07-13)**
+> **Status: 29 Rounds — All Complete (2026-07-13)**
 
 ---
 
@@ -1253,3 +1253,32 @@ Re-reviewed with Opus model. Found and fixed 3 critical/high + 4 medium/low issu
 - **HIGH**: `changePassword()` @Transactional, JWT `jti` uniqueness
 - **MEDIUM**: `updateProfile()` + `changePassword()` @Auditable annotations
 - **LOW**: refresh token expiry externalized to configuration
+
+---
+
+# Round 29: Append-Only Medical History & Allergies ✅ Complete
+
+> **Status: Complete (2026-07-13)**
+> **Method: Plan + Implement done directly (not subagent), 9 files**
+
+## Goal
+From Round 28 Part D deferred items: make `medicalHistory` and `allergies` append-only entities with timestamps and provider attribution, instead of mutable text fields on the Patient record.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `MedicalHistoryEntry.java` | **New** | Entity: patientId, description, recordedBy. Extends BaseEntity |
+| `AllergyEntry.java` | **New** | Entity: patientId, allergen, reaction, severity, recordedBy. Extends BaseEntity |
+| `MedicalHistoryEntryRepository.java` | **New** | JPA + findByPatientIdOrderByCreateTimeDesc |
+| `AllergyEntryRepository.java` | **New** | JPA + findByPatientIdOrderByCreateTimeDesc |
+| `PatientController.java` | Modify | GET/POST `/patients/{patientId}/history`, GET/POST/DELETE `/patients/{patientId}/allergies` with @Transactional, @Auditable, ownership checks |
+| `DataInitializer.java` | Modify | Seed 4 allergy entries for patients 100, 101 |
+| `schema.sql` | Modify | 2 new tables (medical_history_entry, allergy_entry) |
+| `api/patient.ts` | Modify | 5 new API functions |
+| `patients/index.tsx` | Modify | Replace medicalHistory/allergies text inputs with append-only entry lists + add-entry forms |
+
+## Verified
+- Seed allergies: Penicillin(SEVERE) + Shellfish(MODERATE) for patient 100 ✅
+- POST history: recordedBy captures userId ✅
+- POST allergy: allergen/reaction/severity all stored ✅

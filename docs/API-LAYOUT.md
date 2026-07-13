@@ -133,6 +133,11 @@ All require `ADMIN` role.
 | GET | `/{id}/case` | ADMIN,DOCTOR | path | FHIR R4 Bundle (Patient + Conditions + Encounters + Medications + Allergies) |
 | POST | `/` | ADMIN,DOCTOR | body: PatientFormDTO | Create patient |
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body | Update patient (evicts cache) |
+| GET | `/{patientId}/history` | ADMIN,DOCTOR | path | List medical history entries (append-only, ordered by date descending) |
+| POST | `/{patientId}/history` | ADMIN,DOCTOR | body: {description} | Add medical history entry (recordedBy captured from auth) |
+| GET | `/{patientId}/allergies` | ADMIN,DOCTOR | path | List allergy entries (append-only) |
+| POST | `/{patientId}/allergies` | ADMIN,DOCTOR | body: {allergen, reaction?, severity?} | Add allergy entry |
+| DELETE | `/{patientId}/allergies/{id}` | ADMIN,DOCTOR | path | Remove allergy entry (soft-delete, with ownership check) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete patient |
 
 ### Patient Portal — `/api/v1/patient/me`
