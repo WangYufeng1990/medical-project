@@ -1236,7 +1236,7 @@ The patient edit form allows direct overwrite of `medicalHistory` and `allergies
 | Backend | `PatientService.update()` | Ignore or reject attempts to modify `medicalHistory` and `allergies` through the general update endpoint |
 
 ### Future (production scope — deferred)
-- `medicalHistory` and `allergies` → separate append-only entities with timestamps and provider attribution
+- ~~`medicalHistory` and `allergies` → append-only entities~~ ✅ Done (Round 29)
 - Patient demographics → versioned records with effective dates
 - Name/DOB changes → dedicated workflow with audit trail
 
