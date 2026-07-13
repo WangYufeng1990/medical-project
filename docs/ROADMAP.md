@@ -1157,42 +1157,85 @@ Removed create/edit/delete from `/system/menus`. Menu structure is defined in co
 
 ---
 
-# Round 28: Clinical Data Immutability — Appointment & Prescription Edit Restrictions [PLANNED]
+# Round 28: Clinical Data Immutability — Comprehensive Audit & Remediation [PLANNED]
 
-> **Status: Plan written (2026-07-13) — executing now**
+> **Status: Audit complete (2026-07-13) — implementation pending**
+
+## Principle
+Medical decisions are historical facts. They should only be **terminated/cancelled** or **corrected with new entries**, never edited in place. An edit that silently overwrites clinical data destroys the audit trail and creates medico-legal risk.
+
+## Audit Results
+
+| Module | Put Endpoints | Issue | Severity |
+|--------|-------------|-------|----------|
+| **Billing** | adjudicate, pay, deny | Insurance payment/adjustment figures overwritten; PAID bills can be re-adjudicated; DRAFT can bypass adjudication via pay(); no version history | **CRITICAL** |
+| **Patient Records** | PUT /{id} | Medical history + allergies overwritten in place; name/DOB/sex edits retroactively alter all historical records; Edit button on every row | **CRITICAL** |
+| **Appointments** | PUT /{id} | Terminal states (2/3/4) are editable — completed visits can be retroactively changed | **CRITICAL** |
+| **Prescriptions** | PUT /{id} | Legal medical order can be fully edited after signing; bypasses CDS re-check; should be cancel-reissue | **CRITICAL** |
+| **Chat** | None | Append-only — messages cannot be edited or deleted | COMPLIANT |
+| **Sys Users** | PUT /{id} | Staff operational data; DEA/license changes unversioned but acceptable | LOW |
+| **Sys Roles** | PUT /{id} | RBAC configuration only — no clinical data | LOW |
+
+---
 
 ## Part A: Appointments — Terminal State Edit Protection
 
 ### Analysis
-Currently all appointment states are editable. This is clinically invalid:
-- **Completed (3)**: The visit happened. Diagnosis, time, doctor are part of the medico-legal record. Editing after the fact destroys clinical audit trail.
-- **Cancelled (2)**: Patient/staff cancelled. Should not be retroactively changed to "arrived" — this is fraud-relevant.
-- **No-Show (4)**: Patient didn't show up. Same as above — a factual record.
+Completed (3), Cancelled (2), and No-Show (4) are terminal states — the visit outcome is a medico-legal record. Editing them destroys the clinical audit trail and is fraud-relevant (e.g., changing "no-show" to "arrived" after the fact).
 
-Only these states are valid for editing: Scheduled (0), Arrived (1), Rescheduled (5), In Progress (6).
-These are transitional states where changes still reflect reality (patient ran late, wrong room assigned, etc.).
+Only transitional states should be editable: Scheduled (0), Arrived (1), Rescheduled (5), In Progress (6).
 
 ### Fix
 | Layer | File | Change |
 |-------|------|--------|
-| Backend | `AppointmentService.update()` | Add status guard: if status in {2, 3, 4} → throw `BusinessException(CONFLICT, "Terminal appointments cannot be modified")` |
-| Frontend | `appointments/index.tsx` | Hide Edit button when status ∈ {2, 3, 4} |
+| Backend | `AppointmentService.update()` | Status guard: if status ∈ {2,3,4} → 409 "Terminal appointments cannot be modified" |
+| Frontend | `appointments/index.tsx` | Hide Edit button when status ∈ {2,3,4} |
 
-## Part B: Prescriptions — Remove Edit, Cancel-Reissue Workflow
+---
+
+## Part B: Prescriptions — Cancel-Reissue Instead of Edit
 
 ### Analysis
-A prescription is a legal medical order — once signed and issued:
-- Modifying drug name/dosage/quantity after the fact destroys the original order
-- If the wrong drug was prescribed, the correct clinical workflow is: **cancel** the erroneous prescription (status → cancelled) + **create** a new one
-- This preserves a clean audit trail: original order → cancelled → corrected order
-- The Edit button enables modification that bypasses CDS re-check (drug interactions, allergy warnings)
-- Current delete (ADMIN only) is also problematic — prescriptions should never be deleted, only cancelled
-
-Only status changes (active → transmitted → cancelled) via explicit transmit/cancel actions, and the transmit button are valid modifications. Full edit of header + items is NOT.
+A prescription is a legal medical order. Editing it in place:
+- Destroys the original order (no record of what was first prescribed)
+- Bypasses CDS re-check (drug interactions, allergy warnings)
+- If wrong drug/dosage was prescribed, correct workflow is: cancel old → create new
 
 ### Fix
 | Layer | File | Change |
 |-------|------|--------|
-| Backend | `PrescriptionController.update()` | No code change — but the endpoint should eventually reject edits to non-active prescriptions, and items modification should force CDS re-check |
-| Frontend | `prescriptions/index.tsx` | Remove Edit button. Keep Transmit (active→transmitted) and Delete (ADMIN only, for seed data cleanup). Add Cancel button for active prescriptions (status→cancelled) |
-| Backend | `PrescriptionController` | Add `PUT /{id}/cancel` — sets rxStatus to "cancelled" (ADMIN,DOCTOR). Controlled substances require additional audit |
+| Frontend | `prescriptions/index.tsx` | Remove Edit button. Add Cancel button for active Rx (status→cancelled) |
+| Backend | `PrescriptionController` | Add `PUT /{id}/cancel` — ADMIN,DOCTOR. Sets rxStatus="cancelled" |
+
+---
+
+## Part C: Billing — Immutable State Transitions
+
+### Analysis
+Billing is a regulated financial transaction. The `adjudicate` endpoint overwrites insurance payment, adjustment, and patient responsibility figures on the Bill row. A PAID bill can be re-adjudicated with different amounts — the original figures are silently lost. The `pay` endpoint allows DRAFT bills to bypass adjudication entirely.
+
+### Fix
+| Layer | File | Change |
+|-------|------|--------|
+| Backend | `BillService.adjudicate()` | Add guard: reject if status is already PAID or DENIED |
+| Backend | `BillService.pay()` | Remove DRAFT from payable states (must go through submit→adjudicate first) |
+| Backend | `BillService.deny()` | Add guard: reject if already PAID (cannot deny a paid bill) |
+| Frontend | `billing/index.tsx` | Hide Adjudicate button for PAID/DENIED; hide Deny for PAID; hide Pay for PAID/DENIED (already partially done — verify) |
+
+---
+
+## Part D: Patient Records — Append-Only Clinical Data
+
+### Analysis
+The patient edit form allows direct overwrite of `medicalHistory` and `allergies` — clinical facts that should be append-only. Name/DOB/sex at birth edits retroactively change all historical records (past encounters now show the new name). For a production system, these need versioned demographics + append-only clinical entries. For the current scope, removing these fields from the edit form and making them staff-managed via dedicated append operations is the minimal fix.
+
+### Fix (Immediate — current scope)
+| Layer | File | Change |
+|-------|------|--------|
+| Frontend | `patients/index.tsx` | Mark `name`, `mrn`, `ssn`, `dateOfBirth`, `sexAtBirth`, `medicalHistory`, `allergies` as readonly in edit form (display-only, not editable) |
+| Backend | `PatientService.update()` | Ignore or reject attempts to modify `medicalHistory` and `allergies` through the general update endpoint |
+
+### Future (production scope — deferred)
+- `medicalHistory` and `allergies` → separate append-only entities with timestamps and provider attribution
+- Patient demographics → versioned records with effective dates
+- Name/DOB changes → dedicated workflow with audit trail
