@@ -140,6 +140,18 @@ public class PrescriptionService {
         }
     }
 
+    @Transactional
+    @Auditable(module = "prescription", action = "CANCEL")
+    public void cancel(Long id) {
+        Prescription p = prescriptionRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Prescription not found"));
+        if (!"active".equals(p.getRxStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Only active prescriptions can be cancelled");
+        }
+        p.setRxStatus("cancelled");
+        prescriptionRepository.save(p);
+    }
+
     private PrescriptionVO toVO(Prescription p) {
         String patientName = patientRepository.findById(p.getPatientId())
                 .map(Patient::getName).orElse("");

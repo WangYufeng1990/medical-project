@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription } from '../../api/prescription'
+import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
@@ -150,8 +150,8 @@ export default function Prescriptions() {
         <tbody>{data.map(r => (
           <tr key={r.id}><td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
             <td>
-              <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
+              {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Cancel prescription?')) { await cancelPrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Cancel</button>}
               <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deletePrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>
             </td></tr>
         ))}</tbody>

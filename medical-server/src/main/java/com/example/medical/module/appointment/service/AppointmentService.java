@@ -56,6 +56,9 @@ public class AppointmentService {
     public void update(Long id, AppointmentFormDTO dto) {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
+        if (a.getStatus() != null && java.util.Set.of(2, 3, 4).contains(a.getStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Terminal appointments cannot be modified");
+        }
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
         dto.applyTo(a);
         appointmentRepository.save(a);

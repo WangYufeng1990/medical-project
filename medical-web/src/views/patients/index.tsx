@@ -241,10 +241,16 @@ export default function Patients() {
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{editId ? 'Edit Patient' : 'Add Patient'}</h3>
             <form onSubmit={handleSubmit} className={styles.formGrid}>
-              {['name','mrn','ssn','dateOfBirth','sexAtBirth','genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
+              {['name','mrn','ssn','dateOfBirth','sexAtBirth','medicalHistory','allergies'].map(f => (
+                <div key={f} className={styles.formGroup}>
+                  <label>{f}</label>
+                  <input value={form[f] ?? ''} disabled={!!editId} style={{ background: editId ? '#f5f7fa' : undefined }} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                </div>
+              ))}
+              {['genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
                 'phoneMobile','phoneHome','phoneWork','email','addressLine1','addressLine2','city','state','zipCode',
                 'emergencyContactName','emergencyContactPhone','emergencyContactRelation',
-                'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider','medicalHistory','allergies'].map(f => (
+                'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider'].map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
                   <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />

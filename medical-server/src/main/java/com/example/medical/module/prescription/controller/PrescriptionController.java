@@ -97,4 +97,11 @@ public class PrescriptionController {
         return Result.ok(Map.of("status", "transmitted", "format", "NCPDP SCRIPT 10.6",
                 "messageId", "RX-" + id, "xml", xml));
     }
+
+    @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    public Result<Void> cancel(@PathVariable Long id) {
+        prescriptionService.cancel(id);
+        return Result.ok();
+    }
 }

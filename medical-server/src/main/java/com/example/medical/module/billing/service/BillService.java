@@ -91,8 +91,8 @@ public class BillService {
     public void pay(Long id, BigDecimal paymentAmount, String paymentMethod) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
-        if (!"PENDING".equals(b.getClaimStatus()) && !"DRAFT".equals(b.getClaimStatus())) {
-            throw new BusinessException(ResultCode.CONFLICT, "Bill is not in a payable state");
+        if (!"PENDING".equals(b.getClaimStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Bill must be in PENDING state to accept payment");
         }
 
         BigDecimal paid = b.getPatientPaidAmount() != null ? b.getPatientPaidAmount() : BigDecimal.ZERO;
@@ -114,6 +114,9 @@ public class BillService {
     public void denyClaim(Long id, String reason) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
+        if ("PAID".equals(b.getClaimStatus()) || "DENIED".equals(b.getClaimStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Cannot deny a bill that is already paid or denied");
+        }
         b.setClaimStatus("DENIED");
         b.setAdjudicationDate(LocalDate.now());
         billRepository.save(b);

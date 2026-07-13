@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { getBillPage, createBill, submitBill, adjudicateBill, denyBill, deleteBill } from '../../api/bill'
+import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill, deleteBill } from '../../api/bill'
 import { getPatientPage } from '../../api/patient'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
@@ -49,6 +49,7 @@ export default function Billing() {
             <td>
               {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (confirm('Submit claim?')) { await submitBill(r.id); refresh() } }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}
+              {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={async () => { const pmt = prompt('Payment amount:'); const pmtMethod = prompt('Payment method (CASH/CARD/CHECK):'); if (pmt && pmtMethod) { await payBill(r.id, { paymentAmount: Number(pmt), paymentMethod: pmtMethod }); refresh() } }}>Pay</button>}
               {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={async () => { const reason = prompt('Denial reason:'); if (reason) { await denyBill(r.id, reason); refresh() } }}>Deny</button>}
               <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteBill(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>
             </td></tr>

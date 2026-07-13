@@ -6,3 +6,4 @@ export const updatePrescription = (id: number, data: any) => request.put(`/presc
 export const deletePrescription = (id: number) => request.delete(`/prescriptions/${id}`)
 export const transmitPrescription = (id: number, pharmacyId: number) => request.put(`/prescriptions/${id}/transmit`, null, { params: { pharmacyId } })
 export const getPrescriptionsByPatientId = (patientId: number) => request.get(`/prescriptions/by-patient/${patientId}`)
+export const cancelPrescription = (id: number) => request.put(`/prescriptions/${id}/cancel`)
