@@ -149,7 +149,7 @@ All require `PATIENT` role.
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
 | GET | `/observations` | `?loinc=` (optional) | My lab results. Without `?loinc=` returns all; with param returns trend for specific test |
 | GET | `/consent` | — | My consent records |
-| PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING/DRAFT → PAID). Ownership verified — cannot pay another patient's bill |
+| PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified. DRAFT is not payable |
 | PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
 
 ### Appointments — `/api/v1/appointments`
@@ -174,6 +174,7 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO | Create + items |
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body: PrescriptionUpdateFormDTO | Update header + replace items |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete + items |
+| PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409) |
 
 ### Billing — `/api/v1/bills`
 
@@ -183,8 +184,8 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | GET | `/{id}` | ADMIN,DOCTOR | path | Bill detail |
 | POST | `/` | ADMIN,DOCTOR | body: BillFormDTO | Create bill (DRAFT) |
 | PUT | `/{id}/submit` | ADMIN,DOCTOR | path | Submit claim (DRAFT → SUBMITTED) |
-| PUT | `/{id}/adjudicate` | ADMIN | body: {insurancePayment, adjustment, claimNumber, adjudicationDate} | Adjudicate (SUBMITTED → PENDING/PAID) |
-| PUT | `/{id}/deny` | ADMIN | body: {reason} | Deny claim (PENDING → DENIED) |
+| PUT | `/{id}/adjudicate` | ADMIN | body: {insurancePayment, adjustment, claimNumber, adjudicationDate} | Adjudicate (SUBMITTED/PENDING). Rejects PAID/DENIED (409) |
+| PUT | `/{id}/deny` | ADMIN | body: {reason} | Deny claim (PENDING → DENIED). Rejects PAID (409) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
 Claim lifecycle: DRAFT → SUBMITTED → (adjudicate) → PENDING → (patient pays) PAID / (staff deny) DENIED.
