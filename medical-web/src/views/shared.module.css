@@ -1,5 +1,7 @@
 .table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.06); border-radius: 6px; overflow: hidden; }
 .table th, .table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #ebeef5; font-size: 13px; }
+.clickableRow { cursor: pointer; transition: background 0.15s; }
+.clickableRow:hover { background: #ecf5ff !important; }
 .table th { background: #f5f7fa; font-weight: 600; color: #606266; }
 .btnPrimary { padding: 8px 16px; background: var(--primary); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
 .btnSm { padding: 4px 10px; background: #f0f2f5; border: 1px solid #dcdfe6; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 12px; }

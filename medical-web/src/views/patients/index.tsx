@@ -163,7 +163,7 @@ export default function Patients() {
         </tr></thead>
         <tbody>
           {data.map(row => (
-            <tr key={row.id} onClick={() => openForm(row, true)} style={{ cursor: 'pointer' }}>
+            <tr key={row.id} className={styles.clickableRow} onClick={() => openForm(row, true)}>
               <td>{row.id}</td><td>{row.mrn}</td><td>{row.name}</td><td>{row.dateOfBirth}</td>
               <td>{maskPhone(row.phoneMobile)}</td><td>{maskEmail(row.email)}</td>
               <td onClick={e => e.stopPropagation()}>
