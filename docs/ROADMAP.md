@@ -1157,6 +1157,19 @@ Removed create/edit/delete from `/system/menus`. Menu structure is defined in co
 
 ---
 
+## Post-Round 28 Refactoring
+
+### Round 20 Revision: Agent Roles Moved to CLAUDE.md
+Merged 4 `.claude/agents/*.md` files into root `CLAUDE.md` as a dedicated **Agent Roles** section. Key decision: **Plan and Review phases are now done directly (not via subagents)** to ensure deep reasoning quality. Only the Implement phase may use subagents for mechanical edits. This addresses review quality issues observed in earlier rounds (review agents using flashed models, reviewing wrong diffs).
+
+### Round 22 Re-Review Fixes
+Opus-powered re-review found 3 critical/high issues in patient token refresh:
+- **CRITICAL**: refresh endpoint used `SignedJWT.parse()` without cryptographic signature verification → switched to `JwtDecoder.decode()` (forged tokens now rejected)
+- **HIGH**: `changePassword()` lacked `@Transactional` → password history + password update now atomic
+- **HIGH**: JWT `jti` was `patientId.toString()` (same for all tokens) → changed to `UUID.randomUUID()`
+
+---
+
 # Round 28: Clinical Data Immutability ✅ Complete
 
 > **Status: Complete (2026-07-13)**
