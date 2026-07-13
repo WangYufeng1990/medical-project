@@ -10,4 +10,4 @@ export const getPatientHistory = (patientId: number) => request.get(`/patients/$
 export const addPatientHistory = (patientId: number, description: string) => request.post(`/patients/${patientId}/history`, { description })
 export const getPatientAllergies = (patientId: number) => request.get(`/patients/${patientId}/allergies`)
 export const addPatientAllergy = (patientId: number, data: any) => request.post(`/patients/${patientId}/allergies`, data)
-export const removePatientAllergy = (patientId: number, id: number) => request.delete(`/patients/${patientId}/allergies/${id}`)
+export const resolvePatientAllergy = (patientId: number, id: number) => request.put(`/patients/${patientId}/allergies/${id}/resolve`)

@@ -29,4 +29,13 @@ public class AllergyEntry extends BaseEntity {
 
     @Column(name = "recorded_by")
     private Long recordedBy;
+
+    @Column(name = "status", length = 20)
+    private String status;
+
+    @Column(name = "resolved_by")
+    private Long resolvedBy;
+
+    @Column(name = "resolved_at")
+    private java.time.LocalDateTime resolvedAt;
 }

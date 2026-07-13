@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, removePatientAllergy } from '../../api/patient'
+import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, resolvePatientAllergy } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { initiateEmergencyAccess } from '../../api/emergency'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
@@ -334,20 +334,24 @@ export default function Patients() {
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                     <h4 style={{ marginBottom: 8 }}>Allergies</h4>
                     {allergyEntries.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No known allergies.</p>}
-                    {allergyEntries.map((e: any) => (
-                      <div key={e.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span>
-                          <strong>{e.allergen}</strong>
-                          {e.reaction && <span style={{ color: '#E6A23C' }}> — {e.reaction}</span>}
-                          {e.severity && <span style={{ color: e.severity === 'SEVERE' ? '#F56C6C' : '#E6A23C', marginLeft: 8 }}>[{e.severity}]</span>}
-                        </span>
-                        <button type="button" className={styles.btnSmDanger} onClick={async () => {
-                          if (!editId || !confirm('Remove this allergy?')) return
-                          await removePatientAllergy(editId, e.id)
-                          setAllergyEntries(await getPatientAllergies(editId))
-                        }}>✕</button>
-                      </div>
-                    ))}
+                    {allergyEntries.map((e: any) => {
+                      const resolved = e.status === 'resolved'
+                      return (
+                        <div key={e.id} style={{ fontSize: 12, color: resolved ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: resolved ? '#f5f5f5' : '#fafafa', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>
+                            <strong style={{ textDecoration: resolved ? 'line-through' : 'none' }}>{e.allergen}</strong>
+                            {e.reaction && <span style={{ color: resolved ? '#909399' : '#E6A23C' }}> — {e.reaction}</span>}
+                            {e.severity && <span style={{ color: resolved ? '#909399' : (e.severity === 'SEVERE' ? '#F56C6C' : '#E6A23C'), marginLeft: 8 }}>[{e.severity}]</span>}
+                            {resolved && e.resolvedAt && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>resolved {e.resolvedAt.substring(0, 10)}</span>}
+                          </span>
+                          {!resolved && <button type="button" className={styles.btnSmDanger} onClick={async () => {
+                            if (!editId || !confirm('Resolve this allergy? This records that the patient no longer has this allergy.')) return
+                            await resolvePatientAllergy(editId, e.id)
+                            setAllergyEntries(await getPatientAllergies(editId))
+                          }}>Resolve</button>}
+                        </div>
+                      )
+                    })}
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'end' }}>
                       <div className={styles.formGroup} style={{ flex: 1 }}><label style={{ fontSize: 11 }}>Allergen</label><input value={newAllergy.allergen} onChange={e => setNewAllergy({ ...newAllergy, allergen: e.target.value })} placeholder="e.g. Penicillin" style={{ padding: '4px 8px', fontSize: 12 }} /></div>
                       <div className={styles.formGroup} style={{ flex: 1 }}><label style={{ fontSize: 11 }}>Reaction</label><input value={newAllergy.reaction} onChange={e => setNewAllergy({ ...newAllergy, reaction: e.target.value })} placeholder="e.g. Anaphylaxis" style={{ padding: '4px 8px', fontSize: 12 }} /></div>

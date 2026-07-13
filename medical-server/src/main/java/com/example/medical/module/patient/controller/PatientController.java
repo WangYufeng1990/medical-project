@@ -122,22 +122,29 @@ public class PatientController {
         e.setAllergen(request.getAllergen());
         e.setReaction(request.getReaction());
         e.setSeverity(request.getSeverity());
+        e.setStatus("active");
         e.setRecordedBy(resolveUserId());
         allergyRepo.save(e);
         return Result.ok();
     }
 
-    @DeleteMapping("/{patientId}/allergies/{id}")
+    @PutMapping("/{patientId}/allergies/{id}/resolve")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "patient", action = "REMOVE_ALLERGY")
-    public Result<Void> removeAllergy(@PathVariable Long patientId, @PathVariable Long id) {
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "RESOLVE_ALLERGY")
+    public Result<Void> resolveAllergy(@PathVariable Long patientId, @PathVariable Long id) {
         AllergyEntry e = allergyRepo.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Allergy entry not found"));
         if (!e.getPatientId().equals(patientId)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
         }
-        allergyRepo.delete(e);
+        if ("resolved".equals(e.getStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Allergy already resolved");
+        }
+        e.setStatus("resolved");
+        e.setResolvedBy(resolveUserId());
+        e.setResolvedAt(java.time.LocalDateTime.now());
+        allergyRepo.save(e);
         return Result.ok();
     }
 
