@@ -1157,9 +1157,11 @@ Removed create/edit/delete from `/system/menus`. Menu structure is defined in co
 
 ---
 
-# Round 28: Clinical Data Immutability — Comprehensive Audit & Remediation [PLANNED]
+# Round 28: Clinical Data Immutability ✅ Complete
 
-> **Status: Audit complete (2026-07-13) — implementation pending**
+> **Status: Complete (2026-07-13)**
+> **Method: Workflow (Plan → 4 parallel pipeline agents → Review), 6 agents, 189K tokens, 120s**
+> **9 files changed**
 
 ## Principle
 Medical decisions are historical facts. They should only be **terminated/cancelled** or **corrected with new entries**, never edited in place. An edit that silently overwrites clinical data destroys the audit trail and creates medico-legal risk.
