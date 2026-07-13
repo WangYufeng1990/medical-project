@@ -1282,3 +1282,9 @@ From Round 28 Part D deferred items: make `medicalHistory` and `allergies` appen
 - Seed allergies: Penicillin(SEVERE) + Shellfish(MODERATE) for patient 100 ✅
 - POST history: recordedBy captures userId ✅
 - POST allergy: allergen/reaction/severity all stored ✅
+
+### Post-Release Revisions
+
+**Allergy resolution (was: silent delete)** — Changed `DELETE /allergies/{id}` to `PUT /allergies/{id}/resolve`. Sets `status=resolved`, records `resolvedBy` + `resolvedAt`. Frontend shows resolved allergies greyed out with strikethrough + resolution date. Re-revoke blocked (409).
+
+**Row click to view patient** — Removed View button. Clicking a patient row opens read-only view mode with history + allergies. Action buttons use `e.stopPropagation()`. Added `.clickableRow` CSS class with `:hover` blue background + `cursor:pointer`.
