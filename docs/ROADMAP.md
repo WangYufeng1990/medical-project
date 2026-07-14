@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 30 Rounds Complete + Rounds 31-32 Planned (2026-07-14)**
+> **Status: 31 Rounds Complete + Round 32 Planned (2026-07-14)**
 
 ---
 
@@ -1345,9 +1345,11 @@ Systematic review of all backend code for: @PreAuthorize coverage, @Auditable on
 
 ---
 
-# Round 31: Frontend Data Freshness — Auto-Refresh on Navigation [PLANNED]
+# Round 31: Frontend Data Freshness ✅ Complete
 
-> **Status: Plan written (2026-07-14) — implementation pending**
+> **Status: Complete (2026-07-14)**
+> **Method: Subagent Implement — 1 agent, 56K tokens, 127s**
+> **15 files changed, 45 insertions**
 
 ## Problem
 Multiple pages don't automatically refresh data when navigated to. Data is stale from the previous visit until the user manually switches pages and comes back. This affects:
