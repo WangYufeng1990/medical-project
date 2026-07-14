@@ -10,6 +10,7 @@ export default function EmergencyAudit() {
   const [reloading, setReloading] = useState(false)
   const [audited, setAudited] = useState<string>('')
   const [patientIdFilter, setPatientIdFilter] = useState('')
+  const [expandedRow, setExpandedRow] = useState<number | null>(null)
 
   const fetchData = async (reloadId?: number) => {
     if (reloadId != null) setReloading(true); else setLoading(true)
@@ -65,8 +66,8 @@ export default function EmergencyAudit() {
           <th>ID</th><th>User ID</th><th>Patient ID</th><th>Reason</th><th>Accessed At</th><th>Expires At</th><th>Audited</th><th>Reviewed By</th><th>Reviewed At</th><th></th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (
-            <tr key={row.id} className={styles.clickableRow}>
+          {data.map((row: any) => (<React.Fragment key={row.id}>
+            <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId}</td>
               <td>{row.patientId}</td>
@@ -76,11 +77,18 @@ export default function EmergencyAudit() {
               <td><span style={{ color: row.audited ? '#67c23a' : '#e6a23c', fontWeight: 600 }}>{row.audited ? 'Yes' : 'No'}</span></td>
               <td>{row.reviewedBy ?? '-'}</td>
               <td>{row.reviewedAt ?? '-'}</td>
-              <td>
+              <td onClick={e => e.stopPropagation()}>
                 <button className={styles.btnSm} disabled={row.audited} onClick={() => handleReview(row.id)}>Review</button>
               </td>
             </tr>
-          ))}
+            {expandedRow === row.id && (
+              <tr key={`${row.id}-detail`}>
+                <td colSpan={10} style={{ padding: '12px 16px', background: '#fafafa', fontSize: 12, color: '#606266', whiteSpace: 'pre-wrap', borderBottom: '2px solid #409EFF' }}>
+                  <strong>Full Reason:</strong> {row.reason || 'No reason provided'}
+                </td>
+              </tr>
+            )}
+          </React.Fragment>))}
           {!loading && data.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No records</td></tr>
           )}

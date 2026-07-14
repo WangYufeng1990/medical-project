@@ -19,6 +19,7 @@ export default function AuditLogs() {
   const [patientIdFilter, setPatientIdFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [expandedRow, setExpandedRow] = useState<number | null>(null)
 
   useEffect(() => {
     getDistinctValues().then(r => {
@@ -113,8 +114,8 @@ export default function AuditLogs() {
           <th>ID</th><th>User</th><th>Username</th><th>Patient</th><th>Module</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th><th>Timestamp</th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (
-            <tr key={row.id} className={styles.clickableRow}>
+          {data.map((row: any) => (<React.Fragment key={row.id}>
+            <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId ?? '-'}</td>
               <td>{row.username ?? '-'}</td>
@@ -126,7 +127,14 @@ export default function AuditLogs() {
               <td>{row.ip ?? '-'}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{row.createTime}</td>
             </tr>
-          ))}
+            {expandedRow === row.id && (
+              <tr key={`${row.id}-detail`}>
+                <td colSpan={10} style={{ padding: '12px 16px', background: '#fafafa', fontSize: 12, color: '#606266', whiteSpace: 'pre-wrap', borderBottom: '2px solid #409EFF' }}>
+                  <strong>Detail:</strong> {row.detail || 'No detail available'}
+                </td>
+              </tr>
+            )}
+          </React.Fragment>))}
           {!loading && data.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No audit logs found</td></tr>
           )}
