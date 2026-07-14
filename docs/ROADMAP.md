@@ -1291,9 +1291,10 @@ From Round 28 Part D deferred items: make `medicalHistory` and `allergies` appen
 
 ---
 
-# Round 30: HIPAA Compliance Remediation [PLANNED]
+# Round 30: HIPAA Compliance Remediation ✅ (CRITICAL done)
 
-> **Status: Audit complete (2026-07-14) — implementation pending**
+> **Status: CRITICAL fixed (2026-07-14) — HIGH/MEDIUM remaining**
+> **Method: Pro model review of 29 controllers, 22 entities, 11 services**
 > **Method: Pro model review of all 29 controllers, 22 entities, 11 services**
 
 ## Audit Scope
