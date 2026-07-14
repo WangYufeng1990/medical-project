@@ -24,4 +24,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
     @Modifying
     @Query("UPDATE AuditLog a SET a.archived = 1 WHERE a.createTime < :cutoff AND a.archived = 0")
     int archiveByCreateTimeBefore(@Param("cutoff") LocalDateTime cutoff);
+
+    @Query("SELECT DISTINCT a.module, a.action FROM AuditLog a WHERE a.module IS NOT NULL AND a.action IS NOT NULL")
+    List<Object[]> findDistinctModulesAndActions();
 }

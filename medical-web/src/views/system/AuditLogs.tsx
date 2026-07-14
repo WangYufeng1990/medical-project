@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAuditLogs } from '../../api/audit'
+import { getAuditLogs, getDistinctValues } from '../../api/audit'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -9,12 +9,21 @@ export default function AuditLogs() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
 
+  const [modules, setModules] = useState<string[]>([])
+  const [actions, setActions] = useState<string[]>([])
   const [moduleFilter, setModuleFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
   const [userIdFilter, setUserIdFilter] = useState('')
   const [patientIdFilter, setPatientIdFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+
+  useEffect(() => {
+    getDistinctValues().then(r => {
+      setModules(r.modules || [])
+      setActions(r.actions || [])
+    }).catch(() => {})
+  }, [])
 
   const buildParams = (p: number) => {
     const params: any = { page: p, size: PAGE_SIZE }
@@ -56,15 +65,19 @@ export default function AuditLogs() {
       <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, color: '#909399' }}>Module</label>
-          <input value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
-            placeholder="e.g. auth"
-            style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, width: 120 }} />
+          <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
+            style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, width: 130 }}>
+            <option value="">All</option>
+            {modules.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, color: '#909399' }}>Action</label>
-          <input value={actionFilter} onChange={e => setActionFilter(e.target.value)}
-            placeholder="e.g. LOGIN_SUCCESS"
-            style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, width: 140 }} />
+          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)}
+            style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, width: 160 }}>
+            <option value="">All</option>
+            {actions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, color: '#909399' }}>User ID</label>

@@ -10,3 +10,5 @@ export const getAuditLogs = (params?: {
   fromDate?: string
   toDate?: string
 }) => request.get('/audit-logs', { params })
+
+export const getDistinctValues = () => request.get('/audit-logs/distinct-values')

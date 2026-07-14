@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/audit-logs")
@@ -16,6 +17,11 @@ import java.time.LocalDate;
 public class AuditLogController {
 
     private final AuditLogService auditLogService;
+
+    @GetMapping("/distinct-values")
+    public Result<Map<String, java.util.List<String>>> distinctValues() {
+        return Result.ok(auditLogService.getDistinctModulesAndActions());
+    }
 
     @GetMapping
     public Result<PageResult<AuditLogVO>> search(
