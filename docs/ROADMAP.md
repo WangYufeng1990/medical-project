@@ -1291,9 +1291,9 @@ From Round 28 Part D deferred items: make `medicalHistory` and `allergies` appen
 
 ---
 
-# Round 30: HIPAA Compliance Remediation ✅ (CRITICAL done)
+# Round 30: HIPAA Compliance Remediation ✅ Complete
 
-> **Status: CRITICAL fixed (2026-07-14) — HIGH/MEDIUM remaining**
+> **Status: Complete (2026-07-14)**
 > **Method: Pro model review of 29 controllers, 22 entities, 11 services**
 > **Method: Pro model review of all 29 controllers, 22 entities, 11 services**
 
@@ -1336,6 +1336,12 @@ Systematic review of all backend code for: @PreAuthorize coverage, @Auditable on
 | PHI encryption | `@Convert(converter = AesAttributeConverter.class)` on all patient entity PHI fields. `AesCryptoUtil.encrypt()` used in DataInitializer seed data. |
 | Soft-delete coverage | All clinical entities extend BaseEntity with `@SQLDelete`/`@SQLRestriction`. |
 | @Version optimistic locking | All BaseEntity-extending entities have `@Version` via inheritance. |
+
+## Results
+- **3 CRITICAL fixed**: ChatService @Auditable, UserProfileController @Transactional/@Auditable
+- **3 HIGH fixed**: EmergencyAccess, PasswordHistory, CdsOverride now extend BaseEntity
+- **2 MEDIUM fixed**: PatientPortalController.updateProfile() @Transactional
+- **8 reference entities** (DrugInteraction, DrugAllergyClass, LoincCatalog, PharmacyDirectory, QualityMeasure) intentionally kept without BaseEntity — lookup/reference data with no PHI
 
 ---
 
