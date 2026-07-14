@@ -40,7 +40,7 @@ export default function Appointments() {
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.duration}m</td><td>{r.visitType}</td>
             <td><span style={{ color: APPOINTMENT_STATUS_COLOR[r.status] ?? '#909399', fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
             <td onClick={e => e.stopPropagation()}>{[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>}
-              <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteAppointment(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button></td></tr>
+              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteAppointment(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>}</td></tr>
         ))}</tbody>
       </table>
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
