@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 29 Rounds Complete + Round 30 Planned (2026-07-14)**
+> **Status: 30 Rounds Complete + Round 31 Planned (2026-07-14)**
 
 ---
 
@@ -1336,3 +1336,31 @@ Systematic review of all backend code for: @PreAuthorize coverage, @Auditable on
 | PHI encryption | `@Convert(converter = AesAttributeConverter.class)` on all patient entity PHI fields. `AesCryptoUtil.encrypt()` used in DataInitializer seed data. |
 | Soft-delete coverage | All clinical entities extend BaseEntity with `@SQLDelete`/`@SQLRestriction`. |
 | @Version optimistic locking | All BaseEntity-extending entities have `@Version` via inheritance. |
+
+---
+
+# Round 31: Frontend Data Freshness — Auto-Refresh on Navigation [PLANNED]
+
+> **Status: Plan written (2026-07-14) — implementation pending**
+
+## Problem
+Multiple pages don't automatically refresh data when navigated to. Data is stale from the previous visit until the user manually switches pages and comes back. This affects:
+- **Audit Logs**: filter/search results don't re-fetch on page load
+- **All list pages**: Patients, Appointments, Prescriptions, Billing show stale data after CRUD operations in other views
+- **Dashboard**: stats don't update when navigating back
+
+Root cause: `useEffect(fetchData, [])` with empty dependency only fires on initial component mount. React Router reuses the same component instance on re-navigation, so the effect doesn't re-run.
+
+## Plan
+
+| File | Change |
+|------|--------|
+| All paginated list views | Add `useLocation()` dependency to `useEffect` to re-fetch on route change |
+| Dashboard | Add `useLocation()` trigger |
+| Audit Logs, Emergency Audit | Add `useLocation()` trigger |
+| Patient portal list views | Same fix |
+
+Alternative considered: React Router's `<Outlet context>` or Redux — rejected as overengineered for current scope.
+
+### Scope
+~15 files, ~2 lines each (import `useLocation`, add `location` to useEffect deps).
