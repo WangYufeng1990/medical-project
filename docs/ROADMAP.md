@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 31 Rounds Complete + Round 32 Planned (2026-07-14)**
+> **Status: 31 Rounds Complete + Rounds 32-33 Planned (2026-07-14)**
 
 ---
 
@@ -1390,3 +1390,37 @@ Audit log table shows 10 columns (ID, User, Username, Patient, Module, Action, T
 
 ### Scope
 2 files, ~30 lines each. Small round.
+
+---
+
+# Round 33: React Query — Client-Side Caching & Optimistic Updates [PLANNED]
+
+> **Status: Plan written (2026-07-14) — future optimization, not urgent**
+
+## Problem
+Round 31's `useLocation()` trigger re-fetches ALL data on every navigation. At scale, this wastes bandwidth and server resources. No client-side caching, deduplication, or stale-while-revalidate.
+
+## Industry Standard
+**React Query (TanStack Query)** is the dominant solution in production healthcare UIs (Epic MyChart, Cerner, Athenahealth):
+- **Write**: `useMutation` with optimistic update — UI updates instantly, server confirms in background
+- **Read**: `useQuery` with stale-while-revalidate — show cached data immediately, re-fetch in background
+- **Deduplication**: multiple components requesting same key → single network call
+- **Window refocus**: auto-refresh when user switches tabs
+- **Retry**: automatic exponential backoff on failure
+- **Pagination/infinite scroll**: built-in support
+
+## Plan
+| Task | Description |
+|------|-------------|
+| Add `@tanstack/react-query` dependency | ~15kB gzipped, zero-config |
+| Wrap App with `QueryClientProvider` | `App.tsx` — single provider at root |
+| Replace `useEffect(fetch)` with `useQuery` | All 15 paginated views — remove manual loading/error state |
+| Replace direct `create/update/delete` calls with `useMutation` | With `onSuccess` → `queryClient.invalidateQueries()` |
+| Remove `useLocation()` deps | No longer needed — React Query handles revalidation |
+
+## Risk
+- New npm dependency (`@tanstack/react-query`). CLAUDE.md requires "no new dependencies without concrete justification." This justifies: 15 files stop re-fetching unconditionally, server load drops significantly, user experience improves.
+- Migration is file-by-file, can be done incrementally.
+
+## Scope
+~15 view files + 1 provider in App.tsx + 1 new dependency. Medium round.
