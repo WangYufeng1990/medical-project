@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 import styles from '../../shared.module.css'
 
@@ -7,6 +8,7 @@ const FLAG_COLOR: Record<string, string> = {
 }
 
 export default function PatientLab() {
+  const location = useLocation()
   const [observations, setObservations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
@@ -16,7 +18,7 @@ export default function PatientLab() {
       .then(r => setObservations(r.data.data || []))
       .catch(() => setObservations([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [location])
 
   const grouped: Record<string, any[]> = {}
   observations.forEach(o => {

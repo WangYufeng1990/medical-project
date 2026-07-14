@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getAuditLogs, getDistinctValues } from '../../api/audit'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 export default function AuditLogs() {
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -51,7 +53,7 @@ export default function AuditLogs() {
     }
   }
 
-  useEffect(() => { fetchData(1) }, [])
+  useEffect(() => { fetchData(1) }, [location])
 
   const handleSearch = () => fetchData(1)
 

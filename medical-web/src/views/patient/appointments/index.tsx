@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 import { APPOINTMENT_STATUS, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientAppointments() {
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -11,7 +13,7 @@ export default function PatientAppointments() {
 
   const fetchAppointments = (p?: number) => patientRequest.get(`/patient/me/appointments?page=${p ?? page}&size=${PAGE_SIZE}`).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
 
-  useEffect(() => { fetchAppointments() }, [page])
+  useEffect(() => { fetchAppointments() }, [page, location])
 
   const canCancel = (s: number) => s !== 2 && s !== 3
 

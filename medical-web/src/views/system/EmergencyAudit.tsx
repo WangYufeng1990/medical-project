@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getEmergencyHistory, reviewEmergencyAccess } from '../../api/emergency'
 import styles from '../shared.module.css'
 
 export default function EmergencyAudit() {
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [reloading, setReloading] = useState(false)
@@ -22,7 +24,7 @@ export default function EmergencyAudit() {
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [location])
 
   const handleReview = async (id: number) => {
     try {

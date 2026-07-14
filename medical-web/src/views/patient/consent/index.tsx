@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 import { CONSENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientConsent() {
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -13,7 +15,7 @@ export default function PatientConsent() {
       .then(r => setData(r.data.data ?? []))
       .catch(() => setData([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [location])
 
   return (
     <div>

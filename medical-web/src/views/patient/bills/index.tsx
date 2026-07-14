@@ -1,9 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientBills() {
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -12,7 +14,7 @@ export default function PatientBills() {
 
   const refresh = () => patientRequest.get(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
 
-  useEffect(() => { refresh() }, [page])
+  useEffect(() => { refresh() }, [page, location])
 
   const openPay = (bill: any) => {
     setPayId(bill.id)

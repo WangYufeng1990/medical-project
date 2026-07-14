@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getRolePage, createRole, updateRole, deleteRole } from '../../../api/role'
 import { PAGE_SIZE } from '../../../utils/labels'
 import styles from '../../shared.module.css'
@@ -11,8 +12,9 @@ export default function Roles() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...ef })
+  const location = useLocation()
 
-  useEffect(() => { getRolePage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  useEffect(() => { getRolePage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
 
   const openForm = (row?: any) => { if (row) { setEditId(row.id); setForm(row) } else { setEditId(null); setForm({ ...ef }) }; setShowForm(true) }
 

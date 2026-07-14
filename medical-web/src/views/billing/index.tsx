@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill, deleteBill } from '../../api/bill'
 import { getPatientPage } from '../../api/patient'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../utils/labels'
@@ -17,7 +18,8 @@ export default function Billing() {
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
   const [adjForm, setAdjForm] = useState({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
 
-  useEffect(() => { getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  const location = useLocation()
+  useEffect(() => { getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
   useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
 
   const refresh = () => getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })

@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, resolvePatientAllergy } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
@@ -11,6 +11,7 @@ const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth
 
 export default function Patients() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [data, setData] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -37,7 +38,7 @@ export default function Patients() {
     setLoading(true)
     try { const r = await getPatientPage({ page, size: PAGE_SIZE }); setData(r.records); setTotal(r.total) } finally { setLoading(false) }
   }
-  useEffect(() => { fetchData() }, [page])
+  useEffect(() => { fetchData() }, [page, location])
 
   const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 
 const cards = [
@@ -10,6 +10,7 @@ const cards = [
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [counts, setCounts] = useState<number[]>([0, 0, 0])
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
 
@@ -21,7 +22,7 @@ export default function PatientDashboard() {
     ]).then(([a, p, b]) => {
       setCounts([a.data.data.total, p.data.data.total, b.data.data.total])
     }).catch(() => {})
-  }, [])
+  }, [location])
 
   return (<div>
     <h2>Welcome, {info.name || 'Patient'}</h2>

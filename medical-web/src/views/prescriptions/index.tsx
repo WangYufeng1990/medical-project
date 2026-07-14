@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
@@ -25,7 +26,8 @@ export default function Prescriptions() {
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
 
-  useEffect(() => { getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  const location = useLocation()
+  useEffect(() => { getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
 
   useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
 

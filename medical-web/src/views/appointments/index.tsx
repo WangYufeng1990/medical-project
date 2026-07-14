@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
@@ -13,8 +14,9 @@ export default function Appointments() {
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
+  const location = useLocation()
 
-  useEffect(() => { getAppointmentPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  useEffect(() => { getAppointmentPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
 
   const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)

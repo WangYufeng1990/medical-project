@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getUserPage, getUserById, createUser, updateUser, deleteUser } from '../../../api/user'
 import { PAGE_SIZE } from '../../../utils/labels'
 import styles from '../../shared.module.css'
@@ -11,8 +12,9 @@ export default function Users() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
+  const location = useLocation()
 
-  useEffect(() => { getUserPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page])
+  useEffect(() => { getUserPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
 
   const openForm = async (row?: any) => {
     if (row) { setEditId(row.id); const d = await getUserById(row.id); setForm({ ...form, ...d, password: '' }) }
