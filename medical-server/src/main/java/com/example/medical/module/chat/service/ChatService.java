@@ -29,6 +29,7 @@ public class ChatService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
+    @com.example.medical.common.audit.Auditable(module = "chat", action = "SEND_MESSAGE")
     public MessageVO sendMessage(Long senderId, Long receiverId, String content) {
         Message msg = new Message();
         msg.setSenderId(senderId);

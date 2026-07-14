@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -45,6 +46,7 @@ public class UserProfileController {
     }
 
     @PutMapping
+    @Transactional
     @Auditable(module = "system", action = "UPDATE_PROFILE")
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                       @Valid @RequestBody ProfileUpdateRequest request) {
@@ -87,6 +89,8 @@ public class UserProfileController {
     }
 
     @PutMapping("/password")
+    @Transactional
+    @Auditable(module = "system", action = "CHANGE_PASSWORD")
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PasswordChangeRequest request) {
         SysUser user = sysUserRepository.findById(loginUser.getUserId())
