@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 31 Rounds Complete + Rounds 32-33 Planned (2026-07-14)**
+> **Status: 32 Rounds Complete + Round 33 Planned (2026-07-14)**
 
 ---
 
@@ -1375,9 +1375,10 @@ Alternative considered: React Router's `<Outlet context>` or Redux — rejected 
 
 ---
 
-# Round 32: Audit Log Detail View — Clickable Row to Expand [PLANNED]
+# Round 32: Audit Log Detail View ✅ Complete
 
-> **Status: Plan written (2026-07-14) — implementation pending**
+> **Status: Complete (2026-07-14)**
+> **2 files changed, 23 insertions**
 
 ## Problem
 Audit log table shows 10 columns (ID, User, Username, Patient, Module, Action, Target, Detail, IP, Timestamp) but the `detail` column contains method parameter dumps (e.g. `login(LoginRequest(username=admin, password=[PROTECTED]))`) that are truncated in the table. Currently rows are not clickable — there's no way to see the full detail text.
