@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 29 Rounds — All Complete (2026-07-13)**
+> **Status: 29 Rounds Complete + Round 30 Planned (2026-07-14)**
 
 ---
 
@@ -1288,3 +1288,50 @@ From Round 28 Part D deferred items: make `medicalHistory` and `allergies` appen
 **Allergy resolution (was: silent delete)** — Changed `DELETE /allergies/{id}` to `PUT /allergies/{id}/resolve`. Sets `status=resolved`, records `resolvedBy` + `resolvedAt`. Frontend shows resolved allergies greyed out with strikethrough + resolution date. Re-revoke blocked (409).
 
 **Row click to view patient** — Removed View button. Clicking a patient row opens read-only view mode with history + allergies. Action buttons use `e.stopPropagation()`. Added `.clickableRow` CSS class with `:hover` blue background + `cursor:pointer`.
+
+---
+
+# Round 30: HIPAA Compliance Remediation [PLANNED]
+
+> **Status: Audit complete (2026-07-14) — implementation pending**
+> **Method: Pro model review of all 29 controllers, 22 entities, 11 services**
+
+## Audit Scope
+Systematic review of all backend code for: @PreAuthorize coverage, @Auditable on CUD/PHI access, @Transactional on mutations, entity integrity (BaseEntity, @SQLDelete, @Version), PHI encryption, ownership verification, token security.
+
+## Findings
+
+### 🔴 CRITICAL
+
+| # | File | Issue | Risk |
+|---|------|-------|------|
+| 1 | `ChatService.sendMessage()` | Missing `@Auditable` | Patient-doctor PHI communication has no audit trail |
+| 2 | `UserProfileController.changePassword()` | Missing `@Transactional` + `@Auditable` | PasswordHistory + SysUser written outside transaction — inconsistent state on partial failure |
+| 3 | `UserProfileController.updateProfile()` | Missing `@Transactional` | Has `@Auditable` but mutation not in transaction boundary |
+
+### 🟡 HIGH
+
+| # | Entity | Issue |
+|---|--------|-------|
+| 4 | `EmergencyAccess` | Does not extend BaseEntity — no soft-delete, no @Version |
+| 5 | `PasswordHistory` | Does not extend BaseEntity — security audit data |
+| 6 | `CdsOverride` | Does not extend BaseEntity — clinical override records |
+
+### 🟠 MEDIUM
+
+| # | File | Issue |
+|---|------|-------|
+| 7 | `PatientPortalController.updateProfile()` | Has `@Auditable` but no `@Transactional` |
+| 8 | 5 reference entities | `DrugInteraction`, `DrugAllergyClass`, `LoincCatalog`, `PharmacyDirectory`, `QualityMeasure` do not extend BaseEntity — reference/lookup data, acceptable but should be unified |
+
+### ✅ VERIFIED
+
+| Category | Result |
+|----------|--------|
+| @PreAuthorize on endpoints | All 29 controllers checked — public endpoints (auth/login, patient/login, patient/refresh) correctly in SecurityConfig permitAll. No unauthorized endpoints found. |
+| Controllers delegate to Services | All CUD controllers delegate @Transactional + @Auditable to service layer correctly (Appointment, Billing, Prescription, Patient, SysUser, SysRole, SysMenu, Consent, Emergency). |
+| Patient-owned resource verification | All patient portal endpoints verify `loginUser.getUserId()` matches resource owner. |
+| Token security | Patient refresh uses JwtDecoder (signature verified). JWT jti uses UUID. Staff refresh dev-mode restriction documented. |
+| PHI encryption | `@Convert(converter = AesAttributeConverter.class)` on all patient entity PHI fields. `AesCryptoUtil.encrypt()` used in DataInitializer seed data. |
+| Soft-delete coverage | All clinical entities extend BaseEntity with `@SQLDelete`/`@SQLRestriction`. |
+| @Version optimistic locking | All BaseEntity-extending entities have `@Version` via inheritance. |
