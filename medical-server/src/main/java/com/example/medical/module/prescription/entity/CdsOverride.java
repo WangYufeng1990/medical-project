@@ -39,7 +39,7 @@ public class CdsOverride extends BaseEntity {
     private LocalDateTime overriddenAt;
 
     @PrePersist
-    protected void onCreate() {
+    protected void prePersist() {
         if (overriddenAt == null) overriddenAt = LocalDateTime.now();
     }
 }

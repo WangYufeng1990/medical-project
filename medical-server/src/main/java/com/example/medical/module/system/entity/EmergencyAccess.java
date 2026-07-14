@@ -33,7 +33,7 @@ public class EmergencyAccess extends BaseEntity {
     private LocalDateTime expiresAt;
 
     @Column(name = "audited")
-    private Integer audited;
+    private Integer audited = 0;
 
     @Column(name = "reviewed_by")
     private Long reviewedBy;
@@ -42,8 +42,7 @@ public class EmergencyAccess extends BaseEntity {
     private LocalDateTime reviewedAt;
 
     @PrePersist
-    protected void onCreate() {
+    protected void prePersist() {
         if (accessedAt == null) accessedAt = LocalDateTime.now();
-        if (audited == null) audited = 0;
     }
 }

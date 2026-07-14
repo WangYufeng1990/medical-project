@@ -30,7 +30,7 @@ public class PasswordHistory extends BaseEntity {
     private LocalDateTime changedAt;
 
     @PrePersist
-    protected void onCreate() {
+    protected void prePersist() {
         if (changedAt == null) changedAt = LocalDateTime.now();
     }
 }
