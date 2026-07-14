@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useLocation } from 'react-router-dom'
 import { getAuditLogs, getDistinctValues } from '../../api/audit'
 import { PAGE_SIZE } from '../../utils/labels'
@@ -114,7 +114,7 @@ export default function AuditLogs() {
           <th>ID</th><th>User</th><th>Username</th><th>Patient</th><th>Module</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th><th>Timestamp</th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (<React.Fragment key={row.id}>
+          {data.map((row: any) => (<Fragment key={row.id}>
             <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId ?? '-'}</td>
@@ -134,7 +134,7 @@ export default function AuditLogs() {
                 </td>
               </tr>
             )}
-          </React.Fragment>))}
+          </Fragment>))}
           {!loading && data.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No audit logs found</td></tr>
           )}

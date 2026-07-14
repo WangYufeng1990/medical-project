@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useLocation } from 'react-router-dom'
 import { getEmergencyHistory, reviewEmergencyAccess } from '../../api/emergency'
 import styles from '../shared.module.css'
@@ -66,7 +66,7 @@ export default function EmergencyAudit() {
           <th>ID</th><th>User ID</th><th>Patient ID</th><th>Reason</th><th>Accessed At</th><th>Expires At</th><th>Audited</th><th>Reviewed By</th><th>Reviewed At</th><th></th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (<React.Fragment key={row.id}>
+          {data.map((row: any) => (<Fragment key={row.id}>
             <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId}</td>
@@ -88,7 +88,7 @@ export default function EmergencyAudit() {
                 </td>
               </tr>
             )}
-          </React.Fragment>))}
+          </Fragment>))}
           {!loading && data.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No records</td></tr>
           )}
