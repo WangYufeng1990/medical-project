@@ -1,18 +1,21 @@
 package com.example.medical.module.prescription.entity;
 
+import com.example.medical.common.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "cds_override")
-public class CdsOverride {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@SQLDelete(sql = "UPDATE cds_override SET is_deleted = 1 WHERE id = ? AND version = ?")
+@SQLRestriction("is_deleted = 0")
+public class CdsOverride extends BaseEntity {
 
     @Column(name = "prescription_id")
     private Long prescriptionId;

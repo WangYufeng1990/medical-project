@@ -84,6 +84,7 @@ public class PatientPortalController {
     }
 
     @PutMapping
+    @Transactional
     @com.example.medical.common.audit.Auditable(module = "patient", action = "UPDATE_PROFILE", phiAccess = true)
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                        @RequestBody Map<String, Object> body) {

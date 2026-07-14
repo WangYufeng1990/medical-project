@@ -277,6 +277,10 @@ CREATE TABLE IF NOT EXISTS password_history (
     user_id BIGINT NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     changed_at TIMESTAMP NULL DEFAULT NULL,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_user_type_id (user_type, user_id)
 );
@@ -310,6 +314,10 @@ CREATE TABLE IF NOT EXISTS emergency_access (
     audited TINYINT NOT NULL DEFAULT 0,
     reviewed_by BIGINT DEFAULT NULL,
     reviewed_at TIMESTAMP NULL DEFAULT NULL,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_emergency_user_id (user_id),
     INDEX idx_emergency_patient_id (patient_id)
@@ -356,6 +364,10 @@ CREATE TABLE IF NOT EXISTS cds_override (
     override_reason VARCHAR(500) NOT NULL,
     overridden_by BIGINT NOT NULL,
     overridden_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT DEFAULT 0,
+    version INT DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_override_prescription (prescription_id)
 );

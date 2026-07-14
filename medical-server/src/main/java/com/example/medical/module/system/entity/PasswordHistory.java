@@ -1,18 +1,21 @@
 package com.example.medical.module.system.entity;
 
+import com.example.medical.common.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "password_history")
-public class PasswordHistory {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@SQLDelete(sql = "UPDATE password_history SET is_deleted = 1 WHERE id = ? AND version = ?")
+@SQLRestriction("is_deleted = 0")
+public class PasswordHistory extends BaseEntity {
 
     @Column(name = "user_type", length = 10)
     private String userType;
