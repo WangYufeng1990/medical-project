@@ -4,7 +4,6 @@ import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
-import com.example.medical.module.prescription.dto.PrescriptionUpdateFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
@@ -59,14 +58,6 @@ public class PrescriptionController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<Void> create(@Valid @RequestBody PrescriptionFormDTO dto) {
         prescriptionService.create(dto);
-        return Result.ok();
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<Void> update(@PathVariable Long id,
-                               @Valid @RequestBody PrescriptionUpdateFormDTO dto) {
-        prescriptionService.update(id, dto);
         return Result.ok();
     }
 
