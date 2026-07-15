@@ -30,7 +30,7 @@ public class AuditLog {
     @Column(name = "module")
     private String module;
 
-    @Column(name = "action")
+    @Column(name = "action", length = 50)
     private String action;
 
     @Column(name = "target_id")

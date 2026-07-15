@@ -1,5 +1,5 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, FormEvent } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
@@ -7,16 +7,33 @@ import styles from '../shared.module.css'
 const emptyForm: any = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', status: 0 }
 
 export default function Appointments() {
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
-  const location = useLocation()
 
-  useEffect(() => { getAppointmentPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
+  const { data: pageData } = useQuery({
+    queryKey: ['appointments', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => getAppointmentPage({ page, size: PAGE_SIZE }),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
+
+  const saveMutation = useMutation({
+    mutationFn: (params: { id?: number; data: any }) =>
+      params.id != null ? updateAppointment(params.id, params.data) : createAppointment(params.data),
+    onSuccess: () => {
+      setShowForm(false)
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteAppointment(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+  })
 
   const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)
@@ -25,10 +42,9 @@ export default function Appointments() {
     setShowForm(true)
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    editId ? await updateAppointment(editId, form) : await createAppointment(form)
-    setShowForm(false); getAppointmentPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })
+    saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
 
   return (
@@ -42,7 +58,7 @@ export default function Appointments() {
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.duration}m</td><td>{r.visitType}</td>
             <td><span style={{ color: APPOINTMENT_STATUS_COLOR[r.status] ?? '#909399', fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
             <td onClick={e => e.stopPropagation()}>{[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>}
-              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteAppointment(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>}</td></tr>
+              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>
         ))}</tbody>
       </table>
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
@@ -62,7 +78,7 @@ export default function Appointments() {
           {editId && <div className={styles.formGroup}><label>Status</label>
             <select disabled={viewOnly} value={form.status} onChange={e => setForm({ ...form, status: Number(e.target.value) })}>
               {Object.entries(APPOINTMENT_STATUS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div>}
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary}>Save</button>}</div></form></div></div>}
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button>}</div></form></div></div>}
     </div>
   )
 }

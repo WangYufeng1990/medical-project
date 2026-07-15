@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 32 Rounds Complete + Round 33 Planned (2026-07-14)**
+> **Status: 32 Rounds Complete + Round 33 In Progress (2026-07-15)**
 
 ---
 
@@ -1394,9 +1394,9 @@ Audit log table shows 10 columns (ID, User, Username, Patient, Module, Action, T
 
 ---
 
-# Round 33: React Query — Client-Side Caching & Optimistic Updates [PLANNED]
+# Round 33: React Query — Client-Side Caching & Optimistic Updates [IN PROGRESS]
 
-> **Status: Plan written (2026-07-14) — future optimization, not urgent**
+> **Status: POC phase (2026-07-15) — Appointments page migrated first, rest to follow after verification**
 
 ## Problem
 Round 31's `useLocation()` trigger re-fetches ALL data on every navigation. At scale, this wastes bandwidth and server resources. No client-side caching, deduplication, or stale-while-revalidate.
@@ -1411,17 +1411,48 @@ Round 31's `useLocation()` trigger re-fetches ALL data on every navigation. At s
 - **Pagination/infinite scroll**: built-in support
 
 ## Plan
-| Task | Description |
-|------|-------------|
-| Add `@tanstack/react-query` dependency | ~15kB gzipped, zero-config |
-| Wrap App with `QueryClientProvider` | `App.tsx` — single provider at root |
-| Replace `useEffect(fetch)` with `useQuery` | All 15 paginated views — remove manual loading/error state |
-| Replace direct `create/update/delete` calls with `useMutation` | With `onSuccess` → `queryClient.invalidateQueries()` |
-| Remove `useLocation()` deps | No longer needed — React Query handles revalidation |
+| Task | Description | Status |
+|------|-------------|--------|
+| Add `@tanstack/react-query` dependency | ~15kB gzipped, zero-config | ✅ Done |
+| Wrap App with `QueryClientProvider` | `main.tsx` — single provider at root | ✅ Done |
+| Migrate Appointments page (POC) | `useQuery` for list, `useMutation` for CUD, remove `useLocation` | ✅ Done |
+| Migrate remaining staff views | ~6 paginated views + dashboard | ⏳ After POC verified |
+| Migrate patient views | ~6 views with `patientRequest` unwrapping | ⏳ After staff views |
+| Remove `useLocation()` deps everywhere | React Query `refetchOnWindowFocus` replaces navigation trigger | ⏳ Progressive |
+
+## Query Key Convention
+```
+[resource, scope, ...params]
+
+Scopes: 'list' (paginated), 'detail' (single by ID), 'sub' (sub-resource),
+        'all' (full dataset), 'tree' (hierarchical), 'stats' (dashboard)
+
+Patient self-data prefixed with 'me':
+  ['me', resource, scope, ...params]   // e.g. ['me', 'appointments', 'list', { page, size }]
+```
+
+### QueryClient Config
+```ts
+staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
+```
+
+## POC Files Changed
+| File | Change |
+|------|--------|
+| `medical-web/package.json` | Added `@tanstack/react-query` |
+| `medical-web/src/main.tsx` | Added `QueryClientProvider` with config |
+| `medical-web/src/views/appointments/index.tsx` | `useQuery` for list, `useMutation` for create/update/delete, `useLocation` removed |
+
+## POC Verification (pending manual test)
+1. List loads with data, pagination works
+2. Create/Edit/Delete mutate + invalidateQueries refreshes list
+3. Navigate away → back: cached data appears instantly, no loading flash
+4. Tab switch after >30s: stale data shows + background refetch
+5. `npm run build` passes (verified: 186 modules, ~340KB JS)
 
 ## Risk
 - New npm dependency (`@tanstack/react-query`). CLAUDE.md requires "no new dependencies without concrete justification." This justifies: 15 files stop re-fetching unconditionally, server load drops significantly, user experience improves.
 - Migration is file-by-file, can be done incrementally.
 
 ## Scope
-~15 view files + 1 provider in App.tsx + 1 new dependency. Medium round.
+~15 view files + 1 provider in main.tsx + 1 new dependency. Medium round.
