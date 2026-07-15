@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 33 Rounds Complete (2026-07-15)**
+> **Status: 33 Rounds Complete + Round 34 Planned (2026-07-15)**
 
 ---
 
@@ -1486,3 +1486,53 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 ## Scope
 ~15 view files + 1 provider in main.tsx + 1 new dependency. Medium round.
+
+---
+
+# Round 34: Audit Fixes & Gap Closure [PLANNED]
+
+> **Status: Audit complete (2026-07-15) — 4 gaps identified, ranked by severity**
+
+## Gap 1 🔴 Patient Export Data Contract Mismatch
+
+**Severity**: HIGH — broken UX
+**File**: `patient/layout/PatientLayout.tsx` line 31
+**Problem**: Frontend calls `patientRequest.get('/patient/me/export', { responseType: 'blob' })` expecting a file download, but backend `PatientPortalController.exportMyData()` returns `Result<PatientDataExport>` JSON. Clicking "Export My Data" downloads a raw JSON file instead of a formatted document.
+**Fix**: Align frontend and backend — either backend returns a blob/file stream, or frontend formats the JSON into a downloadable document.
+
+## Gap 2 🔴 Prescription In-Place Edit Endpoint Still Alive
+
+**Severity**: HIGH — clinical risk
+**File**: `PrescriptionController.java` lines 65-70
+**Problem**: Round 28 mandated cancel-reissue workflow for prescriptions. Frontend Edit button was removed. But `PUT /api/v1/prescriptions/{id}` still exists on the backend. Any API client can bypass CDS re-check and edit a prescription in place.
+**Fix**: Remove the endpoint or add a guard rejecting edits on active/transmitted prescriptions.
+
+## Gap 3 🟡 eCQM Quality Measures — No Frontend
+
+**Severity**: MEDIUM — functional gap
+**Problem**: Backend `quality` module is fully implemented (CMS122/CMS125/CMS165 calculations, `QualityMeasure` entity, `QualityMeasureService`). But there is no frontend page, route, or API module. Quality reporting is invisible to users.
+**Fix**: Add a quality dashboard page under `/system/quality` with measure list, calculation results, and trend view.
+
+## Gap 4 ⚪ `QualityResult` Entity Missing
+
+**Severity**: LOW — data model inconsistency
+**Problem**: ROADMAP Round 9 mentions `quality_result` table and `QualityResult` entity. Neither exists in `schema.sql` or codebase. `QualityMeasureService.calculateReport()` returns `HashMap` instead of a persisted entity.
+**Fix**: Create `quality_result` table + `QualityResult` entity, persist calculation results for audit trail.
+
+## Gap 5 ⚪ Round 17-10 Permission Change Not Landed
+
+**Severity**: LOW — documentation mismatch
+**Problem**: ROADMAP Round 17-10 documents converting `hasRole('ADMIN')` to `hasAuthority('system:user:list')`. All controllers still use `hasRole()`/`hasAnyRole()` exclusively.
+**Fix**: Either implement the permission-based authorization or update ROADMAP to reflect current state.
+
+## Gap 6 ⚪ Integration DTO Pattern Inconsistency
+
+**Severity**: LOW — style deviation
+**Problem**: `AdtEventDTO` and `LabResultDTO` are inbound message schemas, not entity-conversion DTOs. They don't follow the `fromEntity()`/`toEntity()` convention required by CLAUDE.md.
+**Fix**: Document as intentional exception (inbound JSON payload, not JPA-backed), or rename to `AdtEventPayload`/`LabResultPayload` to distinguish from entity DTOs.
+
+## Execution Priority
+1. Gap 2 (Prescription endpoint) — lowest effort, highest clinical risk
+2. Gap 1 (Patient export) — user-facing bug
+3. Gap 3 (eCQM frontend) — new feature, most effort
+4. Gaps 4-6 — documentation/low-priority cleanup
