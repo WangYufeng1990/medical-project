@@ -1,20 +1,29 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, FormEvent } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientBills() {
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [payId, setPayId] = useState<number | null>(null)
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CREDIT_CARD' })
 
-  const refresh = () => patientRequest.get(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
+  const { data: pageData } = useQuery({
+    queryKey: ['me', 'bills', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => patientRequest.get(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`).then(r => r.data.data),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
 
-  useEffect(() => { refresh() }, [page, location])
+  const payMutation = useMutation({
+    mutationFn: (params: { id: number; data: any }) => patientRequest.put(`/patient/me/bills/${params.id}/pay`, params.data),
+    onSuccess: () => {
+      setPayId(null)
+      queryClient.invalidateQueries({ queryKey: ['me', 'bills'] })
+    },
+  })
 
   const openPay = (bill: any) => {
     setPayId(bill.id)
@@ -22,12 +31,10 @@ export default function PatientBills() {
     setPayForm({ paymentAmount: amount, paymentMethod: 'CREDIT_CARD' })
   }
 
-  const handlePay = async (e: FormEvent) => {
+  const handlePay = (e: FormEvent) => {
     e.preventDefault()
     if (!payId) return
-    await patientRequest.put(`/patient/me/bills/${payId}/pay`, { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod })
-    setPayId(null)
-    refresh()
+    payMutation.mutate({ id: payId, data: { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod } })
   }
 
   return (<div>

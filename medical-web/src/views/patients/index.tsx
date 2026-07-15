@@ -1,5 +1,6 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useState, FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, resolvePatientAllergy } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
@@ -11,11 +12,8 @@ const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth
 
 export default function Patients() {
   const navigate = useNavigate()
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
@@ -34,11 +32,26 @@ export default function Patients() {
   const [newHistoryDesc, setNewHistoryDesc] = useState('')
   const [newAllergy, setNewAllergy] = useState({ allergen: '', reaction: '', severity: 'MODERATE' })
 
-  const fetchData = async () => {
-    setLoading(true)
-    try { const r = await getPatientPage({ page, size: PAGE_SIZE }); setData(r.records); setTotal(r.total) } finally { setLoading(false) }
-  }
-  useEffect(() => { fetchData() }, [page, location])
+  const { data: pageData } = useQuery({
+    queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => getPatientPage({ page, size: PAGE_SIZE }),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
+
+  const saveMutation = useMutation({
+    mutationFn: (params: { id?: number; data: any }) =>
+      params.id != null ? updatePatient(params.id, params.data) : createPatient(params.data),
+    onSuccess: () => {
+      setShowForm(false)
+      queryClient.invalidateQueries({ queryKey: ['patients'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deletePatient(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['patients'] }),
+  })
 
   const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)
@@ -72,15 +85,14 @@ export default function Patients() {
     setShowForm(true)
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    editId ? await updatePatient(editId, form) : await createPatient(form)
-    setShowForm(false); fetchData()
+    saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (!confirm('Delete this patient?')) return
-    await deletePatient(id); fetchData()
+    deleteMutation.mutate(id)
   }
 
   const maskPhone = (p: string) => p ? '****' + p.slice(-4) : ''
@@ -117,7 +129,6 @@ export default function Patients() {
   const openEmergencyPrompt = (patientId: number) => {
     setEmergencyPatientId(patientId)
     setEmergencyReason('')
-    setEmergencyResult(null)
   }
 
   const handleInitiateEmergency = async () => {
@@ -127,13 +138,11 @@ export default function Patients() {
       const r = await initiateEmergencyAccess(emergencyPatientId, emergencyReason)
       sessionStorage.setItem('emergencyToken', r.token)
       sessionStorage.setItem('emergencyPatientId', String(r.patientId))
+      const row = data.find(p => p.id === emergencyPatientId)
       setEmergencyPatientId(null)
       setEmergencyReason('')
-      const row = data.find(p => p.id === emergencyPatientId)
-      if (row) {
-        setEmergencySubmitting(false)
-        openForm(row)
-      }
+      setEmergencySubmitting(false)
+      if (row) openForm(row)
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Failed to initiate emergency access')
       setEmergencySubmitting(false)

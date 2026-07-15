@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import styles from '../../shared.module.css'
 
@@ -8,17 +7,13 @@ const FLAG_COLOR: Record<string, string> = {
 }
 
 export default function PatientLab() {
-  const location = useLocation()
-  const [observations, setObservations] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
 
-  useEffect(() => {
-    patientRequest.get('/patient/me/observations')
-      .then(r => setObservations(r.data.data || []))
-      .catch(() => setObservations([]))
-      .finally(() => setLoading(false))
-  }, [location])
+  const { data, isLoading } = useQuery({
+    queryKey: ['me', 'lab'],
+    queryFn: () => patientRequest.get('/patient/me/observations').then(r => r.data.data ?? []),
+  })
+  const observations = data ?? []
 
   const grouped: Record<string, any[]> = {}
   observations.forEach(o => {
@@ -31,13 +26,13 @@ export default function PatientLab() {
     <div>
       <h2 style={{ marginBottom: 20 }}>{info.name || 'Patient'} — Lab Results</h2>
 
-      {loading && <p style={{ color: '#909399', fontSize: 13 }}>Loading...</p>}
+      {isLoading && <p style={{ color: '#909399', fontSize: 13 }}>Loading...</p>}
 
-      {!loading && observations.length === 0 && (
+      {!isLoading && observations.length === 0 && (
         <p style={{ color: '#909399', fontSize: 13 }}>No lab results found.</p>
       )}
 
-      {!loading && observations.length > 0 && (
+      {!isLoading && observations.length > 0 && (
         <table className={styles.table}>
           <thead>
             <tr>

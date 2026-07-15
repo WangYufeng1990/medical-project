@@ -1,24 +1,38 @@
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProfile, updateProfile, changePassword } from '../../api/user'
 import styles from '../shared.module.css'
 
 export default function Profile() {
-  const [profile, setProfile] = useState<any>({})
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<any>({})
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '' })
   const [showPwd, setShowPwd] = useState(false)
 
-  useEffect(() => { getProfile().then(setProfile) }, [])
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => getProfile(),
+  })
 
-  const handleUpdate = async () => {
-    await updateProfile(profile)
-    alert('Updated')
-  }
+  useEffect(() => {
+    if (profile) setForm(profile)
+  }, [profile])
 
-  const handleChangePwd = async () => {
-    await changePassword(pwdForm)
-    alert('Password changed')
-    setShowPwd(false)
-  }
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => updateProfile(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      alert('Updated')
+    },
+  })
+
+  const pwdMutation = useMutation({
+    mutationFn: (data: any) => changePassword(data),
+    onSuccess: () => {
+      setShowPwd(false)
+      alert('Password changed')
+    },
+  })
 
   return (
     <div>
@@ -28,11 +42,11 @@ export default function Profile() {
           {['realName','phone','email','gender','npi','licenseState','taxonomyCode','credentials','specialty'].map(f => (
             <div key={f} className={styles.formGroup}>
               <label>{f}</label>
-              <input value={profile[f] ?? ''} onChange={e => setProfile({ ...profile, [f]: e.target.value })} />
+              <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
             </div>
           ))}
         </div>
-        <button className={styles.btnPrimary} onClick={handleUpdate} style={{ marginTop: 16 }}>Update Profile</button>
+        <button className={styles.btnPrimary} onClick={() => updateMutation.mutate(form)} style={{ marginTop: 16 }}>Update Profile</button>
         <button className={styles.btnSm} onClick={() => setShowPwd(!showPwd)} style={{ marginLeft: 8, marginTop: 16 }}>Change Password</button>
 
         {showPwd && (
@@ -41,7 +55,7 @@ export default function Profile() {
               <input type="password" value={pwdForm.oldPassword} onChange={e => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} /></div>
             <div className={styles.formGroup} style={{ marginBottom: 8 }}><label>New Password</label>
               <input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({ ...pwdForm, newPassword: e.target.value })} /></div>
-            <button className={styles.btnPrimary} onClick={handleChangePwd}>Change Password</button>
+            <button className={styles.btnPrimary} onClick={() => pwdMutation.mutate(pwdForm)}>Change Password</button>
           </div>
         )}
       </div>

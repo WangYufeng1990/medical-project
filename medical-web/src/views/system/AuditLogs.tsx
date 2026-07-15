@@ -1,65 +1,48 @@
-import { useState, useEffect, Fragment } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, Fragment } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getAuditLogs, getDistinctValues } from '../../api/audit'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 export default function AuditLogs() {
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-
-  const [modules, setModules] = useState<string[]>([])
-  const [actions, setActions] = useState<string[]>([])
   const [moduleFilter, setModuleFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
   const [userIdFilter, setUserIdFilter] = useState('')
   const [patientIdFilter, setPatientIdFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [searchParams, setSearchParams] = useState<{ page: number; filters: Record<string, any> }>({ page: 1, filters: {} })
   const [expandedRow, setExpandedRow] = useState<number | null>(null)
 
-  useEffect(() => {
-    getDistinctValues().then(r => {
-      setModules(r.modules || [])
-      setActions(r.actions || [])
-    }).catch(() => {})
-  }, [])
+  const { data: distinctData } = useQuery({
+    queryKey: ['audit', 'distinct'],
+    queryFn: () => getDistinctValues(),
+    staleTime: 5 * 60_000,
+  })
+  const modules: string[] = distinctData?.modules ?? []
+  const actions: string[] = distinctData?.actions ?? []
 
-  const buildParams = (p: number) => {
-    const params: any = { page: p, size: PAGE_SIZE }
-    if (moduleFilter !== '') params.module = moduleFilter
-    if (actionFilter !== '') params.action = actionFilter
-    if (userIdFilter !== '') params.userId = Number(userIdFilter)
-    if (patientIdFilter !== '') params.patientId = Number(patientIdFilter)
-    if (fromDate !== '') params.fromDate = fromDate
-    if (toDate !== '') params.toDate = toDate
-    return params
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ['audit', 'list', searchParams],
+    queryFn: () => getAuditLogs({ page: searchParams.page, size: PAGE_SIZE, ...searchParams.filters }),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
+  const page = searchParams.page
+
+  const handleSearch = () => {
+    const filters: Record<string, any> = {}
+    if (moduleFilter !== '') filters.module = moduleFilter
+    if (actionFilter !== '') filters.action = actionFilter
+    if (userIdFilter !== '') filters.userId = Number(userIdFilter)
+    if (patientIdFilter !== '') filters.patientId = Number(patientIdFilter)
+    if (fromDate !== '') filters.fromDate = fromDate
+    if (toDate !== '') filters.toDate = toDate
+    setSearchParams({ page: 1, filters })
   }
 
-  const fetchData = async (p: number) => {
-    setLoading(true)
-    try {
-      const r = await getAuditLogs(buildParams(p))
-      setData(r.records)
-      setTotal(r.total)
-      setPage(p)
-    } catch {
-      setData([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchData(1) }, [location])
-
-  const handleSearch = () => fetchData(1)
-
-  const handlePrev = () => { if (page > 1) fetchData(page - 1) }
-  const handleNext = () => { if (page * PAGE_SIZE < total) fetchData(page + 1) }
+  const handlePrev = () => { if (page > 1) setSearchParams(prev => ({ ...prev, page: prev.page - 1 })) }
+  const handleNext = () => { if (page * PAGE_SIZE < total) setSearchParams(prev => ({ ...prev, page: prev.page + 1 })) }
 
   return (
     <div>
@@ -104,8 +87,8 @@ export default function AuditLogs() {
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
             style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }} />
         </div>
-        <button className={styles.btnPrimary} onClick={handleSearch} disabled={loading}>
-          {loading ? '...' : 'Search'}
+        <button className={styles.btnPrimary} onClick={handleSearch} disabled={isLoading}>
+          {isLoading ? '...' : 'Search'}
         </button>
       </div>
 
@@ -135,7 +118,7 @@ export default function AuditLogs() {
               </tr>
             )}
           </Fragment>))}
-          {!loading && data.length === 0 && (
+          {!isLoading && data.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No audit logs found</td></tr>
           )}
         </tbody>

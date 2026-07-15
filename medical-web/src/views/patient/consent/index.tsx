@@ -1,32 +1,25 @@
-import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { CONSENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientConsent() {
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    patientRequest.get('/patient/me/consent')
-      .then(r => setData(r.data.data ?? []))
-      .catch(() => setData([]))
-      .finally(() => setLoading(false))
-  }, [location])
+  const { data, isLoading } = useQuery({
+    queryKey: ['me', 'consent'],
+    queryFn: () => patientRequest.get('/patient/me/consent').then(r => r.data.data ?? []),
+  })
+  const list = data ?? []
 
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>My Consents</h2>
-      {loading ? (
+      {isLoading ? (
         <div style={{ color: '#909399', padding: 20 }}>Loading...</div>
       ) : (
         <table className={styles.table}>
           <thead><tr><th>ID</th><th>Type</th><th>Scope</th><th>Status</th><th>Signed At</th></tr></thead>
           <tbody>
-            {data.map(c => (
+            {list.map(c => (
               <tr key={c.id}>
                 <td>{c.id}</td>
                 <td>{c.consentType}</td>
@@ -35,7 +28,7 @@ export default function PatientConsent() {
                 <td>{c.consentDate ?? c.createTime}</td>
               </tr>
             ))}
-            {data.length === 0 && (
+            {list.length === 0 && (
               <tr><td colSpan={5} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No consent records</td></tr>
             )}
           </tbody>

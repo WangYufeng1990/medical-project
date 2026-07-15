@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { getDashboardStats } from '../../api/dashboard'
 import styles from './style.module.css'
 
@@ -12,14 +12,15 @@ const cards = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const location = useLocation()
-  const [values, setValues] = useState<(number | string)[]>([0, 0, 0, 0])
 
-  useEffect(() => {
-    getDashboardStats().then(stats => {
-      setValues([stats.totalPatients, stats.todayAppointments, stats.pendingBills, stats.monthlyPrescriptions])
-    }).catch(() => {})
-  }, [location])
+  const { data: stats } = useQuery({
+    queryKey: ['dashboard', 'stats'],
+    queryFn: () => getDashboardStats(),
+  })
+
+  const values: (number | string)[] = stats
+    ? [stats.totalPatients, stats.todayAppointments, stats.pendingBills, stats.monthlyPrescriptions]
+    : [0, 0, 0, 0]
 
   return (
     <div>

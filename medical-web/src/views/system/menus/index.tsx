@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getMenuTree } from '../../../api/menu'
 import styles from '../../shared.module.css'
 
 export default function Menus() {
-  const [data, setData] = useState<any[]>([])
+  const { data: tree } = useQuery({
+    queryKey: ['menus', 'tree'],
+    queryFn: () => getMenuTree(),
+    staleTime: 5 * 60_000,
+  })
+  const nodes = tree ?? []
 
-  useEffect(() => { getMenuTree().then(setData) }, [])
-
-  // Flatten tree for display: each node shown with indentation
   const flatten = (nodes: any[], level: number = 0): any[] => {
     const result: any[] = []
     nodes.forEach(n => {
@@ -19,7 +21,7 @@ export default function Menus() {
     return result
   }
 
-  const flat = flatten(data)
+  const flat = flatten(nodes)
 
   return (
     <div>

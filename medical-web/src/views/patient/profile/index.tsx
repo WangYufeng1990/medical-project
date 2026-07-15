@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import styles from '../../shared.module.css'
 
@@ -24,38 +25,39 @@ const FIELDS = [
 ]
 
 export default function PatientProfile() {
-  const [profile, setProfile] = useState<any>({})
+  const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<any>({})
   const [showPwd, setShowPwd] = useState(false)
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '' })
 
+  const { data: profile } = useQuery({
+    queryKey: ['me', 'profile'],
+    queryFn: () => patientRequest.get('/patient/me').then(r => r.data.data),
+  })
+
   useEffect(() => {
-    patientRequest.get('/patient/me').then(r => {
-      setProfile(r.data.data)
-      setForm(r.data.data)
-    })
-  }, [])
+    if (profile) setForm(profile)
+  }, [profile])
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    await patientRequest.put('/patient/me', form)
-    setProfile({ ...form })
-    setEditing(false)
-    alert('Profile updated')
-  }
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => patientRequest.put('/patient/me', data),
+    onSuccess: () => {
+      setEditing(false)
+      queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
+      alert('Profile updated')
+    },
+  })
 
-  const handlePasswordChange = async (e: FormEvent) => {
-    e.preventDefault()
-    try {
-      await patientRequest.put('/patient/me/password', pwdForm)
+  const pwdMutation = useMutation({
+    mutationFn: (data: any) => patientRequest.put('/patient/me/password', data),
+    onSuccess: () => {
       setShowPwd(false)
       setPwdForm({ oldPassword: '', newPassword: '' })
+      queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
       alert('Password changed')
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Password change failed')
-    }
-  }
+    },
+  })
 
   return (<div>
     <h2 style={{ marginBottom: 20 }}>My Profile
@@ -64,7 +66,7 @@ export default function PatientProfile() {
     </h2>
     <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 700, marginTop: 16 }}>
       {editing ? (
-        <form onSubmit={handleSubmit} className={styles.formGrid}>
+        <form onSubmit={e => { e.preventDefault(); updateMutation.mutate(form) }} className={styles.formGrid}>
           {FIELDS.map(f => (
             <div key={f.key} className={styles.formGroup}>
               <label>{f.label}</label>
@@ -74,7 +76,7 @@ export default function PatientProfile() {
             </div>
           ))}
           <div className={styles.formActions}>
-            <button type="button" className={styles.btnSm} onClick={() => { setEditing(false); setForm(profile) }}>Cancel</button>
+            <button type="button" className={styles.btnSm} onClick={() => { setEditing(false); setForm(profile ?? {}) }}>Cancel</button>
             <button type="submit" className={styles.btnPrimary}>Save</button>
           </div>
         </form>
@@ -82,7 +84,7 @@ export default function PatientProfile() {
         FIELDS.map(f => (
           <div key={f.key} style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}>
             <span style={{ color: '#909399', fontSize: 12 }}>{f.label}</span><br />
-            <span>{profile[f.key] ?? '-'}</span>
+            <span>{profile?.[f.key] ?? '-'}</span>
           </div>
         ))
       )}
@@ -90,7 +92,7 @@ export default function PatientProfile() {
 
     {showPwd && <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 500, marginTop: 16 }}>
       <h3 style={{ marginBottom: 16 }}>Change Password</h3>
-      <form onSubmit={handlePasswordChange} className={styles.formGrid}>
+      <form onSubmit={e => { e.preventDefault(); pwdMutation.mutate(pwdForm) }} className={styles.formGrid}>
         <div className={styles.formGroup}><label>Current Password</label><input type="password" value={pwdForm.oldPassword} onChange={e => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} /></div>
         <div className={styles.formGroup}><label>New Password</label><input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({ ...pwdForm, newPassword: e.target.value })} /></div>
         <div className={styles.formActions}>

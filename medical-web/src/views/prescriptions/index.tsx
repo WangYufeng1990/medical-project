@@ -1,5 +1,5 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, FormEvent } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
@@ -12,13 +12,11 @@ const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', dur
 const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: '', prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
-  const [patients, setPatients] = useState<any[]>([])
   const [transmitId, setTransmitId] = useState<number | null>(null)
   const [pharmacies, setPharmacies] = useState<any[]>([])
   const [selectedPharmacy, setSelectedPharmacy] = useState('')
@@ -26,10 +24,44 @@ export default function Prescriptions() {
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
 
-  const location = useLocation()
-  useEffect(() => { getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
+  const { data: pageData } = useQuery({
+    queryKey: ['prescriptions', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => getPrescriptionPage({ page, size: PAGE_SIZE }),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
 
-  useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
+  const { data: patients } = useQuery({
+    queryKey: ['patients', 'all'],
+    queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: (params: { id?: number; payload: any }) =>
+      params.id != null ? updatePrescription(params.id, params.payload) : createPrescription(params.payload),
+    onSuccess: () => {
+      setShowForm(false)
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
+    },
+  })
+
+  const transmitMutation = useMutation({
+    mutationFn: (params: { id: number; pharmacyId: number }) => transmitPrescription(params.id, params.pharmacyId),
+    onSuccess: () => {
+      setTransmitId(null)
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => cancelPrescription(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deletePrescription(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
+  })
 
   const openTransmit = async (id: number) => {
     setTransmitId(id)
@@ -38,11 +70,9 @@ export default function Prescriptions() {
     setPharmacies(ph || [])
   }
 
-  const handleTransmit = async () => {
+  const handleTransmit = () => {
     if (!transmitId || !selectedPharmacy) return
-    await transmitPrescription(transmitId, Number(selectedPharmacy))
-    setTransmitId(null)
-    getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })
+    transmitMutation.mutate({ id: transmitId, pharmacyId: Number(selectedPharmacy) })
   }
 
   const openForm = async (row?: any) => {
@@ -70,12 +100,8 @@ export default function Prescriptions() {
     setShowForm(true)
   }
 
-  const doSave = async (payload: any) => {
-    editId ? await updatePrescription(editId, payload) : await createPrescription(payload)
-    getPrescriptionPage({ page, size: PAGE_SIZE }).then(r => {
-      setData(r.records); setTotal(r.total)
-      setShowForm(false)
-    })
+  const doSave = (payload: any) => {
+    saveMutation.mutate({ id: editId ?? undefined, payload })
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -95,23 +121,23 @@ export default function Prescriptions() {
       }))
       const cdsResult = await checkCds({ patientId: payload.patientId, items: cdsItems })
       if (cdsResult.passed === true) {
-        await doSave(payload)
+        doSave(payload)
       } else {
         setPendingCdsPayload(payload)
         setCdsWarnings(cdsResult.warnings ?? [])
         setShowCdsModal(true)
       }
     } catch {
-      await doSave(payload)
+      doSave(payload)
     }
   }
 
-  const handleOverrideSave = async () => {
+  const handleOverrideSave = () => {
     if (!pendingCdsPayload) return
     setShowCdsModal(false)
     setCdsWarnings([])
     setPendingCdsPayload(null)
-    await doSave(pendingCdsPayload)
+    doSave(pendingCdsPayload)
   }
 
   const addItem = () => setForm({ ...form, items: [...form.items, { ...emptyItem }] })
@@ -154,8 +180,8 @@ export default function Prescriptions() {
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
-              {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Cancel prescription?')) { await cancelPrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Cancel</button>}
-              <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deletePrescription(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>
+              {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
+              <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
             </td></tr>
         ))}</tbody>
       </table>
@@ -169,7 +195,7 @@ export default function Prescriptions() {
               <label>Patient</label>
               <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
                 <option value="">-- Select Patient --</option>
-                {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
+                {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
               </select>
             </div>
             <div className={styles.formGroup}><label>Doctor ID</label><input value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })} /></div>

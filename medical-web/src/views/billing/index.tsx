@@ -1,5 +1,5 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, FormEvent } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill, deleteBill } from '../../api/bill'
 import { getPatientPage } from '../../api/patient'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../utils/labels'
@@ -8,33 +8,64 @@ import styles from '../shared.module.css'
 const emptyForm: any = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
 
 export default function Billing() {
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
-  const [patients, setPatients] = useState<any[]>([])
-
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
   const [adjForm, setAdjForm] = useState({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
 
-  const location = useLocation()
-  useEffect(() => { getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) }) }, [page, location])
-  useEffect(() => { getPatientPage({ page: 1, size: 999 }).then(r => setPatients(r.records || [])) }, [])
+  const { data: pageData } = useQuery({
+    queryKey: ['billing', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => getBillPage({ page, size: PAGE_SIZE }),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
 
-  const refresh = () => getBillPage({ page, size: PAGE_SIZE }).then(r => { setData(r.records); setTotal(r.total) })
+  const { data: patients } = useQuery({
+    queryKey: ['patients', 'all'],
+    queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+  })
 
-  const handleCreate = async (e: FormEvent) => {
+  const createMutation = useMutation({
+    mutationFn: (data: any) => createBill(data),
+    onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+  })
+
+  const submitMutation = useMutation({
+    mutationFn: (id: number) => submitBill(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+  })
+
+  const adjudicateMutation = useMutation({
+    mutationFn: (params: { id: number; data: any }) => adjudicateBill(params.id, params.data),
+    onSuccess: () => { setAdjudicateId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+  })
+
+  const payMutation = useMutation({
+    mutationFn: (params: { id: number; data: any }) => payBill(params.id, params.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+  })
+
+  const denyMutation = useMutation({
+    mutationFn: (params: { id: number; reason: string }) => denyBill(params.id, params.reason),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteBill(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+  })
+
+  const handleCreate = (e: FormEvent) => {
     e.preventDefault()
-    await createBill({ ...form, patientId: Number(form.patientId), totalCharge: Number(form.totalCharge), copayAmount: form.copayAmount !== '' ? Number(form.copayAmount) : undefined })
-    setShowForm(false); refresh()
+    createMutation.mutate({ ...form, patientId: Number(form.patientId), totalCharge: Number(form.totalCharge), copayAmount: form.copayAmount !== '' ? Number(form.copayAmount) : undefined })
   }
 
-  const handleAdjudicate = async (e: FormEvent) => {
+  const handleAdjudicate = (e: FormEvent) => {
     e.preventDefault()
     if (!adjudicateId) return
-    await adjudicateBill(adjudicateId, { insurancePayment: Number(adjForm.insurancePayment), adjustment: adjForm.adjustment ? Number(adjForm.adjustment) : 0, claimNumber: adjForm.claimNumber || undefined, adjudicationDate: adjForm.adjudicationDate || undefined })
-    setAdjudicateId(null); refresh()
+    adjudicateMutation.mutate({ id: adjudicateId, data: { insurancePayment: Number(adjForm.insurancePayment), adjustment: adjForm.adjustment ? Number(adjForm.adjustment) : 0, claimNumber: adjForm.claimNumber || undefined, adjudicationDate: adjForm.adjudicationDate || undefined } })
   }
 
   return (
@@ -49,11 +80,11 @@ export default function Billing() {
             <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
             <td onClick={e => e.stopPropagation()}>
-              {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (confirm('Submit claim?')) { await submitBill(r.id); refresh() } }}>Submit</button>}
+              {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={() => { if (confirm('Submit claim?')) submitMutation.mutate(r.id) }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}
-              {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={async () => { const pmt = prompt('Payment amount:'); const pmtMethod = prompt('Payment method (CASH/CARD/CHECK):'); if (pmt && pmtMethod) { await payBill(r.id, { paymentAmount: Number(pmt), paymentMethod: pmtMethod }); refresh() } }}>Pay</button>}
-              {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={async () => { const reason = prompt('Denial reason:'); if (reason) { await denyBill(r.id, reason); refresh() } }}>Deny</button>}
-              <button className={styles.btnSmDanger} onClick={async () => { if (confirm('Delete?')) { await deleteBill(r.id); setData(d => d.filter(x => x.id !== r.id)) } }}>Del</button>
+              {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={() => { const pmt = prompt('Payment amount:'); const pmtMethod = prompt('Payment method (CASH/CARD/CHECK):'); if (pmt && pmtMethod) payMutation.mutate({ id: r.id, data: { paymentAmount: Number(pmt), paymentMethod: pmtMethod } }) }}>Pay</button>}
+              {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={() => { const reason = prompt('Denial reason:'); if (reason) denyMutation.mutate({ id: r.id, reason }) }}>Deny</button>}
+              <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
             </td></tr>
         ))}</tbody>
       </table>
@@ -65,7 +96,7 @@ export default function Billing() {
             <label>Patient</label>
             <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
               <option value="">-- Select --</option>
-              {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div className={styles.formGroup}><label>Total Charge</label><input type="number" step="0.01" value={form.totalCharge} onChange={e => setForm({ ...form, totalCharge: e.target.value })} /></div>

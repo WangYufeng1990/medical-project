@@ -1,39 +1,40 @@
-import { useState, useEffect, Fragment } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, Fragment } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getEmergencyHistory, reviewEmergencyAccess } from '../../api/emergency'
 import styles from '../shared.module.css'
 
 export default function EmergencyAudit() {
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [reloading, setReloading] = useState(false)
-  const [audited, setAudited] = useState<string>('')
+  const queryClient = useQueryClient()
+  const [audited, setAudited] = useState('')
   const [patientIdFilter, setPatientIdFilter] = useState('')
+  const [searchFilters, setSearchFilters] = useState<Record<string, any>>({})
   const [expandedRow, setExpandedRow] = useState<number | null>(null)
 
-  const fetchData = async (reloadId?: number) => {
-    if (reloadId != null) setReloading(true); else setLoading(true)
-    try {
+  const { data, isLoading } = useQuery({
+    queryKey: ['emergency', 'list', searchFilters],
+    queryFn: () => {
       const params: any = {}
-      if (audited !== '') params.audited = Number(audited)
-      if (patientIdFilter !== '') params.patientId = Number(patientIdFilter)
-      const r = await getEmergencyHistory(params)
-      setData(r)
-    } catch { setData([]) } finally {
-      setLoading(false); setReloading(false)
-    }
+      if (searchFilters.audited !== undefined && searchFilters.audited !== '') params.audited = searchFilters.audited
+      if (searchFilters.patientId) params.patientId = searchFilters.patientId
+      return getEmergencyHistory(params)
+    },
+  })
+  const list = data ?? []
+
+  const reviewMutation = useMutation({
+    mutationFn: (id: number) => reviewEmergencyAccess(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emergency'] }),
+  })
+
+  const handleSearch = () => {
+    const filters: any = {}
+    if (audited !== '') filters.audited = Number(audited)
+    if (patientIdFilter !== '') filters.patientId = Number(patientIdFilter)
+    setSearchFilters(filters)
   }
 
-  useEffect(() => { fetchData() }, [location])
-
-  const handleReview = async (id: number) => {
-    try {
-      await reviewEmergencyAccess(id)
-      fetchData()
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Review failed')
-    }
+  const handleReview = (id: number) => {
+    reviewMutation.mutate(id)
   }
 
   return (
@@ -56,8 +57,8 @@ export default function EmergencyAudit() {
             <option value="1">Reviewed</option>
           </select>
         </div>
-        <button className={styles.btnPrimary} onClick={() => fetchData()} disabled={loading}>
-          {loading ? '...' : 'Search'}
+        <button className={styles.btnPrimary} onClick={handleSearch} disabled={isLoading}>
+          {isLoading ? '...' : 'Search'}
         </button>
       </div>
 
@@ -66,7 +67,7 @@ export default function EmergencyAudit() {
           <th>ID</th><th>User ID</th><th>Patient ID</th><th>Reason</th><th>Accessed At</th><th>Expires At</th><th>Audited</th><th>Reviewed By</th><th>Reviewed At</th><th></th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (<Fragment key={row.id}>
+          {list.map((row: any) => (<Fragment key={row.id}>
             <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId}</td>
@@ -89,7 +90,7 @@ export default function EmergencyAudit() {
               </tr>
             )}
           </Fragment>))}
-          {!loading && data.length === 0 && (
+          {!isLoading && list.length === 0 && (
             <tr><td colSpan={10} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No records</td></tr>
           )}
         </tbody>

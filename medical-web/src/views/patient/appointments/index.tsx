@@ -1,33 +1,32 @@
-import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { APPOINTMENT_STATUS, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientAppointments() {
-  const location = useLocation()
-  const [data, setData] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
-  const [cancelling, setCancelling] = useState<number | null>(null)
 
-  const fetchAppointments = (p?: number) => patientRequest.get(`/patient/me/appointments?page=${p ?? page}&size=${PAGE_SIZE}`).then(r => { setData(r.data.data.records); setTotal(r.data.data.total) })
+  const { data: pageData } = useQuery({
+    queryKey: ['me', 'appointments', 'list', { page, size: PAGE_SIZE }],
+    queryFn: () => patientRequest.get(`/patient/me/appointments?page=${page}&size=${PAGE_SIZE}`).then(r => r.data.data),
+  })
+  const data = pageData?.records ?? []
+  const total = pageData?.total ?? 0
 
-  useEffect(() => { fetchAppointments() }, [page, location])
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => patientRequest.put(`/patient/me/appointments/${id}/cancel`),
+    onSuccess: () => {
+      setPage(1)
+      queryClient.invalidateQueries({ queryKey: ['me', 'appointments'] })
+    },
+  })
 
   const canCancel = (s: number) => s !== 2 && s !== 3
 
-  const handleCancel = async (id: number) => {
-    setCancelling(id)
-    try {
-      await patientRequest.put(`/patient/me/appointments/${id}/cancel`)
-      fetchAppointments(1)
-      setPage(1)
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Cancel failed')
-    } finally {
-      setCancelling(null)
-    }
+  const handleCancel = (id: number) => {
+    if (confirm('Cancel this appointment?')) cancelMutation.mutate(id)
   }
 
   return (<div>
@@ -40,9 +39,9 @@ export default function PatientAppointments() {
           <td><span style={{ color: APPOINTMENT_STATUS_COLOR[r.status] ?? '#909399', fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
           <td>
             {canCancel(r.status) && (
-              <button className={styles.btnSmDanger} disabled={cancelling === r.id}
-                onClick={() => { if (confirm('Cancel this appointment?')) handleCancel(r.id) }}>
-                {cancelling === r.id ? '...' : 'Cancel'}
+              <button className={styles.btnSmDanger} disabled={cancelMutation.isPending && cancelMutation.variables === r.id}
+                onClick={() => handleCancel(r.id)}>
+                {cancelMutation.isPending && cancelMutation.variables === r.id ? '...' : 'Cancel'}
               </button>
             )}
           </td>

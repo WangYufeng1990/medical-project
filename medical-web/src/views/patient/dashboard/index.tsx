@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 
 const cards = [
@@ -10,19 +10,24 @@ const cards = [
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
-  const location = useLocation()
-  const [counts, setCounts] = useState<number[]>([0, 0, 0])
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
 
-  useEffect(() => {
-    Promise.all([
-      patientRequest.get('/patient/me/appointments?page=1&size=1'),
-      patientRequest.get('/patient/me/prescriptions?page=1&size=1'),
-      patientRequest.get('/patient/me/bills?page=1&size=1'),
-    ]).then(([a, p, b]) => {
-      setCounts([a.data.data.total, p.data.data.total, b.data.data.total])
-    }).catch(() => {})
-  }, [location])
+  const fetchCount = (url: string) => patientRequest.get(url).then(r => r.data.data)
+
+  const { data: aptData } = useQuery({
+    queryKey: ['me', 'appointments', 'list', { page: 1, size: 1 }],
+    queryFn: () => fetchCount('/patient/me/appointments?page=1&size=1'),
+  })
+  const { data: rxData } = useQuery({
+    queryKey: ['me', 'prescriptions', 'list', { page: 1, size: 1 }],
+    queryFn: () => fetchCount('/patient/me/prescriptions?page=1&size=1'),
+  })
+  const { data: billData } = useQuery({
+    queryKey: ['me', 'bills', 'list', { page: 1, size: 1 }],
+    queryFn: () => fetchCount('/patient/me/bills?page=1&size=1'),
+  })
+
+  const counts = [aptData?.total ?? 0, rxData?.total ?? 0, billData?.total ?? 0]
 
   return (<div>
     <h2>Welcome, {info.name || 'Patient'}</h2>
