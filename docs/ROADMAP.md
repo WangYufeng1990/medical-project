@@ -1489,29 +1489,27 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 ---
 
-# Round 34: Audit Fixes & Gap Closure [PLANNED]
+# Round 34: Audit Fixes & Gap Closure [IN PROGRESS]
 
-> **Status: Audit complete (2026-07-15) — 4 gaps identified, ranked by severity**
+> **Status: 3 of 6 gaps fixed (2026-07-16)**
 
-## Gap 1 🔴 Patient Export Data Contract Mismatch
+## Gap 1 🔴 Patient Export Data Contract Mismatch ✅ Fixed
 
 **Severity**: HIGH — broken UX
-**File**: `patient/layout/PatientLayout.tsx` line 31
-**Problem**: Frontend calls `patientRequest.get('/patient/me/export', { responseType: 'blob' })` expecting a file download, but backend `PatientPortalController.exportMyData()` returns `Result<PatientDataExport>` JSON. Clicking "Export My Data" downloads a raw JSON file instead of a formatted document.
-**Fix**: Align frontend and backend — either backend returns a blob/file stream, or frontend formats the JSON into a downloadable document.
+**Fix**: Frontend now parses JSON response correctly: extracts `res.data.data` (the PatientDataExport object), formats as indented JSON, downloads as `health-data-YYYY-MM-DD.json`.
+**Commit**: `e3f4fa0`
 
-## Gap 2 🔴 Prescription In-Place Edit Endpoint Still Alive
+## Gap 2 🔴 Prescription In-Place Edit Endpoint Still Alive ✅ Fixed
 
 **Severity**: HIGH — clinical risk
-**File**: `PrescriptionController.java` lines 65-70
-**Problem**: Round 28 mandated cancel-reissue workflow for prescriptions. Frontend Edit button was removed. But `PUT /api/v1/prescriptions/{id}` still exists on the backend. Any API client can bypass CDS re-check and edit a prescription in place.
-**Fix**: Remove the endpoint or add a guard rejecting edits on active/transmitted prescriptions.
+**Fix**: Removed `PUT /api/v1/prescriptions/{id}` endpoint, `PrescriptionService.update()`, and `PrescriptionUpdateFormDTO`.
+**Commit**: `6df8035`
 
-## Gap 3 🟡 eCQM Quality Measures — No Frontend
+## Gap 3 🟡 eCQM Quality Measures — No Frontend ✅ Fixed
 
 **Severity**: MEDIUM — functional gap
-**Problem**: Backend `quality` module is fully implemented (CMS122/CMS125/CMS165 calculations, `QualityMeasure` entity, `QualityMeasureService`). But there is no frontend page, route, or API module. Quality reporting is invisible to users.
-**Fix**: Add a quality dashboard page under `/system/quality` with measure list, calculation results, and trend view.
+**Fix**: Created `api/quality.ts`, `views/system/QualityMeasures.tsx` with measure list + report panel. Route `/system/quality` under AdminGuard. Sidebar link under admin section.
+**Commit**: `5bec26d`
 
 ## Gap 4 ⚪ `QualityResult` Entity Missing
 
