@@ -1517,11 +1517,10 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 **Problem**: ROADMAP Round 9 mentions `quality_result` table and `QualityResult` entity. Neither exists in `schema.sql` or codebase. `QualityMeasureService.calculateReport()` returns `HashMap` instead of a persisted entity.
 **Fix**: Create `quality_result` table + `QualityResult` entity, persist calculation results for audit trail.
 
-## Gap 5 ⚪ Round 17-10 Permission Change Not Landed
+## Gap 5 ⚪ Round 17-10 Permission Change Not Landed ✅ Resolved (by design)
 
 **Severity**: LOW — documentation mismatch
-**Problem**: ROADMAP Round 17-10 documents converting `hasRole('ADMIN')` to `hasAuthority('system:user:list')`. All controllers still use `hasRole()`/`hasAnyRole()` exclusively.
-**Fix**: Either implement the permission-based authorization or update ROADMAP to reflect current state.
+**Decision**: Keep `hasRole()`/`hasAnyRole()` — this is the standard Spring Security RBAC pattern. The menu `permission` codes (`system:user:list`, `patient:list`, etc.) are used for frontend menu visibility filtering, not backend authorization. Converting to `hasAuthority()` would add complexity with no security benefit — roles already map cleanly to clinical access levels (ADMIN = full access, DOCTOR = clinical access, PATIENT = self-service).
 
 ## Gap 6 ⚪ Integration DTO Pattern Inconsistency
 
