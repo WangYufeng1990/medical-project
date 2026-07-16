@@ -26,6 +26,7 @@ import PatientConsent from './views/patient/consent'
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
 import PatientLab from './views/patient/lab'
+import QualityMeasures from './views/system/QualityMeasures'
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="loinc" element={<LoincCatalog />} />
         <Route path="system/roles" element={<AdminGuard><Roles /></AdminGuard>} />
         <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />
+        <Route path="system/quality" element={<AdminGuard><QualityMeasures /></AdminGuard>} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>

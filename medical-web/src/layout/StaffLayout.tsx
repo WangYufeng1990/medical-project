@@ -17,6 +17,7 @@ const menuItems = [
   { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
   { path: '/system/menus', label: 'Menus', icon: '📋', roles: ['ADMIN'] },
+  { path: '/system/quality', label: 'eCQM Quality', icon: '📈', roles: ['ADMIN'] },
   { path: '/audit-logs', label: 'Audit Logs', icon: '📋', roles: ['ADMIN'] },
 ]
 
