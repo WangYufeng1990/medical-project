@@ -2,6 +2,7 @@ package com.example.medical.module.quality.controller;
 
 import com.example.medical.common.result.Result;
 import com.example.medical.module.quality.entity.QualityMeasure;
+import com.example.medical.module.quality.entity.QualityResult;
 import com.example.medical.module.quality.service.QualityMeasureService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,5 +27,10 @@ public class QualityController {
     @GetMapping("/measures/{cmsId}/report")
     public Result<Map<String, Object>> getReport(@PathVariable String cmsId) {
         return Result.ok(qualityMeasureService.calculateReport(cmsId));
+    }
+
+    @GetMapping("/measures/{cmsId}/history")
+    public Result<List<QualityResult>> getHistory(@PathVariable String cmsId) {
+        return Result.ok(qualityMeasureService.getHistory(cmsId));
     }
 }

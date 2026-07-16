@@ -384,6 +384,22 @@ CREATE TABLE IF NOT EXISTS quality_measure (
     PRIMARY KEY (id)
 );
 
+CREATE TABLE IF NOT EXISTS quality_result (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    cms_id VARCHAR(20) NOT NULL,
+    denominator BIGINT NOT NULL DEFAULT 0,
+    exclusions BIGINT NOT NULL DEFAULT 0,
+    eligible_denominator BIGINT NOT NULL DEFAULT 0,
+    numerator BIGINT NOT NULL DEFAULT 0,
+    performance_rate DOUBLE NOT NULL DEFAULT 0,
+    performance_target VARCHAR(200) DEFAULT NULL,
+    report_period_months INT DEFAULT 12,
+    calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_qr_cms_id (cms_id),
+    INDEX idx_qr_calculated_at (calculated_at)
+);
+
 CREATE TABLE IF NOT EXISTS pharmacy_directory (
     id BIGINT NOT NULL AUTO_INCREMENT,
     npi VARCHAR(10) UNIQUE NOT NULL,

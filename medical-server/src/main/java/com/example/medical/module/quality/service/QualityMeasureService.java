@@ -3,10 +3,13 @@ package com.example.medical.module.quality.service;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.quality.entity.QualityMeasure;
+import com.example.medical.module.quality.entity.QualityResult;
 import com.example.medical.module.quality.repository.QualityMeasureRepository;
+import com.example.medical.module.quality.repository.QualityResultRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +20,7 @@ import java.util.Map;
 public class QualityMeasureService {
 
     private final QualityMeasureRepository qualityMeasureRepository;
+    private final QualityResultRepository qualityResultRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public List<QualityMeasure> listMeasures() {
@@ -37,6 +41,8 @@ public class QualityMeasureService {
         double performance = eligibleDenominator > 0
                 ? (double) numerator / eligibleDenominator * 100.0 : 0.0;
 
+        String target = getTarget(cmsId);
+
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("cmsId", measure.getCmsId());
         report.put("title", measure.getTitle());
@@ -46,8 +52,33 @@ public class QualityMeasureService {
         report.put("eligibleDenominator", eligibleDenominator);
         report.put("numerator", numerator);
         report.put("performanceRate", Math.round(performance * 10.0) / 10.0);
-        report.put("performanceTarget", getTarget(cmsId));
+        report.put("performanceTarget", target);
+
+        persistResult(cmsId, denominator, exclusions, eligibleDenominator, numerator,
+                Math.round(performance * 10.0) / 10.0, target,
+                measure.getReportPeriodMonths());
+
         return report;
+    }
+
+    public List<QualityResult> getHistory(String cmsId) {
+        return qualityResultRepository.findByCmsIdOrderByCalculatedAtDesc(cmsId);
+    }
+
+    @Transactional
+    protected void persistResult(String cmsId, long denominator, long exclusions,
+                                  long eligibleDenominator, long numerator, double performanceRate,
+                                  String target, Integer reportPeriodMonths) {
+        QualityResult result = new QualityResult();
+        result.setCmsId(cmsId);
+        result.setDenominator(denominator);
+        result.setExclusions(exclusions);
+        result.setEligibleDenominator(eligibleDenominator);
+        result.setNumerator(numerator);
+        result.setPerformanceRate(performanceRate);
+        result.setPerformanceTarget(target);
+        result.setReportPeriodMonths(reportPeriodMonths);
+        qualityResultRepository.save(result);
     }
 
     private long executeCount(String query) {
