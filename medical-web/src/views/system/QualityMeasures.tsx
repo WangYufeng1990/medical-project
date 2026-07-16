@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getMeasures, getMeasureReport, getMeasureHistory } from '../../api/quality'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getMeasures, getMeasureReport, calculateMeasureReport, getMeasureHistory } from '../../api/quality'
 import styles from '../shared.module.css'
 
 export default function QualityMeasures() {
+  const queryClient = useQueryClient()
   const [selectedCmsId, setSelectedCmsId] = useState<string | null>(null)
 
   const { data: measures, isLoading } = useQuery({
@@ -21,6 +22,14 @@ export default function QualityMeasures() {
     queryKey: ['quality', 'history', selectedCmsId],
     queryFn: () => getMeasureHistory(selectedCmsId!),
     enabled: selectedCmsId != null,
+  })
+
+  const calculateMutation = useMutation({
+    mutationFn: (cmsId: string) => calculateMeasureReport(cmsId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quality', 'report', selectedCmsId] })
+      queryClient.invalidateQueries({ queryKey: ['quality', 'history', selectedCmsId] })
+    },
   })
 
   return (
@@ -55,13 +64,27 @@ export default function QualityMeasures() {
 
         {selectedCmsId && (
           <div style={{ background: '#fff', borderRadius: 8, padding: 24, boxShadow: '0 1px 6px rgba(0,0,0,.06)' }}>
-            <h3 style={{ marginBottom: 8 }}>{report?.title ?? selectedCmsId}</h3>
-            <p style={{ fontSize: 12, color: '#909399', marginBottom: 20 }}>
-              Reporting period: {report?.reportPeriodMonths ?? '-'} months
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <div>
+                <h3 style={{ marginBottom: 4 }}>{report?.title ?? selectedCmsId}</h3>
+                <p style={{ fontSize: 12, color: '#909399', margin: 0 }}>
+                  Reporting period: {report?.reportPeriodMonths ?? '-'} months
+                  {report?.calculatedAt && (
+                    <span> · Last calculated: {report.calculatedAt.replace('T', ' ').substring(0, 19)}</span>
+                  )}
+                </p>
+              </div>
+              <button
+                className={styles.btnPrimary}
+                disabled={calculateMutation.isPending}
+                onClick={() => calculateMutation.mutate(selectedCmsId)}
+                style={{ whiteSpace: 'nowrap' }}>
+                {calculateMutation.isPending ? 'Calculating...' : 'Calculate Now'}
+              </button>
+            </div>
 
             {reportLoading ? (
-              <div style={{ color: '#909399', padding: 20, textAlign: 'center' }}>Calculating...</div>
+              <div style={{ color: '#909399', padding: 20, textAlign: 'center' }}>Loading...</div>
             ) : report ? (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
@@ -121,7 +144,7 @@ export default function QualityMeasures() {
                 )}
               </>
             ) : (
-              <div style={{ color: '#909399', padding: 20, textAlign: 'center' }}>Report unavailable</div>
+              <div style={{ color: '#909399', padding: 20, textAlign: 'center' }}>No data yet. Click "Calculate Now" to run the first calculation.</div>
             )}
           </div>
         )}

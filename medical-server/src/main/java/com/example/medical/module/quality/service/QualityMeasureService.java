@@ -7,6 +7,7 @@ import com.example.medical.module.quality.entity.QualityResult;
 import com.example.medical.module.quality.repository.QualityMeasureRepository;
 import com.example.medical.module.quality.repository.QualityResultRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class QualityMeasureService {
@@ -27,6 +29,29 @@ public class QualityMeasureService {
         return qualityMeasureRepository.findAll();
     }
 
+    public Map<String, Object> getReport(String cmsId) {
+        QualityMeasure measure = qualityMeasureRepository.findByCmsId(cmsId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND,
+                        "Measure not found: " + cmsId));
+
+        QualityResult latest = qualityResultRepository
+                .findTopByCmsIdOrderByCalculatedAtDesc(cmsId).orElse(null);
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("cmsId", measure.getCmsId());
+        report.put("title", measure.getTitle());
+        report.put("reportPeriodMonths", measure.getReportPeriodMonths());
+        report.put("denominator", latest != null ? latest.getDenominator() : 0L);
+        report.put("exclusions", latest != null ? latest.getExclusions() : 0L);
+        report.put("eligibleDenominator", latest != null ? latest.getEligibleDenominator() : 0L);
+        report.put("numerator", latest != null ? latest.getNumerator() : 0L);
+        report.put("performanceRate", latest != null ? latest.getPerformanceRate() : 0.0);
+        report.put("performanceTarget", getTarget(cmsId));
+        report.put("calculatedAt", latest != null ? latest.getCalculatedAt() : null);
+        return report;
+    }
+
+    @Transactional
     public Map<String, Object> calculateReport(String cmsId) {
         QualityMeasure measure = qualityMeasureRepository.findByCmsId(cmsId)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND,
@@ -42,6 +67,12 @@ public class QualityMeasureService {
                 ? (double) numerator / eligibleDenominator * 100.0 : 0.0;
 
         String target = getTarget(cmsId);
+        double rate = Math.round(performance * 10.0) / 10.0;
+
+        persistResult(cmsId, denominator, exclusions, eligibleDenominator, numerator,
+                rate, target, measure.getReportPeriodMonths());
+
+        log.info("eCQM {} calculated: rate={}% denom={} num={}", cmsId, rate, denominator, numerator);
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("cmsId", measure.getCmsId());
@@ -51,14 +82,22 @@ public class QualityMeasureService {
         report.put("exclusions", exclusions);
         report.put("eligibleDenominator", eligibleDenominator);
         report.put("numerator", numerator);
-        report.put("performanceRate", Math.round(performance * 10.0) / 10.0);
+        report.put("performanceRate", rate);
         report.put("performanceTarget", target);
-
-        persistResult(cmsId, denominator, exclusions, eligibleDenominator, numerator,
-                Math.round(performance * 10.0) / 10.0, target,
-                measure.getReportPeriodMonths());
-
+        report.put("calculatedAt", java.time.LocalDateTime.now());
         return report;
+    }
+
+    public void calculateAllMeasures() {
+        List<QualityMeasure> measures = qualityMeasureRepository.findAll();
+        for (QualityMeasure m : measures) {
+            try {
+                calculateReport(m.getCmsId());
+            } catch (Exception e) {
+                log.error("Failed to calculate eCQM {}", m.getCmsId(), e);
+            }
+        }
+        log.info("Daily eCQM calculation complete: {} measures", measures.size());
     }
 
     public List<QualityResult> getHistory(String cmsId) {

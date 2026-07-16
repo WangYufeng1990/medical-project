@@ -26,6 +26,12 @@ public class QualityController {
 
     @GetMapping("/measures/{cmsId}/report")
     public Result<Map<String, Object>> getReport(@PathVariable String cmsId) {
+        return Result.ok(qualityMeasureService.getReport(cmsId));
+    }
+
+    @PostMapping("/measures/{cmsId}/calculate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> calculateReport(@PathVariable String cmsId) {
         return Result.ok(qualityMeasureService.calculateReport(cmsId));
     }
 
