@@ -356,44 +356,78 @@ public class DataInitializer implements CommandLineRunner {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime collectionDate = LocalDateTime.of(2026, 5, 28, 8, 30);
 
-        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "7.2", "10*3/uL",
-                "4.0-11.0", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.8", "10*6/uL",
-                "4.5-5.9", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "14.1", "g/dL",
-                "13.5-17.5", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "4544-3", "HCT", "42.5", "%",
-                "38.0-50.0", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "777-3", "PLT", "245", "10*3/uL",
-                "150-400", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "135", "mg/dL",
-                "70-99", "H", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "7.8", "%",
-                "<5.7", "H", "final", collectionDate, now);
+        // === Patient 100: Historical trend data (4 dates: Feb → May 2026) ===
+        // Feb 15 — poorly controlled diabetes + hypertension
+        LocalDateTime d1 = LocalDateTime.of(2026, 2, 15, 9, 0);
+        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "8.9", "%", "<5.7", "H", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "155", "mg/dL", "70-99", "H", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "146", "mmHg", "<140", "H", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "92", "mmHg", "<90", "H", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "8.1", "10*3/uL", "4.0-11.0", "N", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.5", "10*6/uL", "4.5-5.9", "N", "final", d1, now);
+        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "13.8", "g/dL", "13.5-17.5", "N", "final", d1, now);
 
-        // Blood pressure for hypertensive patient 100
-        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "132", "mmHg",
-                "<140", "N", "final", collectionDate, now);
-        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "85", "mmHg",
-                "<90", "N", "final", collectionDate, now);
+        // Mar 20 — improving after medication adjustment
+        LocalDateTime d2 = LocalDateTime.of(2026, 3, 20, 9, 0);
+        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "8.3", "%", "<5.7", "H", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "142", "mg/dL", "70-99", "H", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "138", "mmHg", "<140", "N", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "88", "mmHg", "<90", "N", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "7.5", "10*3/uL", "4.0-11.0", "N", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.7", "10*6/uL", "4.5-5.9", "N", "final", d2, now);
+        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "14.0", "g/dL", "13.5-17.5", "N", "final", d2, now);
 
-        // Blood pressure for hypertensive patient 103
-        LocalDateTime bpDate103 = LocalDateTime.of(2026, 6, 1, 10, 0);
-        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "145", "mmHg",
-                "<140", "H", "final", bpDate103, now);
-        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "92", "mmHg",
-                "<90", "H", "final", bpDate103, now);
+        // Apr 25 — continued improvement
+        LocalDateTime d3 = LocalDateTime.of(2026, 4, 25, 9, 0);
+        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "8.1", "%", "<5.7", "H", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "140", "mg/dL", "70-99", "H", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "135", "mmHg", "<140", "N", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "86", "mmHg", "<90", "N", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "7.0", "10*3/uL", "4.0-11.0", "N", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.9", "10*6/uL", "4.5-5.9", "N", "final", d3, now);
+        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "14.2", "g/dL", "13.5-17.5", "N", "final", d3, now);
 
-        // HbA1c for diabetic patient 103
-        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "8.5", "%",
-                "<5.7", "H", "final", bpDate103, now);
+        // May 28 — near target (existing visit)
+        jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "7.8", "%", "<5.7", "H", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "2345-7", "Glucose", "135", "mg/dL", "70-99", "H", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "132", "mmHg", "<140", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "85", "mmHg", "<90", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "6690-2", "WBC", "7.2", "10*3/uL", "4.0-11.0", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "789-8", "RBC", "4.8", "10*6/uL", "4.5-5.9", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "718-7", "HGB", "14.1", "g/dL", "13.5-17.5", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "4544-3", "HCT", "42.5", "%", "38.0-50.0", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "777-3", "PLT", "245", "10*3/uL", "150-400", "N", "final", collectionDate, now);
+
+        // === Patient 103: Historical trend data (4 dates: Mar → Jun 2026) ===
+        LocalDateTime p3d1 = LocalDateTime.of(2026, 3, 1, 10, 0);
+        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "9.2", "%", "<5.7", "H", "final", p3d1, now);
+        jdbcTemplate.update(sql, 103L, "2345-7", "Glucose", "180", "mg/dL", "70-99", "H", "final", p3d1, now);
+        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "152", "mmHg", "<140", "H", "final", p3d1, now);
+        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "95", "mmHg", "<90", "H", "final", p3d1, now);
+
+        LocalDateTime p3d2 = LocalDateTime.of(2026, 4, 1, 10, 0);
+        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "8.8", "%", "<5.7", "H", "final", p3d2, now);
+        jdbcTemplate.update(sql, 103L, "2345-7", "Glucose", "165", "mg/dL", "70-99", "H", "final", p3d2, now);
+        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "148", "mmHg", "<140", "H", "final", p3d2, now);
+        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "93", "mmHg", "<90", "H", "final", p3d2, now);
+
+        LocalDateTime p3d3 = LocalDateTime.of(2026, 5, 1, 10, 0);
+        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "8.6", "%", "<5.7", "H", "final", p3d3, now);
+        jdbcTemplate.update(sql, 103L, "2345-7", "Glucose", "155", "mg/dL", "70-99", "H", "final", p3d3, now);
+        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "146", "mmHg", "<140", "H", "final", p3d3, now);
+        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "91", "mmHg", "<90", "H", "final", p3d3, now);
+
+        LocalDateTime p3d4 = LocalDateTime.of(2026, 6, 1, 10, 0);
+        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "8.5", "%", "<5.7", "H", "final", p3d4, now);
+        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "145", "mmHg", "<140", "H", "final", p3d4, now);
+        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "92", "mmHg", "<90", "H", "final", p3d4, now);
 
         // Mammogram for female patient 103 (CMS125 numerator)
         LocalDateTime mammoDate = LocalDateTime.of(2026, 3, 15, 9, 0);
         jdbcTemplate.update(sql, 103L, "24606-6", "Mammogram", "Screening mammogram completed", null,
                 null, "N", "final", mammoDate, now);
 
-        log.info("Observation seed data: 12 results (CBC+metabolic for p100, BP for p100/p103, HbA1c for p103, mammogram for p103)");
+        log.info("Observation seed data: 42 results (4-date trends for p100/p103 + mammogram)");
     }
 
     private void seedLoincCatalog() {
