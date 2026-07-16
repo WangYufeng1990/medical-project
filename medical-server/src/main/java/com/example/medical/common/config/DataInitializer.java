@@ -125,7 +125,7 @@ public class DataInitializer implements CommandLineRunner {
 
         jdbcTemplate.update(patientSql,
                 100L, "MRN-10001", AesCryptoUtil.encrypt("123-45-6789"), AesCryptoUtil.encrypt("James Anderson"),
-                AesCryptoUtil.encrypt("1998-02-14"), "M", "Male",
+                "1998-02-14", "M", "Male",
                 "White", "Not Hispanic or Latino", "en", "Single",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0101"), null, AesCryptoUtil.encrypt("james.anderson@email.com"),
@@ -134,12 +134,12 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Mary Anderson"), AesCryptoUtil.encrypt("312-555-0102"), "Spouse",
                 AesCryptoUtil.encrypt("Blue Cross Blue Shield"), AesCryptoUtil.encrypt("BCBS-7890123"),
                 AesCryptoUtil.encrypt("GRP-88421"),
-                AesCryptoUtil.encrypt("Hypertension diagnosed 2024-03; Type 2 Diabetes diagnosed 2025-01"),
-                AesCryptoUtil.encrypt("Penicillin; Shellfish"), now, now);
+                "Hypertension diagnosed 2024-03; Type 2 Diabetes diagnosed 2025-01",
+                "Penicillin; Shellfish", now, now);
 
         jdbcTemplate.update(patientSql,
                 101L, "MRN-10002", AesCryptoUtil.encrypt("987-65-4321"), AesCryptoUtil.encrypt("Maria Garcia"),
-                AesCryptoUtil.encrypt("1991-08-23"), "F", "Female",
+                "1991-08-23", "F", "Female",
                 "White", "Hispanic or Latino", "es", "Married",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0201"), AesCryptoUtil.encrypt("312-555-0202"),
@@ -149,12 +149,12 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Carlos Garcia"), AesCryptoUtil.encrypt("312-555-0203"), "Spouse",
                 AesCryptoUtil.encrypt("Aetna"), AesCryptoUtil.encrypt("AET-4567890"),
                 AesCryptoUtil.encrypt("GRP-99234"),
-                AesCryptoUtil.encrypt("Iron-deficiency anemia diagnosed 2023; Seasonal allergic asthma"),
-                AesCryptoUtil.encrypt("Dust mites; Pollen"), now, now);
+                "Iron-deficiency anemia diagnosed 2023; Seasonal allergic asthma",
+                "Dust mites; Pollen", now, now);
 
         jdbcTemplate.update(patientSql,
                 102L, "MRN-10003", null, AesCryptoUtil.encrypt("Robert Chen"),
-                AesCryptoUtil.encrypt("1981-05-07"), "M", "Male",
+                "1981-05-07", "M", "Male",
                 "Asian", "Not Hispanic or Latino", "en", "Divorced",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0301"), null, AesCryptoUtil.encrypt("robert.chen@email.com"),
@@ -163,8 +163,23 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Linda Chen"), AesCryptoUtil.encrypt("312-555-0302"), "Sister",
                 AesCryptoUtil.encrypt("UnitedHealthcare"), AesCryptoUtil.encrypt("UHC-3456789"),
                 AesCryptoUtil.encrypt("GRP-55109"),
-                AesCryptoUtil.encrypt("Lumbar disc herniation 2022; Hyperlipidemia diagnosed 2024"),
+                "Lumbar disc herniation 2022; Hyperlipidemia diagnosed 2024",
                 null, now, now);
+
+        // Patient 103 — Female 71yo for CMS125 breast cancer screening
+        jdbcTemplate.update(patientSql,
+                103L, "MRN-10004", AesCryptoUtil.encrypt("456-78-9012"), AesCryptoUtil.encrypt("Patricia Williams"),
+                "1955-03-12", "F", "Female",
+                "Black or African American", "Not Hispanic or Latino", "en", "Widowed",
+                "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
+                AesCryptoUtil.encrypt("312-555-0401"), null, AesCryptoUtil.encrypt("patricia.williams@email.com"),
+                AesCryptoUtil.encrypt("500 N Michigan Ave"), null,
+                AesCryptoUtil.encrypt("Chicago"), AesCryptoUtil.encrypt("IL"), AesCryptoUtil.encrypt("60611"),
+                AesCryptoUtil.encrypt("David Williams"), AesCryptoUtil.encrypt("312-555-0402"), "Son",
+                AesCryptoUtil.encrypt("Medicare"), AesCryptoUtil.encrypt("MCR-9012345"),
+                AesCryptoUtil.encrypt("GRP-33901"),
+                "Hypertension diagnosed 2018; Type 2 Diabetes diagnosed 2015; Osteoarthritis diagnosed 2019",
+                "Sulfa drugs", now, now);
     }
 
     private void seedPatientAuth() {
@@ -176,6 +191,7 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 1L, 100L, "patient1", passwordEncoder.encode("patient123"), 1, 0, null, null, now, now);
         jdbcTemplate.update(sql, 2L, 101L, "patient2", passwordEncoder.encode("patient123"), 1, 0, null, null, now, now);
         jdbcTemplate.update(sql, 3L, 102L, "patient3", passwordEncoder.encode("patient123"), 1, 0, null, null, now, now);
+        jdbcTemplate.update(sql, 4L, 103L, "patient4", passwordEncoder.encode("patient123"), 1, 0, null, null, now, now);
     }
 
     private void seedAppointments() {
@@ -355,7 +371,29 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 100L, "4548-4", "HbA1c", "7.8", "%",
                 "<5.7", "H", "final", collectionDate, now);
 
-        log.info("Observation seed data: 7 CBC+metabolic results for patient 100");
+        // Blood pressure for hypertensive patient 100
+        jdbcTemplate.update(sql, 100L, "8480-6", "Systolic BP", "132", "mmHg",
+                "<140", "N", "final", collectionDate, now);
+        jdbcTemplate.update(sql, 100L, "8462-4", "Diastolic BP", "85", "mmHg",
+                "<90", "N", "final", collectionDate, now);
+
+        // Blood pressure for hypertensive patient 103
+        LocalDateTime bpDate103 = LocalDateTime.of(2026, 6, 1, 10, 0);
+        jdbcTemplate.update(sql, 103L, "8480-6", "Systolic BP", "145", "mmHg",
+                "<140", "H", "final", bpDate103, now);
+        jdbcTemplate.update(sql, 103L, "8462-4", "Diastolic BP", "92", "mmHg",
+                "<90", "H", "final", bpDate103, now);
+
+        // HbA1c for diabetic patient 103
+        jdbcTemplate.update(sql, 103L, "4548-4", "HbA1c", "8.5", "%",
+                "<5.7", "H", "final", bpDate103, now);
+
+        // Mammogram for female patient 103 (CMS125 numerator)
+        LocalDateTime mammoDate = LocalDateTime.of(2026, 3, 15, 9, 0);
+        jdbcTemplate.update(sql, 103L, "24606-6", "Mammogram", "Screening mammogram completed", null,
+                null, "N", "final", mammoDate, now);
+
+        log.info("Observation seed data: 12 results (CBC+metabolic for p100, BP for p100/p103, HbA1c for p103, mammogram for p103)");
     }
 
     private void seedLoincCatalog() {
@@ -445,11 +483,11 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, "CMS122v11", "HbA1c Poor Control (>9%)",
                 "Percentage of diabetic patients 18-75 whose most recent HbA1c > 9.0%",
                 "SELECT COUNT(DISTINCT p.id) FROM patient p " +
-                "WHERE p.is_deleted = 0 AND (p.medical_history LIKE '%diabetes%' OR p.medical_history LIKE '%Type 2%')",
+                "WHERE p.is_deleted = 0 AND (LOWER(p.medical_history) LIKE '%diabetes%' OR LOWER(p.medical_history) LIKE '%type 2%')",
                 "SELECT COUNT(DISTINCT p.id) FROM patient p " +
                 "JOIN observation o ON o.patient_id = p.id AND o.loinc_code = '4548-4' " +
-                "WHERE p.is_deleted = 0 AND (p.medical_history LIKE '%diabetes%' OR p.medical_history LIKE '%Type 2%') " +
-                "AND CAST(o.value AS DOUBLE) <= 9.0",
+                "WHERE p.is_deleted = 0 AND (LOWER(p.medical_history) LIKE '%diabetes%' OR LOWER(p.medical_history) LIKE '%type 2%') " +
+                "AND CAST(o.obs_value AS DOUBLE) <= 9.0",
                 null, 12);
 
         jdbcTemplate.update(sql, "CMS125v11", "Breast Cancer Screening",
@@ -458,6 +496,7 @@ public class DataInitializer implements CommandLineRunner {
                 "WHERE p.is_deleted = 0 AND p.sex_at_birth = 'F' " +
                 "AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURRENT_DATE) BETWEEN 50 AND 74",
                 "SELECT COUNT(*) FROM patient p " +
+                "JOIN observation o ON o.patient_id = p.id AND o.loinc_code = '24606-6' " +
                 "WHERE p.is_deleted = 0 AND p.sex_at_birth = 'F' " +
                 "AND TIMESTAMPDIFF(YEAR, p.date_of_birth, CURRENT_DATE) BETWEEN 50 AND 74",
                 "SELECT COUNT(*) FROM patient p " +
@@ -469,9 +508,12 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, "CMS165v11", "Controlling High Blood Pressure",
                 "Percentage of hypertensive patients 18-85 whose most recent BP < 140/90",
                 "SELECT COUNT(DISTINCT p.id) FROM patient p " +
-                "WHERE p.is_deleted = 0 AND p.medical_history LIKE '%hypertension%'",
+                "WHERE p.is_deleted = 0 AND LOWER(p.medical_history) LIKE '%hypertension%'",
                 "SELECT COUNT(DISTINCT p.id) FROM patient p " +
-                "WHERE p.is_deleted = 0 AND p.medical_history LIKE '%hypertension%'",
+                "JOIN observation os ON os.patient_id = p.id AND os.loinc_code = '8480-6' " +
+                "JOIN observation od ON od.patient_id = p.id AND od.loinc_code = '8462-4' " +
+                "WHERE p.is_deleted = 0 AND LOWER(p.medical_history) LIKE '%hypertension%' " +
+                "AND CAST(os.obs_value AS DOUBLE) < 140 AND CAST(od.obs_value AS DOUBLE) < 90",
                 null, 12);
 
         log.info("Quality measure seed data: 3 CMS eCQM definitions (122/125/165)");
