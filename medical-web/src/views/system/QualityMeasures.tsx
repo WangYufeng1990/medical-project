@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getMeasures, getMeasureReport } from '../../api/quality'
+import { getMeasures, getMeasureReport, getMeasureHistory } from '../../api/quality'
 import styles from '../shared.module.css'
 
 export default function QualityMeasures() {
@@ -15,6 +15,13 @@ export default function QualityMeasures() {
     queryKey: ['quality', 'report', selectedCmsId],
     queryFn: () => getMeasureReport(selectedCmsId!),
     enabled: selectedCmsId != null,
+  })
+
+  const { data: history } = useQuery({
+    queryKey: ['quality', 'history', selectedCmsId],
+    queryFn: () => getMeasureHistory(selectedCmsId!),
+    enabled: selectedCmsId != null,
+    refetchInterval: 5000,
   })
 
   return (
@@ -85,6 +92,34 @@ export default function QualityMeasures() {
                     {report.performanceTarget}
                   </p>
                 </div>
+
+                {(history ?? []).length > 0 && (
+                  <div style={{ borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 16 }}>
+                    <h4 style={{ marginBottom: 8, fontSize: 13, color: '#606266' }}>Calculation History</h4>
+                    <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #ebeef5' }}>
+                          <th style={{ textAlign: 'left', padding: '4px 8px', color: '#909399' }}>Time</th>
+                          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#909399' }}>Denom</th>
+                          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#909399' }}>Excl</th>
+                          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#909399' }}>Num</th>
+                          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#909399' }}>Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(history ?? []).map((h: any) => (
+                          <tr key={h.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                            <td style={{ padding: '4px 8px', color: '#606266' }}>{h.calculatedAt?.replace('T', ' ').substring(0, 19)}</td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right' }}>{h.denominator}</td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right' }}>{h.exclusions}</td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right' }}>{h.numerator}</td>
+                            <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: performanceColor(h.performanceRate) }}>{h.performanceRate}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ color: '#909399', padding: 20, textAlign: 'center' }}>Report unavailable</div>
