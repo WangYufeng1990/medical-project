@@ -21,7 +21,6 @@ export default function QualityMeasures() {
     queryKey: ['quality', 'history', selectedCmsId],
     queryFn: () => getMeasureHistory(selectedCmsId!),
     enabled: selectedCmsId != null,
-    refetchInterval: 5000,
   })
 
   return (
