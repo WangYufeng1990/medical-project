@@ -28,10 +28,12 @@ export default function PatientLayout() {
         <div style={{ marginTop: 24, padding: '8px 0', color: '#93c5fd', cursor: 'pointer', fontSize: 14 }}
           onClick={async () => {
             try {
-              const res = await patientRequest.get('/patient/me/export', { responseType: 'blob' })
-              const blob = new Blob([res.data])
+              const res = await patientRequest.get('/patient/me/export')
+              const exportData = res.data?.data
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
               const url = URL.createObjectURL(blob)
-              const a = document.createElement('a'); a.href = url; a.download = 'my-health-data.json'; a.click()
+              const date = new Date().toISOString().slice(0, 10)
+              const a = document.createElement('a'); a.href = url; a.download = `health-data-${date}.json`; a.click()
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
