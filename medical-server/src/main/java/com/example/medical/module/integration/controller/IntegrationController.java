@@ -1,8 +1,8 @@
 package com.example.medical.module.integration.controller;
 
 import com.example.medical.common.result.Result;
-import com.example.medical.module.integration.dto.AdtEventDTO;
-import com.example.medical.module.integration.dto.LabResultDTO;
+import com.example.medical.module.integration.dto.AdtEventPayload;
+import com.example.medical.module.integration.dto.LabResultPayload;
 import com.example.medical.module.integration.service.AdtService;
 import com.example.medical.module.integration.service.LabResultService;
 import jakarta.validation.Valid;
@@ -22,13 +22,13 @@ public class IntegrationController {
     private final LabResultService labResultService;
 
     @PostMapping("/adt")
-    public Result<Map<String, Object>> receiveAdt(@Valid @RequestBody AdtEventDTO event) {
+    public Result<Map<String, Object>> receiveAdt(@Valid @RequestBody AdtEventPayload event) {
         adtService.processAdt(event);
         return Result.ok(Map.of("status", "ACK", "sourceMessageId", event.getSourceMessageId()));
     }
 
     @PostMapping("/lab-results")
-    public Result<Map<String, Object>> receiveLabResults(@Valid @RequestBody LabResultDTO dto) {
+    public Result<Map<String, Object>> receiveLabResults(@Valid @RequestBody LabResultPayload dto) {
         int count = labResultService.processLabResults(dto);
         return Result.ok(Map.of("status", "ACK", "recordsCreated", count,
                 "sourceMessageId", dto.getSourceMessageId()));

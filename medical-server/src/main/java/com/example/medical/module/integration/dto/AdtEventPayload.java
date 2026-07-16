@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-public class AdtEventDTO {
+public class AdtEventPayload {
 
     @NotBlank
     private String sourceMessageId;

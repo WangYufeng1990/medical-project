@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 33 Rounds Complete + Round 34 Planned (2026-07-15)**
+> **Status: 34 Rounds Complete (2026-07-16)**
 
 ---
 
@@ -1489,9 +1489,9 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 ---
 
-# Round 34: Audit Fixes & Gap Closure [IN PROGRESS]
+# Round 34: Audit Fixes & Gap Closure ✅ Complete
 
-> **Status: 3 of 6 gaps fixed (2026-07-16)**
+> **Status: 6 of 6 gaps resolved (2026-07-16)**
 
 ## Gap 1 🔴 Patient Export Data Contract Mismatch ✅ Fixed
 
@@ -1522,11 +1522,11 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 **Severity**: LOW — documentation mismatch
 **Decision**: Keep `hasRole()`/`hasAnyRole()` — this is the standard Spring Security RBAC pattern. The menu `permission` codes (`system:user:list`, `patient:list`, etc.) are used for frontend menu visibility filtering, not backend authorization. Converting to `hasAuthority()` would add complexity with no security benefit — roles already map cleanly to clinical access levels (ADMIN = full access, DOCTOR = clinical access, PATIENT = self-service).
 
-## Gap 6 ⚪ Integration DTO Pattern Inconsistency
+## Gap 6 ⚪ Integration DTO Pattern Inconsistency ✅ Fixed
 
 **Severity**: LOW — style deviation
-**Problem**: `AdtEventDTO` and `LabResultDTO` are inbound message schemas, not entity-conversion DTOs. They don't follow the `fromEntity()`/`toEntity()` convention required by CLAUDE.md.
-**Fix**: Document as intentional exception (inbound JSON payload, not JPA-backed), or rename to `AdtEventPayload`/`LabResultPayload` to distinguish from entity DTOs.
+**Fix**: Renamed `AdtEventDTO` → `AdtEventPayload`, `LabResultDTO` → `LabResultPayload`. These are inbound JSON message schemas (Mirth Connect integration), not JPA entity-conversion DTOs. The `Payload` suffix clearly distinguishes them from `fromEntity()`/`toEntity()` DTOs.
+**Commit**: see git log
 
 ## Execution Priority
 1. Gap 2 (Prescription endpoint) — lowest effort, highest clinical risk

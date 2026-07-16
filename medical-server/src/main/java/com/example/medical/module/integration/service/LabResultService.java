@@ -1,6 +1,6 @@
 package com.example.medical.module.integration.service;
 
-import com.example.medical.module.integration.dto.LabResultDTO;
+import com.example.medical.module.integration.dto.LabResultPayload;
 import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.ObservationRepository;
@@ -22,7 +22,7 @@ public class LabResultService {
     private final ObservationRepository observationRepository;
 
     @Transactional
-    public int processLabResults(LabResultDTO dto) {
+    public int processLabResults(LabResultPayload dto) {
         if (observationRepository.existsBySourceMessageId(dto.getSourceMessageId())) {
             log.info("Duplicate lab result ignored: sourceMessageId={}", dto.getSourceMessageId());
             return 0;
@@ -40,7 +40,7 @@ public class LabResultService {
         }
 
         List<Observation> observations = new ArrayList<>();
-        for (LabResultDTO.ResultItem item : dto.getResults()) {
+        for (LabResultPayload.ResultItem item : dto.getResults()) {
             Observation obs = new Observation();
             obs.setPatientId(patient.getId());
             obs.setLoincCode(item.getLoincCode());
