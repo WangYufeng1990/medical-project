@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getPatientPage } from '../../api/patient'
@@ -19,12 +19,25 @@ export default function LabResults() {
     queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
   })
 
-  const { data: observations, isLoading } = useQuery({
-    queryKey: ['observations', selectedPatientId, loincParam],
-    queryFn: () => getObservations(selectedPatientId!, loincParam || undefined),
+  const { data: allObservations, isLoading } = useQuery({
+    queryKey: ['observations', selectedPatientId],
+    queryFn: () => getObservations(selectedPatientId!),
     enabled: selectedPatientId != null,
   })
-  const list = observations ?? []
+  const allList = allObservations ?? []
+
+  const list = loincParam
+    ? allList.filter(o => o.loincCode === loincParam)
+    : allList
+
+  const distinctLoincs = useMemo(() => {
+    return [...new Set(allList.map(o => o.loincCode))]
+      .map(code => {
+        const o = allList.find(x => x.loincCode === code)
+        return { code, display: o?.loincDisplay ?? code }
+      })
+      .sort((a, b) => a.display.localeCompare(b.display))
+  }, [allList])
 
   const grouped: Record<string, any[]> = {}
   list.forEach(o => {
@@ -33,14 +46,24 @@ export default function LabResults() {
     grouped[date].push(o)
   })
 
-  const distinctLoincs = [...new Set(list.map(o => o.loincCode))].map(code => {
-    const o = list.find(x => x.loincCode === code)
-    return { code, display: o?.loincDisplay ?? code }
-  })
+  const dateEntries = Object.entries(grouped)
+  const trendDirection = loincParam && dateEntries.length >= 2
+    ? (() => {
+        const dates = Object.keys(grouped).sort()
+        const first = parseFloat(grouped[dates[0]][0]?.obsValue)
+        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue)
+        if (isNaN(first) || isNaN(last)) return null
+        return last > first ? '↑' : last < first ? '↓' : '→'
+      })()
+    : null
 
   const title = loincParam
     ? `Lab Results — ${list[0]?.loincDisplay ?? loincParam} Trend`
     : 'Lab Results'
+
+  const handleLoincChange = (code: string) => {
+    setSearchParams(code ? { loinc: code } : {})
+  }
 
   return (
     <div>
@@ -57,21 +80,15 @@ export default function LabResults() {
           {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name} (MRN: {p.mrn})</option>)}
         </select>
 
-        {list.length > 0 && (
+        {allList.length > 0 && (
           <>
             <label style={{ fontSize: 13, color: '#606266', marginLeft: 8 }}>Filter by test:</label>
-            <select value={loincParam} onChange={e => {
-              const v = e.target.value
-              setSearchParams(v ? { loinc: v } : {})
-            }} style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
+            <select value={loincParam} onChange={e => handleLoincChange(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
               <option value="">All tests</option>
               {distinctLoincs.map(l => <option key={l.code} value={l.code}>{l.display}</option>)}
             </select>
           </>
-        )}
-
-        {loincParam && (
-          <button className={styles.btnSm} onClick={() => setSearchParams({})}>Show All Tests</button>
         )}
       </div>
 
@@ -82,67 +99,64 @@ export default function LabResults() {
       )}
 
       {!isLoading && list.length > 0 && (
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Collection Date</th><th>Test</th><th>Value</th><th>Unit</th><th>Reference Range</th><th>Flag</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(grouped).map(([date, obs]: [string, any[]]) =>
-              obs.map((o, i) => (
-                <tr key={o.id}>
-                  {i === 0 && <td rowSpan={obs.length} style={{ verticalAlign: 'top', fontWeight: 600 }}>{date}</td>}
-                  <td>{o.loincDisplay || o.loincCode}</td>
-                  <td>{o.obsValue}</td>
-                  <td>{o.unit || '-'}</td>
-                  <td>{o.referenceRange || '-'}</td>
-                  <td>
-                    {o.abnormalFlag && o.abnormalFlag !== 'N' ? (
-                      <span style={{ color: FLAG_COLOR[o.abnormalFlag] || '#909399', fontWeight: 600 }}>
-                        {o.abnormalFlag}
-                      </span>
-                    ) : (
-                      <span style={{ color: '#67C23A' }}>N</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      )}
-
-      {!isLoading && selectedPatientId && list.length > 0 && loincParam && (
-        <div style={{ marginTop: 16, padding: 16, background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #409EFF' }}>
-          <div style={{ fontSize: 13, color: '#606266', marginBottom: 8 }}>
-            Trend for <strong>{list[0]?.loincDisplay ?? loincParam}</strong> ({list[0]?.loincCode})
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-            {Object.entries(grouped).map(([date, obs]: [string, any[]]) => {
-              const val = parseFloat(obs[0]?.obsValue)
-              return (
-                <div key={date} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag] || '#409EFF' }}>
-                    {obs[0]?.obsValue}
+        <>
+          {loincParam && trendDirection && dateEntries.length >= 2 && (
+            <div style={{ marginBottom: 16, padding: 16, background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #409EFF' }}>
+              <div style={{ fontSize: 13, color: '#606266', marginBottom: 8 }}>
+                Trend for <strong>{list[0]?.loincDisplay ?? loincParam}</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
+                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]: [string, any[]]) => {
+                  const val = parseFloat(obs[0]?.obsValue)
+                  return (
+                    <div key={date} style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag] || '#409EFF' }}>
+                        {obs[0]?.obsValue}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
+                      <div style={{ fontSize: 10, color: '#909399', marginTop: 4 }}>{date?.substring(0, 10)}</div>
+                    </div>
+                  )
+                })}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, color: trendDirection === '↓' ? '#67C23A' : trendDirection === '↑' ? '#E6A23C' : '#909399' }}>
+                    {trendDirection}
                   </div>
-                  <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
-                  <div style={{ fontSize: 10, color: '#909399', marginTop: 4 }}>{date?.substring(0, 10)}</div>
                 </div>
-              )
-            })}
-            <div style={{ textAlign: 'center', opacity: 0.7 }}>
-              <div style={{ fontSize: 11, color: '#909399' }}>→</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: '#67C23A', fontWeight: 600 }}>
-                {Object.keys(grouped).length >= 2 && parseFloat(Object.entries(grouped)[0][1][0]?.obsValue) < parseFloat(Object.entries(grouped)[Object.keys(grouped).length - 1][1][0]?.obsValue)
-                  ? '↓ Improving'
-                  : '↑ Worsening'}
               </div>
             </div>
-          </div>
-        </div>
+          )}
+
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Collection Date</th><th>Test</th><th>Value</th><th>Unit</th><th>Reference Range</th><th>Flag</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]: [string, any[]]) =>
+                obs.map((o, i) => (
+                  <tr key={o.id}>
+                    {i === 0 && <td rowSpan={obs.length} style={{ verticalAlign: 'top', fontWeight: 600 }}>{date}</td>}
+                    <td>{o.loincDisplay || o.loincCode}</td>
+                    <td>{o.obsValue}</td>
+                    <td>{o.unit || '-'}</td>
+                    <td>{o.referenceRange || '-'}</td>
+                    <td>
+                      {o.abnormalFlag && o.abnormalFlag !== 'N' ? (
+                        <span style={{ color: FLAG_COLOR[o.abnormalFlag] || '#909399', fontWeight: 600 }}>
+                          {o.abnormalFlag}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#67C23A' }}>N</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   )
