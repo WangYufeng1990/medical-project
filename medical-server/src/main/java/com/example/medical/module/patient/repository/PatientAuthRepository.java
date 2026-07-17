@@ -14,14 +14,14 @@ public interface PatientAuthRepository extends JpaRepository<PatientAuth, Long> 
 
     Optional<PatientAuth> findByPatientId(Long patientId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE PatientAuth a SET a.failedAttempts = COALESCE(a.failedAttempts, 0) + 1, " +
             "a.lockedUntil = CASE WHEN COALESCE(a.failedAttempts, 0) + 1 >= 5 " +
             "THEN :lockedUntil ELSE NULL END WHERE a.id = :id")
     int incrementFailedAttempts(@Param("id") Long id,
                                 @Param("lockedUntil") java.time.LocalDateTime lockedUntil);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE PatientAuth a SET a.failedAttempts = 0, a.lockedUntil = NULL WHERE a.id = :id")
     void resetFailedAttempts(@Param("id") Long id);
 }

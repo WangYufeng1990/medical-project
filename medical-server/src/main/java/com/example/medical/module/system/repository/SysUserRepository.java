@@ -16,14 +16,14 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long>, JpaSpec
 
     boolean existsByUsername(String username);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE SysUser u SET u.failedAttempts = COALESCE(u.failedAttempts, 0) + 1, " +
             "u.lockedUntil = CASE WHEN COALESCE(u.failedAttempts, 0) + 1 >= 5 " +
             "THEN :lockedUntil ELSE NULL END WHERE u.id = :id")
     int incrementFailedAttempts(@Param("id") Long id,
                                 @Param("lockedUntil") java.time.LocalDateTime lockedUntil);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE SysUser u SET u.failedAttempts = 0, u.lockedUntil = NULL WHERE u.id = :id")
     void resetFailedAttempts(@Param("id") Long id);
 
