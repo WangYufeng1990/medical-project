@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getPrescriptionPage, getPrescriptionById, createPrescription, updatePrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
+import { getPrescriptionPage, getPrescriptionById, createPrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
@@ -37,8 +37,7 @@ export default function Prescriptions() {
   })
 
   const saveMutation = useMutation({
-    mutationFn: (params: { id?: number; payload: any }) =>
-      params.id != null ? updatePrescription(params.id, params.payload) : createPrescription(params.payload),
+    mutationFn: (payload: any) => createPrescription(payload),
     onSuccess: () => {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
@@ -101,7 +100,7 @@ export default function Prescriptions() {
   }
 
   const doSave = (payload: any) => {
-    saveMutation.mutate({ id: editId ?? undefined, payload })
+    saveMutation.mutate(payload)
   }
 
   const handleSubmit = async (e: FormEvent) => {
