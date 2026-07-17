@@ -34,6 +34,7 @@ public class AuthService {
     private static final int LOCK_DURATION_MINUTES = 15;
 
     private final SysUserRepository sysUserRepository;
+    private final LockoutService lockoutService;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final com.example.medical.common.audit.AuditLogWriter auditLogWriter;
@@ -233,16 +234,17 @@ public class AuthService {
     }
 
     private void recordFailedAttempt(SysUser user) {
-        sysUserRepository.incrementFailedAttempts(user.getId(),
-                LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
+        lockoutService.recordFailedAttempt(user.getId());
     }
 
     private void resetFailedAttempts(SysUser user) {
-        sysUserRepository.resetFailedAttempts(user.getId());
+        lockoutService.resetFailedAttempts(user.getId());
     }
 
     private boolean isLocked(SysUser user) {
-        return user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
+        boolean exceeded = user.getFailedAttempts() != null && user.getFailedAttempts() >= MAX_FAILED_ATTEMPTS;
+        boolean timeLocked = user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
+        return exceeded && timeLocked;
     }
 
     private static List<String> buildFhirScopes(List<String> roles) {
