@@ -49,8 +49,9 @@ export default function Users() {
   return (<div>
     <h2 style={{ marginBottom: 20 }}>Users</h2>
     <button className={styles.btnPrimary} onClick={() => openForm()} style={{ marginBottom: 16 }}>+ Add User</button>
-    <table className={styles.table}><thead><tr><th>ID</th><th>Username</th><th>Name</th><th>NPI</th><th>Specialty</th><th>Status</th><th></th></tr></thead>
-      <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.username}</td><td>{r.realName}</td><td>{r.npi}</td><td>{r.specialty}</td>
+    <table className={styles.table}><thead><tr><th>ID</th><th>Username</th><th>Name</th><th>NPI</th><th>Last Login</th><th>Status</th><th></th></tr></thead>
+      <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.username}</td><td>{r.realName}</td><td>{r.npi}</td>
+        <td style={{ fontSize: 12, color: '#909399' }}>{r.lastLoginTime ? r.lastLoginTime.substring(0, 16).replace('T', ' ') : 'Never'}</td>
         <td>{r.lockedUntil && new Date(r.lockedUntil) > new Date()
           ? <span style={{ color: '#F56C6C', fontWeight: 600, fontSize: 12 }}>🔒 Locked</span>
           : <span style={{ color: '#67C23A', fontSize: 12 }}>Active</span>}</td>

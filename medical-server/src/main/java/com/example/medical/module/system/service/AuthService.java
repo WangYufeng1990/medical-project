@@ -96,6 +96,8 @@ public class AuthService {
             resetFailedAttempts(user);
         }
 
+        user.setLastLoginTime(LocalDateTime.now());
+
         return LoginResponse.fromEntity(user, roles, permissions,
                 tokens.accessToken(), tokens.refreshToken());
     }

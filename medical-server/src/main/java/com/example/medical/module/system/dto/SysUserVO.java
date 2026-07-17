@@ -35,6 +35,7 @@ public class SysUserVO {
     private LocalDateTime createTime;
     private Integer failedAttempts;
     private LocalDateTime lockedUntil;
+    private LocalDateTime lastLoginTime;
 
     public boolean isLocked() {
         return lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now());
@@ -60,7 +61,8 @@ public class SysUserVO {
                 roles,
                 user.getCreateTime(),
                 user.getFailedAttempts(),
-                user.getLockedUntil());
+                user.getLockedUntil(),
+                user.getLastLoginTime());
     }
 
     private static String maskLast4(String value) {

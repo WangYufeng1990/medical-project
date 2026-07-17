@@ -78,4 +78,7 @@ public class SysUser extends BaseEntity {
 
     @Column(name = "force_logout_after")
     private LocalDateTime forceLogoutAfter;
+
+    @Column(name = "last_login_time")
+    private LocalDateTime lastLoginTime;
 }
