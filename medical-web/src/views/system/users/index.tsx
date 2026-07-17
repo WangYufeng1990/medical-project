@@ -7,6 +7,7 @@ const emptyForm: any = { username: '', password: '', realName: '', phone: '', em
 
 export default function Users() {
   const queryClient = useQueryClient()
+  const currentUserId = Number(localStorage.getItem('userId') || '0')
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -60,7 +61,7 @@ export default function Users() {
             <button className={styles.btnSm} style={{ color: '#67C23A' }}
               onClick={() => { if (confirm('Unlock this account?')) unlockMutation.mutate(r.id) }}>Unlock</button>}
           <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
-          <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button></td></tr>))}</tbody></table>
+          {r.id !== currentUserId && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>))}</tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>{editId ? 'Edit' : 'Add'} User</h3>

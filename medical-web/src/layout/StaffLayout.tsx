@@ -34,6 +34,8 @@ export default function StaffLayout() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
+    localStorage.removeItem('userId')
+    localStorage.removeItem('username')
     navigate('/login')
   }
 

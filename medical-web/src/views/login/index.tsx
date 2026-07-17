@@ -16,6 +16,7 @@ export default function Login() {
       localStorage.setItem('token', data.token)
       localStorage.setItem('refreshToken', data.refreshToken || '')
       localStorage.setItem('username', data.username)
+      localStorage.setItem('userId', String(data.userId))
       navigate('/dashboard')
     } catch (err: any) {
       setError(err?.message || 'Login failed')
