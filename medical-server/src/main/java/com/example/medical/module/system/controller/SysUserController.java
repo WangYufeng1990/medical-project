@@ -54,4 +54,11 @@ public class SysUserController {
         sysUserService.delete(id);
         return Result.ok();
     }
+
+    @PutMapping("/{id}/unlock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Void> unlock(@PathVariable Long id) {
+        sysUserService.unlock(id);
+        return Result.ok();
+    }
 }

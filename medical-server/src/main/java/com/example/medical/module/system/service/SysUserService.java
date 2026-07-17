@@ -83,4 +83,14 @@ public class SysUserService {
     public void delete(Long id) {
         sysUserRepository.deleteById(id);
     }
+
+    @Transactional
+    @Auditable(module = "system", action = "UNLOCK_USER")
+    public void unlock(Long id) {
+        SysUser user = sysUserRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
+        user.setFailedAttempts(0);
+        user.setLockedUntil(null);
+        sysUserRepository.save(user);
+    }
 }
