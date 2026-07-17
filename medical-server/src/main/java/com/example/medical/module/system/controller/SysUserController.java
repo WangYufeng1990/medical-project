@@ -6,9 +6,11 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.SysUserFormDTO;
 import com.example.medical.module.system.dto.SysUserVO;
 import com.example.medical.module.system.service.SysUserService;
+import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -50,7 +52,12 @@ public class SysUserController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable Long id,
+                                @AuthenticationPrincipal LoginUser loginUser) {
+        if (loginUser.getUserId().equals(id)) {
+            throw new com.example.medical.common.exception.BusinessException(
+                    com.example.medical.common.enums.ResultCode.CONFLICT, "Cannot delete your own account");
+        }
         sysUserService.delete(id);
         return Result.ok();
     }
