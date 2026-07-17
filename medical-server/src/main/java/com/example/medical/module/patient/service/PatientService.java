@@ -25,10 +25,9 @@ public class PatientService {
         Specification<Patient> spec = (root, query, cb) -> {
             if (StrUtil.isBlank(keyword)) return null;
             String pattern = "%" + keyword + "%";
-            // name and phoneMobile are encrypted — LIKE on ciphertext is not meaningful
-            return cb.or(
-                    cb.like(root.get("mrn"), pattern),
-                    cb.like(root.get("email"), pattern));
+            // name, phoneMobile, email are encrypted — LIKE on ciphertext is not meaningful
+            // Only MRN can be searched at the database level
+            return cb.like(root.get("mrn"), pattern);
         };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
         return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
