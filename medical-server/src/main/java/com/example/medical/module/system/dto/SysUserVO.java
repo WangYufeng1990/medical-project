@@ -33,6 +33,12 @@ public class SysUserVO {
     private String specialty;
     private List<String> roles;
     private LocalDateTime createTime;
+    private Integer failedAttempts;
+    private LocalDateTime lockedUntil;
+
+    public boolean isLocked() {
+        return lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now());
+    }
 
     public static SysUserVO fromEntity(SysUser user, List<String> roles) {
         return new SysUserVO(
@@ -52,7 +58,9 @@ public class SysUserVO {
                 user.getCredentials(),
                 user.getSpecialty(),
                 roles,
-                user.getCreateTime());
+                user.getCreateTime(),
+                user.getFailedAttempts(),
+                user.getLockedUntil());
     }
 
     private static String maskLast4(String value) {
