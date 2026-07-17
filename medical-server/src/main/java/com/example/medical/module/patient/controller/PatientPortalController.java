@@ -137,6 +137,9 @@ public class PatientPortalController {
         if (appt.getStatus() != null && (appt.getStatus() == 2 || appt.getStatus() == 3)) {
             throw new BusinessException(ResultCode.CONFLICT, "Appointment already cancelled or completed");
         }
+        if (appt.getAppointmentTime() != null && appt.getAppointmentTime().isBefore(java.time.LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Cannot cancel past appointments");
+        }
         appt.setStatus(2);
         appointmentRepository.save(appt);
         return Result.ok();
