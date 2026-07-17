@@ -35,6 +35,10 @@ logging:
   level:
     com.example.medical: debug
 
+app:
+  integration:
+    api-key: dev-integration-key
+
 okta:
   client-id:
   client-secret:
