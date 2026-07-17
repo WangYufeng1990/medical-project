@@ -21,13 +21,14 @@ public class SecurityConfigProd {
 
     private final String rawKey;
 
-    public SecurityConfigProd(@org.springframework.beans.factory.annotation.Value("${AES_KEY}") String rawKey) {
+    public SecurityConfigProd(@org.springframework.beans.factory.annotation.Value("${JWT_SIGNING_KEY:${AES_KEY:}}") String rawKey) {
         if (rawKey == null || rawKey.isBlank() || rawKey.length() < 16) {
-            throw new IllegalStateException("AES_KEY env var is required for production JWT signing (min 16 chars, found " +
-                    (rawKey == null ? "null" : String.valueOf(rawKey.length())) + ")");
+            throw new IllegalStateException(
+                    "JWT_SIGNING_KEY env var is required for production (min 16 chars). " +
+                    "Set JWT_SIGNING_KEY independently from AES_KEY for key separation.");
         }
         this.rawKey = rawKey;
-        log.info("Production JWT signing key initialized from AES_KEY ({} chars)", rawKey.length());
+        log.info("Production JWT signing key initialized ({} chars)", rawKey.length());
     }
 
     private byte[] derive256BitKey() {
