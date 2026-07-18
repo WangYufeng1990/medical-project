@@ -14,6 +14,10 @@ export default function Billing() {
   const [form, setForm] = useState({ ...emptyForm })
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
   const [adjForm, setAdjForm] = useState({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
+  const [payBillId, setPayBillId] = useState<number | null>(null)
+  const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CASH' })
+  const [denyBillId, setDenyBillId] = useState<number | null>(null)
+  const [denyReason, setDenyReason] = useState('')
 
   const { data: pageData } = useQuery({
     queryKey: ['billing', 'list', { page, size: PAGE_SIZE }],
@@ -44,12 +48,12 @@ export default function Billing() {
 
   const payMutation = useMutation({
     mutationFn: (params: { id: number; data: any }) => payBill(params.id, params.data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+    onSuccess: () => { setPayBillId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
   const denyMutation = useMutation({
     mutationFn: (params: { id: number; reason: string }) => denyBill(params.id, params.reason),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+    onSuccess: () => { setDenyBillId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
   const deleteMutation = useMutation({
@@ -82,8 +86,8 @@ export default function Billing() {
             <td onClick={e => e.stopPropagation()}>
               {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={() => { if (confirm('Submit claim?')) submitMutation.mutate(r.id) }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}
-              {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={() => { const pmt = prompt('Payment amount:'); const pmtMethod = prompt('Payment method (CASH/CARD/CHECK):'); if (pmt && pmtMethod) payMutation.mutate({ id: r.id, data: { paymentAmount: Number(pmt), paymentMethod: pmtMethod } }) }}>Pay</button>}
-              {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={() => { const reason = prompt('Denial reason:'); if (reason) denyMutation.mutate({ id: r.id, reason }) }}>Deny</button>}
+              {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={() => { setPayBillId(r.id); setPayForm({ paymentAmount: '', paymentMethod: 'CASH' }) }}>Pay</button>}
+              {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={() => { setDenyBillId(r.id); setDenyReason('') }}>Deny</button>}
               <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
             </td></tr>
         ))}</tbody>
@@ -121,6 +125,26 @@ export default function Billing() {
           <div className={styles.formGroup}><label>Claim Number</label><input value={adjForm.claimNumber} onChange={e => setAdjForm({ ...adjForm, claimNumber: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Adjudication Date</label><input type="date" value={adjForm.adjudicationDate} onChange={e => setAdjForm({ ...adjForm, adjudicationDate: e.target.value })} /></div>
           <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setAdjudicateId(null)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
+        </form>
+      </div></div>}
+
+      {payBillId && <div className={styles.modalOverlay} onClick={() => setPayBillId(null)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Pay Bill #{payBillId}</h3>
+        <form onSubmit={e => { e.preventDefault(); if (payForm.paymentAmount) payMutation.mutate({ id: payBillId, data: { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod }}) }} className={styles.formGrid}>
+          <div className={styles.formGroup}><label>Amount</label><input type="number" step="0.01" value={payForm.paymentAmount} onChange={e => setPayForm({ ...payForm, paymentAmount: e.target.value })} /></div>
+          <div className={styles.formGroup}>
+            <label>Method</label>
+            <select value={payForm.paymentMethod} onChange={e => setPayForm({ ...payForm, paymentMethod: e.target.value })}>
+              <option value="CASH">Cash</option><option value="CARD">Card</option><option value="CHECK">Check</option>
+            </select>
+          </div>
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setPayBillId(null)}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={payMutation.isPending || !payForm.paymentAmount}>Pay</button></div>
+        </form>
+      </div></div>}
+
+      {denyBillId && <div className={styles.modalOverlay} onClick={() => setDenyBillId(null)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Deny Bill #{denyBillId}</h3>
+        <form onSubmit={e => { e.preventDefault(); if (denyReason.trim()) denyMutation.mutate({ id: denyBillId, reason: denyReason.trim() }) }} className={styles.formGrid}>
+          <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>Denial Reason</label><input value={denyReason} onChange={e => setDenyReason(e.target.value)} placeholder="e.g. Not medically necessary" /></div>
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setDenyBillId(null)}>Cancel</button><button type="submit" className={styles.btnSmDanger} disabled={denyMutation.isPending || !denyReason.trim()}>Deny</button></div>
         </form>
       </div></div>}
     </div>
