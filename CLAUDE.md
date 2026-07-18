@@ -148,6 +148,7 @@ medical-project/
 - Logical delete only (`is_deleted` flag) via `@SQLDelete` / `@SQLRestriction`.
 - Medical data: use `@Version` optimistic locking on critical entities.
 - Audit log: immutable (archived flag + row_hash), never physically deleted.
+- **Exception**: Reference/lookup tables populated by seed data (LoincCatalog, DrugInteraction, DrugAllergyClass, PharmacyDirectory, QualityMeasure, QualityResult) do not extend BaseEntity. These are managed via DataInitializer, not user CRUD, so soft-delete and optimistic locking are unnecessary.
 
 ### 8. Testing
 - Write tests only when asked.
