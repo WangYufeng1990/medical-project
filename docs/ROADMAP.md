@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 34 Rounds Complete + Round 35 Planned (2026-07-16)**
+> **Status: 35 Rounds Complete (2026-07-17)**
 
 ---
 
@@ -1536,95 +1536,39 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 ---
 
-# Round 35: Second Audit — Security & Data Integrity Fixes [PLANNED]
+# Round 35: Second Audit — Security & Data Integrity Fixes ✅ Complete
 
-> **Status: Audit complete (2026-07-16) — 10 findings identified**
+> **Status: Complete (2026-07-17) — all 12 gaps resolved + 3 additional fixes**
 
-## 🔴 Critical
+## 🔴 Critical — All Fixed
 
-### Gap 7 — `phone_work VARCHAR(20)` too short for AES-encrypted data
-**Severity**: DATA LOSS
-**File**: `schema.sql` line 103, `Patient.java` line 70-72
-**Problem**: AES-256-GCM output is ~78 hex chars. VARCHAR(20) truncates encrypted phone_work, making decryption impossible.
-**Fix**: Change to `VARCHAR(200)`.
+| Gap | Issue | Fix | Commit |
+|-----|-------|-----|--------|
+| 7 | phone_work column width | Already VARCHAR(200) — verified no risk | - |
+| 8 | Frontend updatePrescription 404 | Removed from api/prescription.ts + prescriptions page | fb6553e |
+| 9 | JWT/AES key sharing | JWT_SIGNING_KEY separate from AES_KEY | 701296c |
+| 10 | Patient login rate limit | Already active — verified 10 req/min → 429 | - |
 
-### Gap 8 — Frontend `updatePrescription` still exported after backend endpoint removed
-**Severity**: BROKEN — 404 on call
-**File**: `api/prescription.ts` line 5
-**Problem**: Gap 2 removed `PUT /api/v1/prescriptions/{id}`. Frontend still exports `updatePrescription`.
-**Fix**: Remove `updatePrescription` from `api/prescription.ts`.
+## 🟡 High — All Fixed
 
-### Gap 9 — Production JWT signing key shares AES encryption key
-**Severity**: SECURITY — single secret compromise = full system access
-**File**: `SecurityConfigProd.java` line 24
-**Problem**: One `AES_KEY` env var controls both PHI encryption and JWT signing.
-**Fix**: Separate into `AES_KEY` + `JWT_SIGNING_KEY` with independent secrets.
+| Gap | Issue | Fix | Commit |
+|-----|-------|-----|--------|
+| 11 | Encrypted email LIKE search | Removed email from database-level keyword search | bd2964a |
+| 12 | Past appointment cancel | Guard + AppointmentScheduler auto no-show | 4fb5b0a, bbaa8b7 |
+| 13 | Account unlock | PUT /users/{id}/unlock + UI button + LockoutService REQUIRES_NEW | 18b44bc, b64bbf9, 59c626b |
+| 14 | lastLoginTime | Added column + entity + VO + AuthService login tracking | c0206c4 |
+| 15 | CORS empty origin | Filter blank origins, fallback to localhost:5173 | 36081f2 |
+| 16 | Integration auth | X-Integration-Key header check + dev default key | e1076c4 |
 
-### Gap 10 — Patient login has no rate limiting
-**Severity**: SECURITY — brute force
-**File**: `RateLimiterConfig.java` line 48
-**Problem**: Rate limiter matches `/api/v1/auth/login` but not `/api/v1/patient/login`.
-**Fix**: Add `/api/v1/patient/login` to rate limiter pattern.
+## ⚪ Low — All Resolved
 
-## 🟡 High
+| Gap | Issue | Fix | Commit |
+|-----|-------|-----|--------|
+| 17 | Reference entities BaseEntity | Documented intentional exception in CLAUDE.md | c842dc8 |
+| 18 | Bill prompt() dialogs | Modal forms with validation + isPending | 9c6609d |
 
-### Gap 11 — Patient search uses LIKE on encrypted `email` field
-**Severity**: BROKEN — search never matches
-**File**: `PatientService.java` lines 28-32
-**Problem**: `LOWER(p.email) LIKE` on AES ciphertext. Keyword search for patients by email silently returns no results.
-**Fix**: Remove email from keyword search or decrypt at application level.
+## Additional Fixes Beyond Audit
 
-### Gap 12 — Patient can cancel past appointments
-**Severity**: BUG — business logic
-**File**: `PatientPortalController.java` lines 131-143
-**Problem**: Cancel endpoint doesn't check if appointmentTime is in the past.
-**Fix**: Add `if (appointmentTime.isBefore(LocalDateTime.now()))` guard.
-
-### Gap 13 — Staff account lockout has no admin unlock mechanism
-**Severity**: DOS RISK
-**File**: `AuthService.java` lines 70-74, 235-246
-**Problem**: Failed login attempts lock account. `lockedUntil` auto-expires, but repeated attacks permanently lock. No admin override.
-**Fix**: Add `POST /api/v1/system/users/{id}/unlock` admin endpoint to reset `failedAttempts` and `lockedUntil`.
-
-### Gap 14 — Staff login doesn't update `lastLoginTime`
-**Severity**: MISSING FEATURE
-**File**: `AuthService.java`
-**Problem**: `SysUser.lastLoginTime` column exists but is never written on successful login.
-**Fix**: Set `lastLoginTime = LocalDateTime.now()` in AuthService.login().
-
-### Gap 15 — CORS fallback matches all origins on empty config
-**Severity**: SECURITY — misconfiguration risk
-**File**: `SecurityConfig.java` line 38
-**Problem**: `app.cors.allowed-origins` defaults to `http://localhost:5173`. If overridden to empty string, `"".split(",")` = `[""]` which matches everything.
-**Fix**: Guard against empty/blank values.
-
-### Gap 16 — Integration endpoints accept any authenticated request
-**Severity**: SECURITY — no origin validation
-**File**: `IntegrationController.java`
-**Problem**: ADT/Lab endpoints accept data from any authenticated user. No IP whitelist, HMAC, or shared secret.
-**Fix**: Add `X-Integration-Secret` header check or IP whitelist in application.yml.
-
-## ⚪ Low
-
-### Gap 17 — Reference entities don't extend BaseEntity
-**Files**: `QualityMeasure`, `QualityResult`, `PharmacyDirectory`, `DrugInteraction`, `DrugAllergyClass`, `LoincCatalog`
-**Problem**: No soft-delete, @Version, or audit timestamps. Inconsistent with rest of codebase.
-**Fix**: Either extend BaseEntity or document as intentional reference data pattern.
-
-### Gap 18 — Bill Pay/Deny uses raw prompt() dialogs
-**File**: `billing/index.tsx`
-**Problem**: No form validation, no loading state during payment. Double-click = duplicate charge.
-**Fix**: Replace with modal form + useMutation isPending.
-
-## Execution Priority
-1. Gap 7 (phone_work column width) — data loss
-2. Gap 8 (frontend updatePrescription) — broken API call
-3. Gap 10 (patient rate limit) — brute force risk
-4. Gap 9 (JWT/AES key separation) — production security
-5. Gap 12 (past appointment cancel) — business logic
-6. Gap 11 (encrypted email search) — broken search
-7. Gap 13 (account unlock) — DoS
-8. Gap 14 (lastLoginTime) — trivial
-9. Gap 15 (CORS guard) — trivial
-10. Gap 16 (integration auth) — depends on deployment
-11. Gaps 17-18 — low priority
+- Admin cannot delete own account (409 + frontend hides Del button) — e0cdbf1, f7181d7
+- Account lockout fixed (transaction rollback was reverting failedAttempts) — 59c626b
+- JPA persistence context staleness in lockout queries (clearAutomatically=true) — 4a1130c
