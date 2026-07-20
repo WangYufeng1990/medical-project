@@ -10,6 +10,7 @@ const emptyForm: any = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL
 export default function Billing() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
+  const [filterPatientId, setFilterPatientId] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
@@ -20,8 +21,8 @@ export default function Billing() {
   const [denyReason, setDenyReason] = useState('')
 
   const { data: pageData } = useQuery({
-    queryKey: ['billing', 'list', { page, size: PAGE_SIZE }],
-    queryFn: () => getBillPage({ page, size: PAGE_SIZE }),
+    queryKey: ['billing', 'list', { page, size: PAGE_SIZE, patientId: filterPatientId ? Number(filterPatientId) : undefined }],
+    queryFn: () => getBillPage({ page, size: PAGE_SIZE, ...(filterPatientId ? { patientId: Number(filterPatientId) } : {}) }),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
@@ -75,7 +76,13 @@ export default function Billing() {
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>Billing</h2>
-      <button className={styles.btnPrimary} onClick={() => { setForm({ ...emptyForm }); setShowForm(true) }} style={{ marginBottom: 16 }}>+ Create Bill</button>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <button className={styles.btnPrimary} onClick={() => { setForm({ ...emptyForm }); setShowForm(true) }}>+ Create Bill</button>
+        <select value={filterPatientId} onChange={e => { setFilterPatientId(e.target.value); setPage(1) }} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d9d9d9' }}>
+          <option value="">All Patients</option>
+          {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Type</th><th>Status</th><th>Total</th><th>Ins Pay</th><th>Patient Resp</th><th></th></tr></thead>
         <tbody>{data.map(r => (

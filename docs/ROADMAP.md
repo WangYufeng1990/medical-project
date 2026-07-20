@@ -1,8 +1,8 @@
-# Project Evolution Roadmap — All Complete ✅
+# Project Evolution Roadmap
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 35 Rounds Complete (2026-07-17)**
+> **Status: 35 Rounds Complete. Round 36 gaps identified (2026-07-20).**
 
 ---
 
@@ -1572,3 +1572,88 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 - Admin cannot delete own account (409 + frontend hides Del button) — e0cdbf1, f7181d7
 - Account lockout fixed (transaction rollback was reverting failedAttempts) — 59c626b
 - JPA persistence context staleness in lockout queries (clearAutomatically=true) — 4a1130c
+
+---
+
+# Round 36: Comprehensive Gap Analysis (Audit)
+
+> **Status: Audit complete (2026-07-20) — 22 gaps identified, 6 resolved (A1 A7 A8 A9 D1 D2 D5)**
+> **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
+
+## Gap Categories
+
+### A. Backend Endpoints Missing Frontend
+
+| # | Endpoint | Severity | Description |
+|---|----------|----------|-------------|
+| A1 | `POST /api/v1/auth/logout` | 🔴 HIGH | ✅ Fixed — `logout()` added to `api/auth.ts`, StaffLayout calls it before clearing localStorage. Best-effort fire-and-forget. |
+| A2 | `GET /api/v1/export/patients` | 🔴 HIGH | CSV streaming export with PHI masking, DOCTOR scoping. No `api/export.ts`, no UI. |
+| A3 | `GET /api/v1/export/bills` | 🟡 MEDIUM | CSV streaming export. No UI. |
+| A4 | `GET /api/v1/admin/keys/history` | 🟡 MEDIUM | Key lifecycle audit trail. No `api/key.ts`, no UI. Zero frontend references to key rotation. |
+| A5 | `POST /api/v1/admin/keys/rotate` | 🟡 MEDIUM | Runtime key rotation trigger. No UI. |
+| A6 | `GET /api/v1/admin/keys/rotation-status` | ⚪ LOW | Migration progress per table. No UI. |
+| A7 | `GET /api/v1/patients/{id}/case` | 🟡 MEDIUM | ✅ Dead code removed — `getPatientCase()` deleted from `api/patient.ts`. Backend endpoint still exists, frontend to be added if needed. |
+| A8 | `GET /api/v1/bills/{id}` | ⚪ LOW | ✅ Dead code removed — `getBillById()` deleted from `api/bill.ts`. Backend endpoint still exists. |
+| A9 | `GET /api/v1/bills` 无 patientId 过滤 + DOCTOR 可看全量 | 🔴 HIGH | ✅ Fixed — `patientId` query param added. DOCTOR scoped to own patients via Appointment+Prescription union. Frontend patient dropdown filter. |
+
+### B. US Healthcare Clinical Feature Gaps
+
+| # | Feature | Severity | Current State |
+|---|---------|----------|---------------|
+| B1 | **Immunizations** | 🔴 HIGH | No vaccine tracking at all. Core Meaningful Use requirement. Needs `Immunization` entity (CVX code, date, lot#, provider). FHIR `Immunization` resource. |
+| B2 | **Vital Signs** | 🔴 HIGH | Observations table exists for labs, but no vital signs entity. BP/HR/temp/RR/O2/BMI/height/weight recorded at every encounter. FHIR `Observation` with vital-signs category. |
+| B3 | **Problem List / Diagnoses** | 🔴 HIGH | `medicalHistory` is free-text (append-only since Round 29). US EHRs require SNOMED CT-coded problem list separate from narrative history. Drives CDS, quality measures, billing. FHIR `Condition`. |
+| B4 | **Care Plans** | 🟡 MEDIUM | Chronic disease management (diabetes, hypertension) requires structured care plans with goals, interventions, outcomes. Required for CMS CCM billing. |
+| B5 | **Referral Management** | 🟡 MEDIUM | No referral workflow (referring physician, specialist, reason, status tracking: sent→scheduled→report→closed). |
+| B6 | **Superbill / Charge Capture** | 🟡 MEDIUM | Billing is entirely manual. No encounter→charges link. CPT/HCPCS codes should auto-populate from appointment/visit type. |
+| B7 | **Prior Authorization** | 🟡 MEDIUM | No PA workflow for medications or procedures. Insurance-mandated for many drugs/imaging. |
+| B8 | **Drug Formulary Checking** | 🟡 MEDIUM | ePrescribing transmits to pharmacy but doesn't check insurance formulary status (on-formulary/non-formulary/PA-required/step-therapy). |
+
+### C. Patient Engagement Gaps
+
+| # | Feature | Severity | Current State |
+|---|---------|----------|---------------|
+| B9 | **Prescription Refill Requests** | 🟡 MEDIUM | Patients can view prescriptions but cannot request refills. Standard patient portal feature. |
+| B10 | **New Patient Self-Registration** | ⚪ LOW | No self-service registration. All patients created by staff. |
+| B11 | **HIPAA Accounting of Disclosures** | 🟡 MEDIUM | Audit log exists (staff-facing) but no patient-facing "who viewed my record" report. HIPAA §164.528 requirement. `GET /api/v1/patient/me/disclosures?from=&to=`. |
+| B12 | **Advance Directives** | ⚪ LOW | Living will, DNR/DNI, healthcare proxy. Required for Medicare/Medicaid hospitals; less critical for outpatient. |
+| B13 | **Appointment Reminders** | ⚪ LOW | SMS/email reminders. Requires messaging infra not in stack. |
+
+### D. Frontend Dead Code & Missing Modules
+
+| # | Issue | Detail |
+|---|-------|--------|
+| D1 | `api/patient.ts` exports `getPatientCase` | ✅ Fixed — removed from `api/patient.ts`. |
+| D2 | `api/bill.ts` exports `getBillById` | ✅ Fixed — removed from `api/bill.ts`. |
+| D3 | `api/export.ts` does not exist | Staff CSV export endpoints have no API module. |
+| D4 | `api/key.ts` does not exist | Key management endpoints have no API module. |
+| D5 | `api/auth.ts` missing `logout()` | ✅ Fixed — `logout()` added, called by StaffLayout with best-effort try/catch. |
+
+## Intentionally Backend-Only (Not Gaps)
+
+| Endpoint | Reason |
+|----------|--------|
+| `POST /api/v1/integration/adt` | Mirth Connect integration engine → backend |
+| `POST /api/v1/integration/lab-results` | Mirth Connect integration engine → backend |
+| `GET /api/v1/fhir/Patient/{id}` | FHIR interoperability — external EHRs |
+| `GET /api/v1/fhir/Patient?_id=` | FHIR interoperability — external EHRs |
+| `GET /api/v1/fhir/Observation/{id}` | FHIR interoperability — external EHRs |
+| `GET /api/v1/fhir/Observation?patient=` | FHIR interoperability — external EHRs |
+| `GET /api/v1/fhir/metadata` | FHIR CapabilityStatement — SMART on FHIR discovery |
+
+## Execution Priority
+
+```
+Priority 1 — Quick wins (logout fix, dead code cleanup)           ~1 round
+Priority 2 — Staff export UI + Key management UI                    ~1 round
+Priority 3 — Vital Signs + Problem List entities                    ~1 round
+Priority 4 — Immunizations entity                                   ~1 round
+Priority 5 — Refill requests + Accounting of Disclosures            ~1 round
+Priority 6 — Referrals + Formulary + Prior Auth + Superbill         ~2 rounds
+```
+
+## Stats
+
+- **84 backend endpoints** audited, **70 frontend API functions** mapped, **26 routes** checked
+- **21 gaps** found: 8 backend-only, 13 missing clinical features, 5 dead code
+- **7 endpoints** intentionally backend-only (interop/external)

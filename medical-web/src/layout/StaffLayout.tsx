@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
+import { logout } from '../api/auth'
 import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
@@ -31,7 +32,8 @@ export default function StaffLayout() {
   const visibleItems = menuItems.filter(item =>
     item.type === 'divider' || hasAnyRole(item.roles))
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await logout() } catch {} // best-effort: trigger audit trail
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('userId')

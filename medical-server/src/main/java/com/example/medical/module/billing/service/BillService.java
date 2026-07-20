@@ -3,22 +3,28 @@ package com.example.medical.module.billing.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.module.appointment.repository.AppointmentRepository;
 import com.example.medical.module.billing.dto.BillFormDTO;
 import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.prescription.repository.PrescriptionRepository;
+import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -26,14 +32,42 @@ public class BillService {
 
     private final BillRepository billRepository;
     private final PatientRepository patientRepository;
+    private final AppointmentRepository appointmentRepository;
+    private final PrescriptionRepository prescriptionRepository;
 
-    public Page<BillVO> page(long page, long size, String claimStatus) {
+    public Page<BillVO> page(long page, long size, String claimStatus, Long patientId) {
+        Set<Long> scopedPatientIds = resolveDoctorScope();
         Specification<Bill> spec = (root, query, cb) -> {
-            if (claimStatus == null) return null;
-            return cb.equal(root.get("claimStatus"), claimStatus);
+            var predicates = cb.conjunction();
+            if (claimStatus != null) {
+                predicates = cb.and(predicates, cb.equal(root.get("claimStatus"), claimStatus));
+            }
+            if (patientId != null) {
+                predicates = cb.and(predicates, cb.equal(root.get("patientId"), patientId));
+            }
+            if (scopedPatientIds != null) {
+                predicates = cb.and(predicates, root.get("patientId").in(scopedPatientIds));
+            }
+            return predicates;
         };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
         return billRepository.findAll(spec, pageable).map(this::toVO);
+    }
+
+    /**
+     * Returns null for ADMIN (no filter), or a Set of patient IDs for DOCTOR
+     * (patients they have appointments or prescriptions with).
+     * Same pattern as ExportController.resolveExportScope().
+     */
+    private Set<Long> resolveDoctorScope() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof LoginUser user)) return null;
+        if (user.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")))
+            return null;
+        Set<Long> ids = new HashSet<>();
+        ids.addAll(appointmentRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
+        ids.addAll(prescriptionRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
+        return ids.isEmpty() ? null : ids;
     }
 
     public BillVO getById(Long id) {

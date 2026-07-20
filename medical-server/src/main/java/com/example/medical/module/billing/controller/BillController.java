@@ -28,8 +28,9 @@ public class BillController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<BillVO>> page(@RequestParam(defaultValue = "1") long page,
                                            @RequestParam(defaultValue = "10") long size,
-                                           @RequestParam(required = false) String claimStatus) {
-        Page<BillVO> result = billService.page(page, size, claimStatus);
+                                           @RequestParam(required = false) String claimStatus,
+                                           @RequestParam(required = false) Long patientId) {
+        Page<BillVO> result = billService.page(page, size, claimStatus, patientId);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1, result.getContent()));
     }

@@ -3,6 +3,8 @@ app:
     key: h2-dev-key-for-local-testing-must-be-32-bytes
   security:
     dev-mode: true
+  integration:
+    api-key: dev-integration-key
 
 spring:
   datasource:
@@ -34,10 +36,6 @@ spring:
 logging:
   level:
     com.example.medical: debug
-
-app:
-  integration:
-    api-key: dev-integration-key
 
 okta:
   client-id:
