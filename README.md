@@ -1,27 +1,19 @@
 # Medical Management System
 
-HIPAA-compliant medical practice management backend with FHIR R4 interoperability. Spring Boot 3.4 + MySQL + Redis + Okta OAuth2.
+HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 + MySQL + Redis + Okta OAuth2.
 
 ## Quick Start
 
 ```bash
-# 1. Start MySQL & Redis
-brew services start mysql redis
+# 1. Start backend (H2 file-based, no external DB needed)
+cd medical-server && mvn spring-boot:run
 
-# 2. Create database
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS medical_dev CHARACTER SET utf8mb4"
-mysql -u root -e "CREATE USER IF NOT EXISTS 'medical'@'localhost' IDENTIFIED BY 'medical123'"
-mysql -u root -e "GRANT ALL ON medical_dev.* TO 'medical'@'localhost'"
+# 2. Start frontend
+cd medical-web && npm run dev
 
-# 3. Run with H2 (no external DB needed)
-cd medical-server
-./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
-
-# 4. Run with MySQL dev profile
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-
-# 5. Run tests
-./mvnw test
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:8080
+# API docs: http://localhost:8080/doc.html
 ```
 
 **Default accounts (dev/h2):**
@@ -31,8 +23,9 @@ cd medical-server
 | Admin | `admin` | `admin123` |
 | Doctor | `doctor1` | `doctor123` |
 | Patient | `patient1` | `patient123` |
-
-API docs: http://localhost:8080/doc.html
+| Patient 2 | `patient2` | `patient123` |
+| Patient 3 | `patient3` | `patient123` |
+| Patient 4 | `patient4` | `patient123` |
 
 ## Tech Stack
 
@@ -40,10 +33,11 @@ API docs: http://localhost:8080/doc.html
 |-------|-----------|
 | Language | Java 17 |
 | Framework | Spring Boot 3.4 |
+| Frontend | React 18 + TypeScript + Vite 5 |
 | ORM | Spring Data JPA + Querydsl |
 | Database | MySQL 8.0 / H2 (dev) |
 | Cache | Redis 7 (Redisson + Spring Cache) |
-| Auth | Spring Boot OAuth2 Resource Server (Okta) |
+| Auth | Spring Boot OAuth2 Resource Server (Okta / dev JWT) |
 | FHIR | HAPI FHIR R4 7.4 |
 | API Doc | Knife4j (Swagger) |
 
@@ -110,6 +104,9 @@ US Core compliant: OMB race/ethnicity Coding extensions. SMART on FHIR OAuth2 sc
 | LOINC | `/api/v1/loinc` | ADMIN,DOCTOR |
 | Pharmacy | `/api/v1/pharmacies` | ADMIN,DOCTOR |
 | eCQM | `/api/v1/quality` | ADMIN,DOCTOR |
+| Patient Export | `/api/v1/patient/me/export` | PATIENT |
+| Account Unlock | `/api/v1/users/{id}/unlock` | ADMIN |
+| eCQM Calculate | `/api/v1/quality/measures/{cmsId}/calculate` | ADMIN |
 
 ## Project Structure
 
@@ -122,7 +119,8 @@ medical-server/src/main/java/com/example/medical/
 │   ├── base/            BaseEntity, PageQuery
 │   ├── config/          SecurityConfig, AesCryptoUtil, FhirConfig,
 │   │                    CacheConfig, RateLimiterConfig, DataInitializer
-│   ├── job/             DataRetentionJob
+│   ├── job/             DataRetentionJob, AppointmentScheduler,
+│   │                     QualityScheduler
 │   ├── validation/      @ValidPassword, PasswordPolicyValidator
 │   ├── exception/       GlobalExceptionHandler, BusinessException
 │   ├── result/          Result<T>, PageResult<T>
@@ -153,10 +151,18 @@ app:
     key.previous:                 # optional — previous key for rotation
   security:
     access-token-expiry-seconds: 7200
+    dev-mode: true                # H2/dev profile — uses local JWT signing
   retention:
     audit-log-days: 2190          # 6 years HIPAA minimum
   cors:
     allowed-origins: http://localhost:5173
+  integration:
+    api-key: dev-integration-key # X-Integration-Key header for Mirth Connect
+  rate-limit:
+    enabled: true                 # Redisson login/refresh/export rate limiting
+
+# Production (prod profile):
+# JWT_SIGNING_KEY=...            # independent from AES_KEY for key separation
 ```
 
 ## Documentation
