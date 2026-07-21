@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-20) — 22 gaps identified, 6 resolved (A1 A7 A8 A9 D1 D2 D5)**
+> **Status: Audit complete (2026-07-21) — 22 gaps identified, 11 resolved (A1–A6 A7 A8 A9 D1–D5)**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1587,11 +1587,11 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 | # | Endpoint | Severity | Description |
 |---|----------|----------|-------------|
 | A1 | `POST /api/v1/auth/logout` | 🔴 HIGH | ✅ Fixed — `logout()` added to `api/auth.ts`, StaffLayout calls it before clearing localStorage. Best-effort fire-and-forget. |
-| A2 | `GET /api/v1/export/patients` | 🔴 HIGH | CSV streaming export with PHI masking, DOCTOR scoping. No `api/export.ts`, no UI. |
-| A3 | `GET /api/v1/export/bills` | 🟡 MEDIUM | CSV streaming export. No UI. |
-| A4 | `GET /api/v1/admin/keys/history` | 🟡 MEDIUM | Key lifecycle audit trail. No `api/key.ts`, no UI. Zero frontend references to key rotation. |
-| A5 | `POST /api/v1/admin/keys/rotate` | 🟡 MEDIUM | Runtime key rotation trigger. No UI. |
-| A6 | `GET /api/v1/admin/keys/rotation-status` | ⚪ LOW | Migration progress per table. No UI. |
+| A2 | `GET /api/v1/export/patients` | 🔴 HIGH | ✅ Fixed — `api/export.ts` created, StaffLayout sidebar has Export CSV → Patients button. |
+| A3 | `GET /api/v1/export/bills` | 🟡 MEDIUM | ✅ Fixed — `api/export.ts` created, StaffLayout sidebar has Export CSV → Bills button. |
+| A4 | `GET /api/v1/admin/keys/history` | 🟡 MEDIUM | ✅ Fixed — `api/key.ts` created, AdminKeys page with key lifecycle table. |
+| A5 | `POST /api/v1/admin/keys/rotate` | 🟡 MEDIUM | ✅ Fixed — AdminKeys page with rotate modal (oldKey/newKey form). |
+| A6 | `GET /api/v1/admin/keys/rotation-status` | ⚪ LOW | ✅ Fixed — AdminKeys page with rotation status panel (active/running/complete/remainingByTable). |
 | A7 | `GET /api/v1/patients/{id}/case` | 🟡 MEDIUM | ✅ Dead code removed — `getPatientCase()` deleted from `api/patient.ts`. Backend endpoint still exists, frontend to be added if needed. |
 | A8 | `GET /api/v1/bills/{id}` | ⚪ LOW | ✅ Dead code removed — `getBillById()` deleted from `api/bill.ts`. Backend endpoint still exists. |
 | A9 | `GET /api/v1/bills` 无 patientId 过滤 + DOCTOR 可看全量 | 🔴 HIGH | ✅ Fixed — `patientId` query param added. DOCTOR scoped to own patients via Appointment+Prescription union. Frontend patient dropdown filter. |
@@ -1625,8 +1625,8 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 |---|-------|--------|
 | D1 | `api/patient.ts` exports `getPatientCase` | ✅ Fixed — removed from `api/patient.ts`. |
 | D2 | `api/bill.ts` exports `getBillById` | ✅ Fixed — removed from `api/bill.ts`. |
-| D3 | `api/export.ts` does not exist | Staff CSV export endpoints have no API module. |
-| D4 | `api/key.ts` does not exist | Key management endpoints have no API module. |
+| D3 | `api/export.ts` does not exist | ✅ Fixed — created with `downloadPatientsCsv()` + `downloadBillsCsv()`. |
+| D4 | `api/key.ts` does not exist | ✅ Fixed — created with `getKeyHistory()`, `rotateKey()`, `getRotationStatus()`. |
 | D5 | `api/auth.ts` missing `logout()` | ✅ Fixed — `logout()` added, called by StaffLayout with best-effort try/catch. |
 
 ## Intentionally Backend-Only (Not Gaps)

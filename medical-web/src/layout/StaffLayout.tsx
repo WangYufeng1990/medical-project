@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
 import { logout } from '../api/auth'
+import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
 import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
@@ -19,6 +20,7 @@ const menuItems = [
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
   { path: '/system/menus', label: 'Menus', icon: '📋', roles: ['ADMIN'] },
   { path: '/system/quality', label: 'eCQM Quality', icon: '📈', roles: ['ADMIN'] },
+  { path: '/system/keys', label: 'Key Management', icon: '🔐', roles: ['ADMIN'] },
   { path: '/audit-logs', label: 'Audit Logs', icon: '📋', roles: ['ADMIN'] },
 ]
 
@@ -61,6 +63,15 @@ export default function StaffLayout() {
           })}
         </nav>
         <div style={{ marginTop: 'auto', padding: '16px' }}>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, paddingLeft: 12 }}>Export CSV</div>
+            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadPatientsCsv().catch(() => alert('Export failed')) }}>
+              <span>📥</span> Patients
+            </div>
+            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadBillsCsv().catch(() => alert('Export failed')) }}>
+              <span>📥</span> Bills
+            </div>
+          </div>
           <div className={styles.menuItem} onClick={() => navigate('/profile')}>
             <span>🔧</span> Profile
           </div>

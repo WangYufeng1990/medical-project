@@ -27,6 +27,7 @@ import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
 import PatientLab from './views/patient/lab'
 import QualityMeasures from './views/system/QualityMeasures'
+import AdminKeys from './views/system/AdminKeys'
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="system/roles" element={<AdminGuard><Roles /></AdminGuard>} />
         <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />
         <Route path="system/quality" element={<AdminGuard><QualityMeasures /></AdminGuard>} />
+        <Route path="system/keys" element={<AdminGuard><AdminKeys /></AdminGuard>} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>
