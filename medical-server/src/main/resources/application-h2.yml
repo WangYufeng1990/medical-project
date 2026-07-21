@@ -5,6 +5,8 @@ app:
     dev-mode: true
   integration:
     api-key: dev-integration-key
+  rate-limit:
+    export-per-hour: 100
 
 spring:
   datasource:

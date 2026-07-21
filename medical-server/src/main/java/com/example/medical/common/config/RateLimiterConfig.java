@@ -23,6 +23,9 @@ import java.time.Duration;
         name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = true)
 public class RateLimiterConfig {
 
+    @org.springframework.beans.factory.annotation.Value("${app.rate-limit.export-per-hour:5}")
+    private long exportPerHour;
+
     @Bean
     public FilterRegistrationBean<Filter> loginRateLimiter(RedissonClient redissonClient) {
         Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
@@ -81,7 +84,7 @@ public class RateLimiterConfig {
             HttpServletRequest httpReq = (HttpServletRequest) request;
             String key = "rate:export:" + httpReq.getRemoteAddr();
             RRateLimiter limiter = redissonClient.getRateLimiter(key);
-            limiter.trySetRate(RateType.OVERALL, 5, Duration.ofHours(1));
+            limiter.trySetRate(RateType.OVERALL, exportPerHour, Duration.ofHours(1));
 
             if (!limiter.tryAcquire()) {
                 HttpServletResponse httpResp = (HttpServletResponse) response;

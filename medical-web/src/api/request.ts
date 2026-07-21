@@ -21,8 +21,17 @@ function onRefreshed(token: string) {
 }
 
 request.interceptors.response.use(
-  (res: any) => {
-    if (res.config.responseType === 'blob') return res.data
+  async (res: any) => {
+    if (res.config.responseType === 'blob') {
+      if (res.status < 400) return res.data
+      const text = await res.data.text()
+      try {
+        const json = JSON.parse(text)
+        return Promise.reject(new Error(json.message || 'Export failed'))
+      } catch {
+        return Promise.reject(new Error('Export failed'))
+      }
+    }
     return res.data.code === 200 ? res.data.data : Promise.reject(new Error(res.data.message))
   },
   async (err: any) => {
