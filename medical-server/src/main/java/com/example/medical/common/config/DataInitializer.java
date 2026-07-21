@@ -125,7 +125,7 @@ public class DataInitializer implements CommandLineRunner {
 
         jdbcTemplate.update(patientSql,
                 100L, "MRN-10001", AesCryptoUtil.encrypt("123-45-6789"), AesCryptoUtil.encrypt("James Anderson"),
-                "1998-02-14", "M", "Male",
+                AesCryptoUtil.encrypt("1998-02-14"), "M", "Male",
                 "White", "Not Hispanic or Latino", "en", "Single",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0101"), null, AesCryptoUtil.encrypt("james.anderson@email.com"),
@@ -134,12 +134,12 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Mary Anderson"), AesCryptoUtil.encrypt("312-555-0102"), "Spouse",
                 AesCryptoUtil.encrypt("Blue Cross Blue Shield"), AesCryptoUtil.encrypt("BCBS-7890123"),
                 AesCryptoUtil.encrypt("GRP-88421"),
-                "Hypertension diagnosed 2024-03; Type 2 Diabetes diagnosed 2025-01",
-                "Penicillin; Shellfish", now, now);
+                AesCryptoUtil.encrypt("Hypertension diagnosed 2024-03; Type 2 Diabetes diagnosed 2025-01"),
+                AesCryptoUtil.encrypt("Penicillin; Shellfish"), now, now);
 
         jdbcTemplate.update(patientSql,
                 101L, "MRN-10002", AesCryptoUtil.encrypt("987-65-4321"), AesCryptoUtil.encrypt("Maria Garcia"),
-                "1991-08-23", "F", "Female",
+                AesCryptoUtil.encrypt("1991-08-23"), "F", "Female",
                 "White", "Hispanic or Latino", "es", "Married",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0201"), AesCryptoUtil.encrypt("312-555-0202"),
@@ -149,12 +149,12 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Carlos Garcia"), AesCryptoUtil.encrypt("312-555-0203"), "Spouse",
                 AesCryptoUtil.encrypt("Aetna"), AesCryptoUtil.encrypt("AET-4567890"),
                 AesCryptoUtil.encrypt("GRP-99234"),
-                "Iron-deficiency anemia diagnosed 2023; Seasonal allergic asthma",
-                "Dust mites; Pollen", now, now);
+                AesCryptoUtil.encrypt("Iron-deficiency anemia diagnosed 2023; Seasonal allergic asthma"),
+                AesCryptoUtil.encrypt("Dust mites; Pollen"), now, now);
 
         jdbcTemplate.update(patientSql,
                 102L, "MRN-10003", null, AesCryptoUtil.encrypt("Robert Chen"),
-                "1981-05-07", "M", "Male",
+                AesCryptoUtil.encrypt("1981-05-07"), "M", "Male",
                 "Asian", "Not Hispanic or Latino", "en", "Divorced",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0301"), null, AesCryptoUtil.encrypt("robert.chen@email.com"),
@@ -163,13 +163,13 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("Linda Chen"), AesCryptoUtil.encrypt("312-555-0302"), "Sister",
                 AesCryptoUtil.encrypt("UnitedHealthcare"), AesCryptoUtil.encrypt("UHC-3456789"),
                 AesCryptoUtil.encrypt("GRP-55109"),
-                "Lumbar disc herniation 2022; Hyperlipidemia diagnosed 2024",
+                AesCryptoUtil.encrypt("Lumbar disc herniation 2022; Hyperlipidemia diagnosed 2024"),
                 null, now, now);
 
         // Patient 103 — Female 71yo for CMS125 breast cancer screening
         jdbcTemplate.update(patientSql,
                 103L, "MRN-10004", AesCryptoUtil.encrypt("456-78-9012"), AesCryptoUtil.encrypt("Patricia Williams"),
-                "1955-03-12", "F", "Female",
+                AesCryptoUtil.encrypt("1955-03-12"), "F", "Female",
                 "Black or African American", "Not Hispanic or Latino", "en", "Widowed",
                 "active", AesCryptoUtil.encrypt("Dr. Sarah Mitchell"),
                 AesCryptoUtil.encrypt("312-555-0401"), null, AesCryptoUtil.encrypt("patricia.williams@email.com"),
@@ -178,8 +178,8 @@ public class DataInitializer implements CommandLineRunner {
                 AesCryptoUtil.encrypt("David Williams"), AesCryptoUtil.encrypt("312-555-0402"), "Son",
                 AesCryptoUtil.encrypt("Medicare"), AesCryptoUtil.encrypt("MCR-9012345"),
                 AesCryptoUtil.encrypt("GRP-33901"),
-                "Hypertension diagnosed 2018; Type 2 Diabetes diagnosed 2015; Osteoarthritis diagnosed 2019",
-                "Sulfa drugs", now, now);
+                AesCryptoUtil.encrypt("Hypertension diagnosed 2018; Type 2 Diabetes diagnosed 2015; Osteoarthritis diagnosed 2019"),
+                AesCryptoUtil.encrypt("Sulfa drugs"), now, now);
     }
 
     private void seedPatientAuth() {

@@ -9,8 +9,6 @@ import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.prescription.repository.PrescriptionRepository;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -56,8 +54,8 @@ public class ExportController {
             boolean hasMore;
             do {
                 var patients = patientRepository.findAll(
-                        PageRequest.of(page++, EXPORT_PAGE_SIZE,
-                                Sort.by(Sort.Direction.DESC, "createTime")));
+                        org.springframework.data.domain.PageRequest.of(page++, EXPORT_PAGE_SIZE,
+                                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime")));
                 for (Patient p : patients.getContent()) {
                     if (scopedPatientIds != null && !scopedPatientIds.contains(p.getId())) continue;
                     writer.write(String.join(",",
@@ -104,8 +102,8 @@ public class ExportController {
             boolean hasMore;
             do {
                 var bills = billRepository.findAll(
-                        PageRequest.of(page++, EXPORT_PAGE_SIZE,
-                                Sort.by(Sort.Direction.DESC, "createTime")));
+                        org.springframework.data.domain.PageRequest.of(page++, EXPORT_PAGE_SIZE,
+                                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime")));
                 for (Bill b : bills.getContent()) {
                     if (scopedPatientIds != null && !scopedPatientIds.contains(b.getPatientId())) continue;
                     writer.write(String.join(",",
@@ -143,7 +141,7 @@ public class ExportController {
         var authorities = user.getAuthorities();
         boolean isAdmin = authorities.stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        if (isAdmin) return null; // ADMIN exports all patients
+        if (isAdmin) return null;
 
         Set<Long> ids = new HashSet<>();
         ids.addAll(appointmentRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
