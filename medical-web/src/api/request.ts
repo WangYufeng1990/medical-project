@@ -21,7 +21,10 @@ function onRefreshed(token: string) {
 }
 
 request.interceptors.response.use(
-  (res: any) => res.data.code === 200 ? res.data.data : Promise.reject(new Error(res.data.message)),
+  (res: any) => {
+    if (res.config.responseType === 'blob') return res.data
+    return res.data.code === 200 ? res.data.data : Promise.reject(new Error(res.data.message))
+  },
   async (err: any) => {
     const originalRequest = err.config
     if (err.response?.status === 401 && !originalRequest._retry) {
