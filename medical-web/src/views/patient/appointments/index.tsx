@@ -23,7 +23,7 @@ export default function PatientAppointments() {
     },
   })
 
-  const canCancel = (s: number) => s !== 2 && s !== 3
+  const canCancel = (s: number) => s !== 2 && s !== 3 && s !== 4
 
   const handleCancel = (id: number) => {
     if (confirm('Cancel this appointment?')) cancelMutation.mutate(id)
