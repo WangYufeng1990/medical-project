@@ -23,6 +23,8 @@ import PatientPrescriptions from './views/patient/prescriptions'
 import PatientBills from './views/patient/bills'
 import PatientChat from './views/patient/chat'
 import PatientConsent from './views/patient/consent'
+import PatientVitals from './views/patient/vitals'
+import PatientProblems from './views/patient/problems'
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
 import PatientLab from './views/patient/lab'
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="chat" element={<PatientChat />} />
         <Route path="lab" element={<PatientLab />} />
         <Route path="consent" element={<PatientConsent />} />
+        <Route path="vitals" element={<PatientVitals />} />
+        <Route path="problems" element={<PatientProblems />} />
       </Route>
     </Routes>
   )

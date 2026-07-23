@@ -68,6 +68,8 @@ public class PatientPortalController {
     private final PasswordHistoryRepository passwordHistoryRepository;
     private final PasswordEncoder passwordEncoder;
     private final LabAnalysisService labAnalysisService;
+    private final com.example.medical.module.patient.repository.VitalSignRepository vitalSignRepository;
+    private final com.example.medical.module.patient.repository.ProblemRepository problemRepository;
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
@@ -290,5 +292,15 @@ public class PatientPortalController {
         String patientName = patientRepository.findById(b.getPatientId())
                 .map(Patient::getName).orElse("");
         return BillVO.fromEntity(b, patientName);
+    }
+
+    @GetMapping("/vitals")
+    public Result<List<com.example.medical.module.patient.entity.VitalSign>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/problems")
+    public Result<List<com.example.medical.module.patient.entity.Problem>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId()));
     }
 }

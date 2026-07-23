@@ -476,3 +476,46 @@ CREATE TABLE IF NOT EXISTS allergy_entry (
     PRIMARY KEY (id),
     INDEX idx_ae_patient_id (patient_id)
 );
+
+CREATE TABLE IF NOT EXISTS vital_sign (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    recorded_by BIGINT DEFAULT NULL,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    systolic_bp INT DEFAULT NULL,
+    diastolic_bp INT DEFAULT NULL,
+    heart_rate INT DEFAULT NULL,
+    temperature DECIMAL(4,1) DEFAULT NULL,
+    respiratory_rate INT DEFAULT NULL,
+    oxygen_saturation INT DEFAULT NULL,
+    height_cm DECIMAL(5,1) DEFAULT NULL,
+    weight_kg DECIMAL(5,1) DEFAULT NULL,
+    bmi DECIMAL(4,1) DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_vs_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS problem (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    snomed_code VARCHAR(20) DEFAULT NULL,
+    snomed_display VARCHAR(200) DEFAULT NULL,
+    icd10_code VARCHAR(10) DEFAULT NULL,
+    onset_date DATE DEFAULT NULL,
+    resolution_date DATE DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    severity VARCHAR(10) DEFAULT NULL,
+    recorded_by BIGINT DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_prob_patient_id (patient_id)
+);

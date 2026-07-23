@@ -5,6 +5,8 @@ import axios from 'axios'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, resolvePatientAllergy } from '../../api/patient'
 import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { initiateEmergencyAccess } from '../../api/emergency'
+import { getVitalSigns, createVitalSign } from '../../api/vitalSign'
+import { getProblems, createProblem, updateProblem } from '../../api/problem'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -31,6 +33,10 @@ export default function Patients() {
   const [allergyEntries, setAllergyEntries] = useState<any[]>([])
   const [newHistoryDesc, setNewHistoryDesc] = useState('')
   const [newAllergy, setNewAllergy] = useState({ allergen: '', reaction: '', severity: 'MODERATE' })
+  const [vitalSigns, setVitalSigns] = useState<any[]>([])
+  const [problems, setProblems] = useState<any[]>([])
+  const [newVital, setNewVital] = useState({ systolicBp: '', diastolicBp: '', heartRate: '', temperature: '', respiratoryRate: '', oxygenSaturation: '', heightCm: '', weightKg: '', bmi: '', notes: '' })
+  const [newProblem, setNewProblem] = useState({ snomedCode: '', snomedDisplay: '', icd10Code: '', onsetDate: '', severity: 'MODERATE', notes: '' })
 
   const { data: pageData } = useQuery({
     queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
@@ -78,6 +84,8 @@ export default function Patients() {
         setForm({ ...emptyForm, ...d })
         try { setHistoryEntries(await getPatientHistory(row.id) || []) } catch { setHistoryEntries([]) }
         try { setAllergyEntries(await getPatientAllergies(row.id) || []) } catch { setAllergyEntries([]) }
+        try { setVitalSigns((await getVitalSigns(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setVitalSigns([]) }
+        try { setProblems((await getProblems(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setProblems([]) }
       }
     } else {
       setEditId(null); setForm({ ...emptyForm })
@@ -378,6 +386,93 @@ export default function Patients() {
                         setAllergyEntries(await getPatientAllergies(editId))
                         setNewAllergy({ allergen: '', reaction: '', severity: 'MODERATE' })
                       }}>+</button>
+                    </div>
+                  </div>
+                </>
+              )}
+              {editId && (
+                <>
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                    <h4 style={{ marginBottom: 8 }}>Vital Signs</h4>
+                    {vitalSigns.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No vital signs recorded.</p>}
+                    {vitalSigns.map((v: any) => (
+                      <div key={v.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
+                        <span style={{ fontWeight: 600 }}>{v.recordedAt?.substring(0, 10)}</span>
+                        {v.systolicBp != null && <span style={{ marginLeft: 12 }}>BP: <strong>{v.systolicBp}/{v.diastolicBp}</strong></span>}
+                        {v.heartRate != null && <span style={{ marginLeft: 12 }}>HR: <strong>{v.heartRate}</strong></span>}
+                        {v.temperature != null && <span style={{ marginLeft: 12 }}>Temp: <strong>{v.temperature}°C</strong></span>}
+                        {v.respiratoryRate != null && <span style={{ marginLeft: 12 }}>RR: <strong>{v.respiratoryRate}</strong></span>}
+                        {v.oxygenSaturation != null && <span style={{ marginLeft: 12 }}>O₂: <strong>{v.oxygenSaturation}%</strong></span>}
+                        {v.bmi != null && <span style={{ marginLeft: 12 }}>BMI: <strong>{v.bmi}</strong></span>}
+                        {v.notes && <div style={{ color: '#909399', marginTop: 2 }}>{v.notes}</div>}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+                      <input value={newVital.systolicBp} onChange={e => setNewVital({ ...newVital, systolicBp: e.target.value })} placeholder="SBP" style={{ width: 54, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newVital.diastolicBp} onChange={e => setNewVital({ ...newVital, diastolicBp: e.target.value })} placeholder="DBP" style={{ width: 54, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newVital.heartRate} onChange={e => setNewVital({ ...newVital, heartRate: e.target.value })} placeholder="HR" style={{ width: 48, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newVital.temperature} onChange={e => setNewVital({ ...newVital, temperature: e.target.value })} placeholder="Temp" style={{ width: 54, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newVital.oxygenSaturation} onChange={e => setNewVital({ ...newVital, oxygenSaturation: e.target.value })} placeholder="O2%" style={{ width: 48, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newVital.notes} onChange={e => setNewVital({ ...newVital, notes: e.target.value })} placeholder="Notes" style={{ width: 120, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <button type="button" className={styles.btnSm} disabled={!newVital.systolicBp && !newVital.diastolicBp && !newVital.heartRate && !newVital.temperature} onClick={async () => {
+                        if (!editId) return
+                        await createVitalSign(editId, {
+                          systolicBp: newVital.systolicBp !== '' ? Number(newVital.systolicBp) : null,
+                          diastolicBp: newVital.diastolicBp !== '' ? Number(newVital.diastolicBp) : null,
+                          heartRate: newVital.heartRate !== '' ? Number(newVital.heartRate) : null,
+                          temperature: newVital.temperature !== '' ? Number(newVital.temperature) : null,
+                          oxygenSaturation: newVital.oxygenSaturation !== '' ? Number(newVital.oxygenSaturation) : null,
+                          notes: newVital.notes || null,
+                        })
+                        setVitalSigns((await getVitalSigns(editId, { page: 1, size: 100 }))?.records ?? [])
+                        setNewVital({ systolicBp: '', diastolicBp: '', heartRate: '', temperature: '', respiratoryRate: '', oxygenSaturation: '', heightCm: '', weightKg: '', bmi: '', notes: '' })
+                      }}>+ Add</button>
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                    <h4 style={{ marginBottom: 8 }}>Problem List</h4>
+                    {problems.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No active problems.</p>}
+                    {problems.map((p: any) => (
+                      <div key={p.id} style={{ fontSize: 12, color: p.status === 'RESOLVED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: p.status === 'RESOLVED' ? '#f5f5f5' : '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>
+                          <strong style={{ textDecoration: p.status === 'RESOLVED' ? 'line-through' : 'none' }}>{p.snomedDisplay || 'Unspecified'}</strong>
+                          {p.snomedCode && <span style={{ color: '#909399', marginLeft: 8, fontSize: 10 }}>({p.snomedCode})</span>}
+                          {p.icd10Code && <span style={{ color: '#909399', marginLeft: 4, fontSize: 10 }}>[{p.icd10Code}]</span>}
+                          <span style={{ color: p.severity === 'SEVERE' ? '#F56C6C' : p.severity === 'MODERATE' ? '#E6A23C' : '#67C23A', marginLeft: 8, fontSize: 10, fontWeight: 600 }}>[{p.severity}]</span>
+                          <span style={{ marginLeft: 8, color: p.status === 'ACTIVE' ? '#67C23A' : '#909399', fontSize: 10 }}>{p.status}</span>
+                          {p.onsetDate && <span style={{ marginLeft: 8, fontSize: 10, color: '#909399' }}>since {p.onsetDate}</span>}
+                        </span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {p.status === 'ACTIVE' && (
+                            <button type="button" className={styles.btnSm} onClick={async () => {
+                              if (!editId || !confirm('Resolve this problem?')) return
+                              await updateProblem(editId, p.id, { status: 'RESOLVED', resolutionDate: new Date().toISOString().slice(0, 10) })
+                              setProblems((await getProblems(editId, { page: 1, size: 100 }))?.records ?? [])
+                            }}>Resolve</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+                      <input value={newProblem.snomedDisplay} onChange={e => setNewProblem({ ...newProblem, snomedDisplay: e.target.value })} placeholder="Diagnosis name" style={{ width: 180, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newProblem.snomedCode} onChange={e => setNewProblem({ ...newProblem, snomedCode: e.target.value })} placeholder="SNOMED" style={{ width: 80, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <input value={newProblem.icd10Code} onChange={e => setNewProblem({ ...newProblem, icd10Code: e.target.value })} placeholder="ICD-10" style={{ width: 70, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                      <select value={newProblem.severity} onChange={e => setNewProblem({ ...newProblem, severity: e.target.value })} style={{ padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }}>
+                        <option value="MILD">Mild</option><option value="MODERATE">Moderate</option><option value="SEVERE">Severe</option>
+                      </select>
+                      <button type="button" className={styles.btnSm} disabled={!newProblem.snomedDisplay.trim()} onClick={async () => {
+                        if (!editId || !newProblem.snomedDisplay.trim()) return
+                        await createProblem(editId, {
+                          snomedDisplay: newProblem.snomedDisplay.trim(),
+                          snomedCode: newProblem.snomedCode.trim() || null,
+                          icd10Code: newProblem.icd10Code.trim() || null,
+                          severity: newProblem.severity,
+                          onsetDate: newProblem.onsetDate || new Date().toISOString().slice(0, 10),
+                          notes: newProblem.notes || null,
+                        })
+                        setProblems((await getProblems(editId, { page: 1, size: 100 }))?.records ?? [])
+                        setNewProblem({ snomedCode: '', snomedDisplay: '', icd10Code: '', onsetDate: '', severity: 'MODERATE', notes: '' })
+                      }}>+ Add</button>
                     </div>
                   </div>
                 </>

@@ -44,6 +44,8 @@ public class DataInitializer implements CommandLineRunner {
         seedCds();
 
         seedAllergies();
+        seedVitalSigns();
+        seedProblems();
         log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
@@ -617,5 +619,63 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(acSql, "435", "Beta-Agonists", null);
         jdbcTemplate.update(acSql, "6809", "Biguanides", null);
         jdbcTemplate.update(acSql, "64479", "Leukotriene Modifiers", null);
+    }
+
+    private void seedVitalSigns() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vital_sign", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO vital_sign (patient_id, recorded_by, recorded_at, systolic_bp, diastolic_bp, " +
+                "heart_rate, temperature, respiratory_rate, oxygen_saturation, height_cm, weight_kg, bmi, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, 2L, LocalDateTime.of(2026, 5, 15, 9, 15),
+                128, 82, 72, 36.6, 16, 98, 175.3, 85.0, 27.6,
+                "Routine checkup; BP slightly elevated", now);
+        jdbcTemplate.update(sql, 100L, 2L, LocalDateTime.of(2026, 7, 10, 10, 0),
+                134, 86, 76, 36.8, 18, 97, 175.3, 84.5, 27.4,
+                "Follow-up; BP trending up, counseled on diet", now);
+        jdbcTemplate.update(sql, 101L, 2L, LocalDateTime.of(2026, 5, 23, 11, 0),
+                118, 76, 68, 36.5, 14, 99, 162.0, 58.0, 22.1,
+                "Annual physical; all vitals within normal range", now);
+        jdbcTemplate.update(sql, 103L, 2L, LocalDateTime.of(2026, 5, 20, 10, 30),
+                142, 90, 80, 36.9, 20, 95, 165.0, 92.0, 33.8,
+                "Hypertension follow-up; BP elevated, adjust meds", now);
+    }
+
+    private void seedProblems() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM problem", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO problem (patient_id, snomed_code, snomed_display, icd10_code, " +
+                "onset_date, status, severity, recorded_by, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, "38341003", "Essential hypertension", "I10",
+                LocalDate.of(2024, 3, 1), "ACTIVE", "MODERATE", 2L,
+                "Diagnosed during routine physical; lifestyle modifications recommended", now);
+        jdbcTemplate.update(sql, 100L, "44054006", "Type 2 diabetes mellitus", "E11.9",
+                LocalDate.of(2025, 1, 15), "ACTIVE", "MILD", 2L,
+                "HbA1c 7.1%; managed with Metformin 500mg BID", now);
+        jdbcTemplate.update(sql, 101L, "195967001", "Iron deficiency anemia", "D50.9",
+                LocalDate.of(2023, 6, 1), "ACTIVE", "MILD", 2L,
+                "Responding to oral iron supplementation", now);
+        jdbcTemplate.update(sql, 101L, "195949008", "Seasonal allergic asthma", "J45.30",
+                LocalDate.of(2022, 4, 1), "ACTIVE", "MODERATE", 2L,
+                "Triggered by dust mites and pollen; managed with Albuterol PRN", now);
+        jdbcTemplate.update(sql, 102L, "202796002", "Lumbar disc herniation", "M51.26",
+                LocalDate.of(2022, 8, 1), "ACTIVE", "MODERATE", 2L,
+                "L4-L5 herniation; physical therapy ongoing", now);
+        jdbcTemplate.update(sql, 102L, "55822004", "Hyperlipidemia", "E78.5",
+                LocalDate.of(2024, 3, 1), "ACTIVE", "MILD", 2L,
+                "LDL elevated; managed with atorvastatin 10mg daily", now);
+        jdbcTemplate.update(sql, 103L, "38341003", "Essential hypertension", "I10",
+                LocalDate.of(2018, 2, 1), "ACTIVE", "SEVERE", 2L,
+                "Long-standing hypertension; on combination therapy", now);
+        jdbcTemplate.update(sql, 103L, "44054006", "Type 2 diabetes mellitus", "E11.9",
+                LocalDate.of(2015, 6, 1), "ACTIVE", "MODERATE", 2L,
+                "HbA1c 8.2%; insulin-dependent", now);
     }
 }
