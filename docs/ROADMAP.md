@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-21) — 22 gaps identified, 11 resolved (A1–A6 A7 A8 A9 D1–D5)**
+> **Status: Audit complete (2026-07-23) — 22 gaps identified, 13 resolved (A1–A6 A7 A8 A9 B2 B3 D1–D5)**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1601,8 +1601,8 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 | # | Feature | Severity | Current State |
 |---|---------|----------|---------------|
 | B1 | **Immunizations** | 🔴 HIGH | No vaccine tracking at all. Core Meaningful Use requirement. Needs `Immunization` entity (CVX code, date, lot#, provider). FHIR `Immunization` resource. |
-| B2 | **Vital Signs** | 🔴 HIGH | Observations table exists for labs, but no vital signs entity. BP/HR/temp/RR/O2/BMI/height/weight recorded at every encounter. FHIR `Observation` with vital-signs category. |
-| B3 | **Problem List / Diagnoses** | 🔴 HIGH | `medicalHistory` is free-text (append-only since Round 29). US EHRs require SNOMED CT-coded problem list separate from narrative history. Drives CDS, quality measures, billing. FHIR `Condition`. |
+| B2 | **Vital Signs** | 🔴 HIGH | ✅ Fixed — `VitalSign` entity (BP/HR/temp/RR/O₂/BMI). Staff CRUD, patient portal view. 4 seed records. |
+| B3 | **Problem List / Diagnoses** | 🔴 HIGH | ✅ Fixed — `Problem` entity (SNOMED CT + ICD-10 coded). Staff CRUD with resolve, patient portal view. 8 seed records. |
 | B4 | **Care Plans** | 🟡 MEDIUM | Chronic disease management (diabetes, hypertension) requires structured care plans with goals, interventions, outcomes. Required for CMS CCM billing. |
 | B5 | **Referral Management** | 🟡 MEDIUM | No referral workflow (referring physician, specialist, reason, status tracking: sent→scheduled→report→closed). |
 | B6 | **Superbill / Charge Capture** | 🟡 MEDIUM | Billing is entirely manual. No encounter→charges link. CPT/HCPCS codes should auto-populate from appointment/visit type. |
