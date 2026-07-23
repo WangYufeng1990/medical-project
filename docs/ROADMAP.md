@@ -1652,6 +1652,14 @@ Priority 5 — Refill requests + Accounting of Disclosures            ~1 round
 Priority 6 — Referrals + Formulary + Prior Auth + Superbill         ~2 rounds
 ```
 
+## Post-Round 36: Appointment Fixes (2026-07-23)
+
+| # | Issue | Fix | Commit |
+|---|-------|-----|--------|
+| Bug | Past appointments stay "scheduled" after server restart | `AppointmentScheduler` now runs `markNoShows()` on `ApplicationReadyEvent` startup, not just 1am cron | `6f75b57` |
+| Bug | Cancel button shown for no-show appointments | Patient portal `canCancel()` now excludes status 4 (no-show) alongside 2/3 | `77db804` |
+| Bug | Doctor/admin can book past appointment times | `AppointmentService.create/update()` reject `appointmentTime < now` with 400. Frontend `datetime-local` gets `min={now}` | `7025aad` |
+
 ## Stats
 
 - **84 backend endpoints** audited, **70 frontend API functions** mapped, **26 routes** checked
