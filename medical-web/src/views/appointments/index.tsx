@@ -66,7 +66,7 @@ export default function Appointments() {
         <form onSubmit={handleSubmit} className={styles.formGrid}>
           <div className={styles.formGroup}><label>Patient ID</label><input disabled={viewOnly} value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Doctor ID</label><input disabled={viewOnly} value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })} /></div>
-          <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
+          <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} min={new Date().toISOString().slice(0, 16)} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Visit Type</label>
             <select disabled={viewOnly} value={form.visitType} onChange={e => setForm({ ...form, visitType: e.target.value })}>
               {VISIT_TYPES.map(v => <option key={v} value={v}>{v.replace(/_/g,' ')}</option>)}</select></div>

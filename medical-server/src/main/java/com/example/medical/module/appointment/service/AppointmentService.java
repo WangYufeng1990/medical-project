@@ -47,6 +47,9 @@ public class AppointmentService {
     @Transactional
     @Auditable(module = "appointment", action = "CREATE")
     public void create(AppointmentFormDTO dto) {
+        if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
+        }
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), null);
         appointmentRepository.save(dto.toEntity());
     }
@@ -58,6 +61,9 @@ public class AppointmentService {
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
         if (a.getStatus() != null && java.util.Set.of(2, 3, 4).contains(a.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Terminal appointments cannot be modified");
+        }
+        if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
         }
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
         dto.applyTo(a);
