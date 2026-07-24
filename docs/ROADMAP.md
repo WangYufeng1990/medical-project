@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-24) — 22 gaps identified, 16 resolved (A1–A6 A7 A8 A9 B1 B2 B3 B9 B11 D1–D5)**
+> **Status: Audit complete (2026-07-24) — 22 gaps identified, 18 resolved (A1–A6 A7 A8 A9 B1 B2 B3 B5 B6 B9 B11 D1–D5)**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1604,8 +1604,8 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 | B2 | **Vital Signs** | 🔴 HIGH | ✅ Fixed — `VitalSign` entity (BP/HR/temp/RR/O₂/BMI). Staff CRUD, patient portal view. 4 seed records. |
 | B3 | **Problem List / Diagnoses** | 🔴 HIGH | ✅ Fixed — `Problem` entity (SNOMED CT + ICD-10 coded). Staff CRUD with resolve, patient portal view. 8 seed records. |
 | B4 | **Care Plans** | 🟡 MEDIUM | Chronic disease management (diabetes, hypertension) requires structured care plans with goals, interventions, outcomes. Required for CMS CCM billing. |
-| B5 | **Referral Management** | 🟡 MEDIUM | No referral workflow (referring physician, specialist, reason, status tracking: sent→scheduled→report→closed). |
-| B6 | **Superbill / Charge Capture** | 🟡 MEDIUM | Billing is entirely manual. No encounter→charges link. CPT/HCPCS codes should auto-populate from appointment/visit type. |
+| B5 | **Referral Management** | 🟡 MEDIUM | ✅ Fixed — `Referral` entity with status workflow. Staff CRUD with Schedule/Complete/Close transitions. Patient portal view. 4 seed records. |
+| B6 | **Superbill / Charge Capture** | 🟡 MEDIUM | ✅ Fixed — `Charge` entity linked to appointment. Staff `/charges` page with Convert to Bill button. 2 seed records. |
 | B7 | **Prior Authorization** | 🟡 MEDIUM | No PA workflow for medications or procedures. Insurance-mandated for many drugs/imaging. |
 | B8 | **Drug Formulary Checking** | 🟡 MEDIUM | ePrescribing transmits to pharmacy but doesn't check insurance formulary status (on-formulary/non-formulary/PA-required/step-therapy). |
 
