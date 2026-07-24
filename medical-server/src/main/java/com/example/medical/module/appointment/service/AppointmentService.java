@@ -28,6 +28,7 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
+    private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
 
     public Page<AppointmentVO> page(long page, long size, Integer status, Long patientId) {
         Specification<Appointment> spec = (root, query, cb) -> {
@@ -68,8 +69,33 @@ public class AppointmentService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
         }
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
+        Integer previousStatus = a.getStatus();
         dto.applyTo(a);
         appointmentRepository.save(a);
+        if (Integer.valueOf(3).equals(a.getStatus()) && !Integer.valueOf(3).equals(previousStatus)) {
+            generateCharge(a);
+        }
+    }
+
+    private void generateCharge(Appointment a) {
+        boolean exists = chargeRepository.findAll(
+                (root, query, cb) -> cb.and(
+                        cb.equal(root.get("appointmentId"), a.getId()),
+                        cb.equal(root.get("patientId"), a.getPatientId())),
+                org.springframework.data.domain.PageRequest.of(0, 1))
+                .hasContent();
+        if (exists) return;
+
+        com.example.medical.module.billing.entity.Charge c = new com.example.medical.module.billing.entity.Charge();
+        c.setPatientId(a.getPatientId());
+        c.setAppointmentId(a.getId());
+        c.setDoctorId(a.getDoctorId());
+        c.setCptCodes(a.getCptCode());
+        c.setIcd10Codes(a.getChiefComplaint());
+        c.setVisitType(a.getVisitType());
+        c.setChargeAmount(a.getCptCode() != null && a.getCptCode().startsWith("992") ? new java.math.BigDecimal("90") : new java.math.BigDecimal("100"));
+        c.setStatus("DRAFT");
+        chargeRepository.save(c);
     }
 
     @Transactional
