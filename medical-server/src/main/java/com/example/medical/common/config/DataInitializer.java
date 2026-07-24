@@ -47,6 +47,8 @@ public class DataInitializer implements CommandLineRunner {
         seedVitalSigns();
         seedProblems();
         seedImmunizations();
+        seedReferrals();
+        seedCharges();
         log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
@@ -724,5 +726,47 @@ public class DataInitializer implements CommandLineRunner {
                 LocalDate.of(2025, 9, 10), "CV2025-101", "Pfizer-BioNTech",
                 "Booster", "left arm", "intramuscular", "completed", 2L,
                 "2025 updated formulation", now);
+    }
+
+    private void seedReferrals() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM referral", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO referral (patient_id, referring_doctor_id, specialist_name, specialist_npi, " +
+                "specialty, diagnosis, reason, urgency, status, referral_date, appointment_date, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, 2L, "Dr. Emily Chen", "9876543210",
+                "Ophthalmology", "Diabetic retinopathy screening", "Annual eye exam for diabetic patient",
+                "ROUTINE", "SCHEDULED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 15),
+                "Patient scheduled at Northwestern Ophthalmology", now);
+        jdbcTemplate.update(sql, 100L, 2L, "Dr. Robert Park", "8765432109",
+                "Cardiology", "Essential hypertension", "BP trending up despite medication; evaluate for secondary causes",
+                "ROUTINE", "PENDING", LocalDate.of(2026, 7, 10), null,
+                "Referral faxed 7/10; awaiting scheduling", now);
+        jdbcTemplate.update(sql, 102L, 2L, "Dr. Lisa Zhang", "7654321098",
+                "Orthopedic Surgery", "Lumbar disc herniation", "Persistent radiculopathy; surgical consultation",
+                "URGENT", "PENDING", LocalDate.of(2026, 6, 28), null,
+                "MRI shows L4-L5 herniation with nerve root compression", now);
+        jdbcTemplate.update(sql, 103L, 2L, "Dr. James Miller", "6543210987",
+                "Endocrinology", "Type 2 diabetes mellitus", "HbA1c 8.2% despite insulin; optimize regimen",
+                "ROUTINE", "COMPLETED", LocalDate.of(2026, 4, 15), LocalDate.of(2026, 5, 20),
+                "Insulin adjusted; follow-up in 3 months", now);
+    }
+
+    private void seedCharges() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM charge", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO charge (patient_id, appointment_id, doctor_id, cpt_codes, icd10_codes, " +
+                "units, charge_amount, visit_type, status, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, 201L, 2L, "99213", "I10;E11.9",
+                1, 20.85, "FOLLOW_UP", "DRAFT",
+                "Hypertension + diabetes follow-up; captured from appointment #201", now);
+        jdbcTemplate.update(sql, 101L, 204L, 2L, "99214", "J45.30",
+                1, 100.00, "FOLLOW_UP", "DRAFT",
+                "Asthma follow-up with pulmonary function assessment", now);
     }
 }

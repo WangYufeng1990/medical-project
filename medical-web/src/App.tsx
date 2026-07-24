@@ -27,6 +27,9 @@ import PatientVitals from './views/patient/vitals'
 import PatientProblems from './views/patient/problems'
 import PatientImmunizations from './views/patient/immunizations'
 import PatientDisclosures from './views/patient/disclosures'
+import PatientReferrals from './views/patient/referrals'
+import Referrals from './views/referrals'
+import Charges from './views/charges'
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
 import PatientLab from './views/patient/lab'
@@ -55,6 +58,8 @@ export default function App() {
         <Route path="system/menus" element={<AdminGuard><Menus /></AdminGuard>} />
         <Route path="system/quality" element={<AdminGuard><QualityMeasures /></AdminGuard>} />
         <Route path="system/keys" element={<AdminGuard><AdminKeys /></AdminGuard>} />
+        <Route path="referrals" element={<Referrals />} />
+        <Route path="charges" element={<Charges />} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>
@@ -71,6 +76,7 @@ export default function App() {
         <Route path="problems" element={<PatientProblems />} />
         <Route path="immunizations" element={<PatientImmunizations />} />
         <Route path="disclosures" element={<PatientDisclosures />} />
+        <Route path="referrals" element={<PatientReferrals />} />
       </Route>
     </Routes>
   )

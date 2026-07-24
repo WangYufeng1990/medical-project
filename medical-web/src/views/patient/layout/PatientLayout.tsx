@@ -13,6 +13,7 @@ const items = [
   { path: '/patient/immunizations', label: 'Immunizations' },
   { path: '/patient/vitals', label: 'Vital Signs' },
   { path: '/patient/problems', label: 'Problem List' },
+  { path: '/patient/referrals', label: 'Referrals' },
   { path: '/patient/disclosures', label: 'Disclosures' },
 ]
 

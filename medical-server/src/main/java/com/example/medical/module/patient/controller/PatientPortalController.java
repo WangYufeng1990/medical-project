@@ -72,6 +72,7 @@ public class PatientPortalController {
     private final com.example.medical.module.patient.repository.ProblemRepository problemRepository;
     private final com.example.medical.module.patient.repository.ImmunizationRepository immunizationRepository;
     private final com.example.medical.common.audit.repository.AuditLogRepository auditLogRepository;
+    private final com.example.medical.module.appointment.repository.ReferralRepository referralRepository;
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
@@ -309,6 +310,11 @@ public class PatientPortalController {
     @GetMapping("/immunizations")
     public Result<List<com.example.medical.module.patient.entity.Immunization>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/referrals")
+    public Result<List<com.example.medical.module.appointment.entity.Referral>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/disclosures")

@@ -500,6 +500,50 @@ CREATE TABLE IF NOT EXISTS vital_sign (
     INDEX idx_vs_patient_id (patient_id)
 );
 
+CREATE TABLE IF NOT EXISTS referral (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    referring_doctor_id BIGINT NOT NULL,
+    specialist_name VARCHAR(200) NOT NULL,
+    specialist_npi VARCHAR(10) DEFAULT NULL,
+    specialty VARCHAR(100) DEFAULT NULL,
+    diagnosis VARCHAR(200) DEFAULT NULL,
+    reason VARCHAR(500) DEFAULT NULL,
+    urgency VARCHAR(20) DEFAULT 'ROUTINE',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    referral_date DATE DEFAULT NULL,
+    appointment_date DATE DEFAULT NULL,
+    completion_date DATE DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_ref_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS charge (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    appointment_id BIGINT DEFAULT NULL,
+    doctor_id BIGINT DEFAULT NULL,
+    cpt_codes VARCHAR(200) DEFAULT NULL,
+    icd10_codes VARCHAR(200) DEFAULT NULL,
+    units INT DEFAULT 1,
+    charge_amount DECIMAL(10,2) DEFAULT NULL,
+    visit_type VARCHAR(30) DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    bill_id BIGINT DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_chg_patient_id (patient_id)
+);
+
 CREATE TABLE IF NOT EXISTS refill_request (
     id BIGINT NOT NULL AUTO_INCREMENT,
     patient_id BIGINT NOT NULL,
