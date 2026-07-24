@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-23) — 22 gaps identified, 13 resolved (A1–A6 A7 A8 A9 B2 B3 D1–D5)**
+> **Status: Audit complete (2026-07-24) — 22 gaps identified, 14 resolved (A1–A6 A7 A8 A9 B1 B2 B3 D1–D5)**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1600,7 +1600,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 | # | Feature | Severity | Current State |
 |---|---------|----------|---------------|
-| B1 | **Immunizations** | 🔴 HIGH | No vaccine tracking at all. Core Meaningful Use requirement. Needs `Immunization` entity (CVX code, date, lot#, provider). FHIR `Immunization` resource. |
+| B1 | **Immunizations** | 🔴 HIGH | ✅ Fixed — `Immunization` entity (CVX code, date, lot#, manufacturer, dose, site/route). Staff CRUD, patient portal view. 9 seed records. |
 | B2 | **Vital Signs** | 🔴 HIGH | ✅ Fixed — `VitalSign` entity (BP/HR/temp/RR/O₂/BMI). Staff CRUD, patient portal view. 4 seed records. |
 | B3 | **Problem List / Diagnoses** | 🔴 HIGH | ✅ Fixed — `Problem` entity (SNOMED CT + ICD-10 coded). Staff CRUD with resolve, patient portal view. 8 seed records. |
 | B4 | **Care Plans** | 🟡 MEDIUM | Chronic disease management (diabetes, hypertension) requires structured care plans with goals, interventions, outcomes. Required for CMS CCM billing. |
