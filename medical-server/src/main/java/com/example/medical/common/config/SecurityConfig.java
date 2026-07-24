@@ -49,7 +49,7 @@ public class SecurityConfig {
                                 .includeSubDomains(true)
                                 .maxAgeInSeconds(31536000))
                         .contentTypeOptions(cfg -> {})
-                        .frameOptions(frame -> frame.deny())
+                        .frameOptions(frame -> frame.sameOrigin())
                         .xssProtection(xss -> {})
                         .cacheControl(cache -> {})
                 )
@@ -58,7 +58,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
                                 "/api/v1/patient/login", "/api/v1/patient/refresh",
                                 "/api/v1/fhir/metadata").permitAll()
-                        .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**", "/h2-console/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
