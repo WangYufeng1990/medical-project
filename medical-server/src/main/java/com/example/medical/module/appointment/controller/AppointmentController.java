@@ -22,8 +22,9 @@ public class AppointmentController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<AppointmentVO>> page(@RequestParam(defaultValue = "1") long page,
                                                   @RequestParam(defaultValue = "10") long size,
-                                                  @RequestParam(required = false) Integer status) {
-        Page<AppointmentVO> result = appointmentService.page(page, size, status);
+                                                  @RequestParam(required = false) Integer status,
+                                                  @RequestParam(required = false) Long patientId) {
+        Page<AppointmentVO> result = appointmentService.page(page, size, status, patientId);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1, result.getContent()));
     }

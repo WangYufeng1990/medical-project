@@ -29,10 +29,12 @@ public class AppointmentService {
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
 
-    public Page<AppointmentVO> page(long page, long size, Integer status) {
+    public Page<AppointmentVO> page(long page, long size, Integer status, Long patientId) {
         Specification<Appointment> spec = (root, query, cb) -> {
-            if (status == null) return null;
-            return cb.equal(root.get("status"), status);
+            var predicates = cb.conjunction();
+            if (status != null) predicates = cb.and(predicates, cb.equal(root.get("status"), status));
+            if (patientId != null) predicates = cb.and(predicates, cb.equal(root.get("patientId"), patientId));
+            return predicates;
         };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
         return appointmentRepository.findAll(spec, pageable).map(this::toVO);

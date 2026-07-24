@@ -2,10 +2,16 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getChargePage, createCharge, convertCharge } from '../../api/charge'
 import { getPatientPage } from '../../api/patient'
+import { getAppointmentPage } from '../../api/appointment'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { patientId: '', appointmentId: '', cptCodes: '', icd10Codes: '', chargeAmount: '', visitType: 'FOLLOW_UP', notes: '' }
+const FEE_SCHEDULE: any = {
+  '99203': 100, '99213': 90, '99214': 130, '99244': 200,
+  'NEW_PATIENT': 120, 'FOLLOW_UP': 90, 'ANNUAL_PHYSICAL': 150, 'PROCEDURE': 250,
+}
+
+const emptyForm: any = { patientId: '', appointmentId: '', cptCodes: '', icd10Codes: '', chargeAmount: '', visitType: '', notes: '' }
 
 export default function Charges() {
   const queryClient = useQueryClient()
@@ -25,6 +31,23 @@ export default function Charges() {
     queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
   })
 
+  const { data: appointments } = useQuery({
+    queryKey: ['appointments', 'forCharge', form.patientId],
+    queryFn: () => form.patientId ? getAppointmentPage({ patientId: form.patientId, size: 100 }) : Promise.resolve({ records: [] }),
+    enabled: !!form.patientId,
+  })
+  const apptList = (appointments as any)?.records ?? []
+
+  const selectAppointment = (apptId: string) => {
+    const appt = apptList.find((a: any) => String(a.id) === apptId)
+    if (!appt) return
+    const cpt = appt.cptCode || ''
+    const icd = appt.chiefComplaint || ''
+    const visit = appt.visitType || 'FOLLOW_UP'
+    const suggestedFee = FEE_SCHEDULE[cpt] || FEE_SCHEDULE[visit] || 90
+    setForm(prev => ({ ...prev, appointmentId: apptId, cptCodes: cpt, icd10Codes: icd, visitType: visit, chargeAmount: String(suggestedFee) }))
+  }
+
   const createMutation = useMutation({
     mutationFn: (d: any) => createCharge(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['charges'] }) },
@@ -38,10 +61,13 @@ export default function Charges() {
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
     createMutation.mutate({
-      ...form,
       patientId: Number(form.patientId),
       appointmentId: form.appointmentId ? Number(form.appointmentId) : undefined,
+      cptCodes: form.cptCodes || undefined,
+      icd10Codes: form.icd10Codes || undefined,
       chargeAmount: form.chargeAmount !== '' ? Number(form.chargeAmount) : undefined,
+      visitType: form.visitType || undefined,
+      notes: form.notes || undefined,
     })
   }
 
@@ -70,12 +96,17 @@ export default function Charges() {
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>New Charge (Superbill)</h3>
       <form onSubmit={handleCreate} className={styles.formGrid}>
-        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}><option value="">-- Select --</option>{(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-        <div className={styles.formGroup}><label>Appointment ID</label><input value={form.appointmentId} onChange={e => setForm({ ...form, appointmentId: e.target.value })} /></div>
-        <div className={styles.formGroup}><label>CPT Codes</label><input value={form.cptCodes} onChange={e => setForm({ ...form, cptCodes: e.target.value })} placeholder="e.g. 99213" /></div>
-        <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. I10" /></div>
-        <div className={styles.formGroup}><label>Charge Amount</label><input type="number" step="0.01" value={form.chargeAmount} onChange={e => setForm({ ...form, chargeAmount: e.target.value })} /></div>
-        <div className={styles.formGroup}><label>Visit Type</label><select value={form.visitType} onChange={e => setForm({ ...form, visitType: e.target.value })}><option value="FOLLOW_UP">Follow Up</option><option value="NEW_PATIENT">New Patient</option><option value="ANNUAL_PHYSICAL">Annual Physical</option><option value="PROCEDURE">Procedure</option></select></div>
+        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => { const pid = e.target.value; setForm({ ...emptyForm, patientId: pid }) }}><option value="">-- Select --</option>{(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        <div className={styles.formGroup}><label>Appointment</label>
+          <select value={form.appointmentId} onChange={e => selectAppointment(e.target.value)} style={{ width: '100%' }}>
+            <option value="">-- Select to auto-fill --</option>
+            {apptList.map((a: any) => <option key={a.id} value={a.id}>#{a.id} — {a.appointmentTime?.substring(0, 16)} {a.visitType}</option>)}
+          </select>
+        </div>
+        <div className={styles.formGroup}><label>CPT Codes</label><input value={form.cptCodes} onChange={e => setForm({ ...form, cptCodes: e.target.value })} placeholder="Auto-filled from appt" /></div>
+        <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="Auto-filled from appt" /></div>
+        <div className={styles.formGroup}><label>Charge Amount ($)</label><input type="number" step="0.01" value={form.chargeAmount} onChange={e => setForm({ ...form, chargeAmount: e.target.value })} /></div>
+        <div className={styles.formGroup}><label>Visit Type</label><select value={form.visitType} onChange={e => setForm({ ...form, visitType: e.target.value })}><option value="">--</option><option value="NEW_PATIENT">New Patient</option><option value="FOLLOW_UP">Follow Up</option><option value="ANNUAL_PHYSICAL">Annual Physical</option><option value="PROCEDURE">Procedure</option></select></div>
         <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>Notes</label><input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
         <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
       </form>
