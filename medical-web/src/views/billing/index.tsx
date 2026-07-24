@@ -74,7 +74,7 @@ export default function Billing() {
 
   const convertMutation = useMutation({
     mutationFn: (id: number) => convertCharge(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['charges', 'billing'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['charges'] }); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
   const submitMutation = useMutation({
