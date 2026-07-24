@@ -7,6 +7,7 @@ import { getConsents, createConsent, revokeConsent } from '../../api/consent'
 import { initiateEmergencyAccess } from '../../api/emergency'
 import { getVitalSigns, createVitalSign } from '../../api/vitalSign'
 import { getProblems, createProblem, updateProblem } from '../../api/problem'
+import { getImmunizations, createImmunization } from '../../api/immunization'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -37,6 +38,8 @@ export default function Patients() {
   const [problems, setProblems] = useState<any[]>([])
   const [newVital, setNewVital] = useState({ systolicBp: '', diastolicBp: '', heartRate: '', temperature: '', respiratoryRate: '', oxygenSaturation: '', heightCm: '', weightKg: '', bmi: '', notes: '' })
   const [newProblem, setNewProblem] = useState({ snomedCode: '', snomedDisplay: '', icd10Code: '', onsetDate: '', severity: 'MODERATE', notes: '' })
+  const [immunizations, setImmunizations] = useState<any[]>([])
+  const [newImmunization, setNewImmunization] = useState({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
 
   const { data: pageData } = useQuery({
     queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
@@ -86,6 +89,7 @@ export default function Patients() {
         try { setAllergyEntries(await getPatientAllergies(row.id) || []) } catch { setAllergyEntries([]) }
         try { setVitalSigns((await getVitalSigns(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setVitalSigns([]) }
         try { setProblems((await getProblems(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setProblems([]) }
+        try { setImmunizations((await getImmunizations(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setImmunizations([]) }
       }
     } else {
       setEditId(null); setForm({ ...emptyForm })
@@ -476,6 +480,47 @@ export default function Patients() {
                     </div>
                   </div>
                 </>
+              )}
+              {editId && (
+                <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                  <h4 style={{ marginBottom: 8 }}>Immunizations</h4>
+                  {immunizations.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No immunizations recorded.</p>}
+                  {immunizations.map((r: any) => (
+                    <div key={r.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>
+                        <strong>{r.vaccineName}</strong>
+                        {r.cvxCode && <span style={{ color: '#909399', marginLeft: 8, fontSize: 10 }}>CVX:{r.cvxCode}</span>}
+                        {r.doseNumber && <span style={{ color: '#409EFF', marginLeft: 8, fontSize: 10 }}>[{r.doseNumber}]</span>}
+                        <span style={{ marginLeft: 8, color: '#909399', fontSize: 10 }}>{r.administrationDate}</span>
+                        {r.lotNumber && <span style={{ marginLeft: 8, fontSize: 10 }}>Lot:{r.lotNumber}</span>}
+                      </span>
+                      <span style={{ color: r.status === 'completed' ? '#67C23A' : r.status === 'refused' ? '#F56C6C' : '#E6A23C', fontWeight: 600, fontSize: 10 }}>{r.status}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+                    <input value={newImmunization.vaccineName} onChange={e => setNewImmunization({ ...newImmunization, vaccineName: e.target.value })} placeholder="Vaccine name" style={{ width: 160, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.cvxCode} onChange={e => setNewImmunization({ ...newImmunization, cvxCode: e.target.value })} placeholder="CVX" style={{ width: 60, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.administrationDate} type="date" onChange={e => setNewImmunization({ ...newImmunization, administrationDate: e.target.value })} style={{ width: 110, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.doseNumber} onChange={e => setNewImmunization({ ...newImmunization, doseNumber: e.target.value })} placeholder="Dose #" style={{ width: 64, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.lotNumber} onChange={e => setNewImmunization({ ...newImmunization, lotNumber: e.target.value })} placeholder="Lot" style={{ width: 80, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <button type="button" className={styles.btnSm} disabled={!newImmunization.vaccineName.trim()} onClick={async () => {
+                      if (!editId || !newImmunization.vaccineName.trim()) return
+                      await createImmunization(editId, {
+                        vaccineName: newImmunization.vaccineName.trim(),
+                        cvxCode: newImmunization.cvxCode.trim() || null,
+                        administrationDate: newImmunization.administrationDate || new Date().toISOString().slice(0, 10),
+                        doseNumber: newImmunization.doseNumber.trim() || null,
+                        lotNumber: newImmunization.lotNumber.trim() || null,
+                        manufacturer: newImmunization.manufacturer.trim() || null,
+                        site: newImmunization.site.trim() || null,
+                        route: newImmunization.route.trim() || null,
+                        notes: newImmunization.notes.trim() || null,
+                      })
+                      setImmunizations((await getImmunizations(editId, { page: 1, size: 100 }))?.records ?? [])
+                      setNewImmunization({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
+                    }}>+ Add</button>
+                  </div>
+                </div>
               )}
               <div className={styles.formActions}>
                 <button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>

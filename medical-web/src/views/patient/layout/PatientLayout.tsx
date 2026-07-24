@@ -10,6 +10,7 @@ const items = [
   { path: '/patient/bills', label: 'Bills' },
   { path: '/patient/chat', label: 'Messages' },
   { path: '/patient/consent', label: 'Consent' },
+  { path: '/patient/immunizations', label: 'Immunizations' },
   { path: '/patient/vitals', label: 'Vital Signs' },
   { path: '/patient/problems', label: 'Problem List' },
 ]

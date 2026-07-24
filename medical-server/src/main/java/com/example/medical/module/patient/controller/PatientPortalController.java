@@ -70,6 +70,7 @@ public class PatientPortalController {
     private final LabAnalysisService labAnalysisService;
     private final com.example.medical.module.patient.repository.VitalSignRepository vitalSignRepository;
     private final com.example.medical.module.patient.repository.ProblemRepository problemRepository;
+    private final com.example.medical.module.patient.repository.ImmunizationRepository immunizationRepository;
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
@@ -302,5 +303,10 @@ public class PatientPortalController {
     @GetMapping("/problems")
     public Result<List<com.example.medical.module.patient.entity.Problem>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/immunizations")
+    public Result<List<com.example.medical.module.patient.entity.Immunization>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId()));
     }
 }

@@ -46,6 +46,7 @@ public class DataInitializer implements CommandLineRunner {
         seedAllergies();
         seedVitalSigns();
         seedProblems();
+        seedImmunizations();
         log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
@@ -677,5 +678,51 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 103L, "44054006", "Type 2 diabetes mellitus", "E11.9",
                 LocalDate.of(2015, 6, 1), "ACTIVE", "MODERATE", 2L,
                 "HbA1c 8.2%; insulin-dependent", now);
+    }
+
+    private void seedImmunizations() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM immunization", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO immunization (patient_id, vaccine_name, cvx_code, administration_date, " +
+                "lot_number, manufacturer, dose_number, site, route, status, administered_by, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, "Influenza (seasonal)", "141",
+                LocalDate.of(2025, 10, 15), "FL2025-001", "Sanofi Pasteur",
+                "Annual", "left arm", "intramuscular", "completed", 2L,
+                "2025-2026 season quadrivalent", now);
+        jdbcTemplate.update(sql, 100L, "COVID-19 (mRNA)", "208",
+                LocalDate.of(2025, 9, 1), "CV2025-089", "Pfizer-BioNTech",
+                "Booster", "left arm", "intramuscular", "completed", 2L,
+                "2025 updated formulation", now);
+        jdbcTemplate.update(sql, 100L, "Tdap", "115",
+                LocalDate.of(2023, 6, 10), "TD2023-045", "GlaxoSmithKline",
+                "Booster", "right arm", "intramuscular", "completed", 2L, null, now);
+        jdbcTemplate.update(sql, 101L, "Influenza (seasonal)", "141",
+                LocalDate.of(2025, 10, 20), "FL2025-002", "Sanofi Pasteur",
+                "Annual", "left arm", "intramuscular", "completed", 2L,
+                "2025-2026 season quadrivalent", now);
+        jdbcTemplate.update(sql, 101L, "COVID-19 (mRNA)", "208",
+                LocalDate.of(2025, 9, 15), "CV2025-092", "Moderna",
+                "Booster", "right arm", "intramuscular", "completed", 2L,
+                "2025 updated formulation", now);
+        jdbcTemplate.update(sql, 101L, "Shingles (recombinant)", "187",
+                LocalDate.of(2024, 3, 1), "SH2024-011", "GlaxoSmithKline",
+                "1st dose", "left arm", "intramuscular", "completed", 2L,
+                "Shingrix dose 1 of 2", now);
+        jdbcTemplate.update(sql, 103L, "Influenza (seasonal)", "141",
+                LocalDate.of(2025, 11, 5), "FL2025-015", "Sanofi Pasteur",
+                "Annual", "left arm", "intramuscular", "completed", 2L,
+                "High-dose for 65+", now);
+        jdbcTemplate.update(sql, 103L, "Pneumococcal conjugate (PCV20)", "215",
+                LocalDate.of(2024, 1, 15), "PC2024-003", "Pfizer",
+                null, "right arm", "intramuscular", "completed", 2L,
+                "Prevnar 20", now);
+        jdbcTemplate.update(sql, 103L, "COVID-19 (mRNA)", "208",
+                LocalDate.of(2025, 9, 10), "CV2025-101", "Pfizer-BioNTech",
+                "Booster", "left arm", "intramuscular", "completed", 2L,
+                "2025 updated formulation", now);
     }
 }

@@ -500,6 +500,28 @@ CREATE TABLE IF NOT EXISTS vital_sign (
     INDEX idx_vs_patient_id (patient_id)
 );
 
+CREATE TABLE IF NOT EXISTS immunization (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    vaccine_name VARCHAR(200) NOT NULL,
+    cvx_code VARCHAR(10) DEFAULT NULL,
+    administration_date DATE DEFAULT NULL,
+    lot_number VARCHAR(50) DEFAULT NULL,
+    manufacturer VARCHAR(100) DEFAULT NULL,
+    dose_number VARCHAR(20) DEFAULT NULL,
+    site VARCHAR(50) DEFAULT NULL,
+    route VARCHAR(50) DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'completed',
+    administered_by BIGINT DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_imm_patient_id (patient_id)
+);
+
 CREATE TABLE IF NOT EXISTS problem (
     id BIGINT NOT NULL AUTO_INCREMENT,
     patient_id BIGINT NOT NULL,
