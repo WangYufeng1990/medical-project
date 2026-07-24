@@ -11,7 +11,6 @@ const menuItems = [
   { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
   { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
-  { path: '/charges', label: 'Superbill', icon: '📝', roles: ['ADMIN','DOCTOR'] },
   { path: '/referrals', label: 'Referrals', icon: '🏥', roles: ['ADMIN','DOCTOR'] },
   { path: '/lab', label: 'Lab Results', icon: '🧪', roles: ['ADMIN','DOCTOR'] },
   { path: '/loinc', label: 'LOINC Catalog', icon: '📋', roles: ['ADMIN','DOCTOR'] },
