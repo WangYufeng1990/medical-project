@@ -71,6 +71,7 @@ public class PatientPortalController {
     private final com.example.medical.module.patient.repository.VitalSignRepository vitalSignRepository;
     private final com.example.medical.module.patient.repository.ProblemRepository problemRepository;
     private final com.example.medical.module.patient.repository.ImmunizationRepository immunizationRepository;
+    private final com.example.medical.common.audit.repository.AuditLogRepository auditLogRepository;
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
@@ -308,5 +309,19 @@ public class PatientPortalController {
     @GetMapping("/immunizations")
     public Result<List<com.example.medical.module.patient.entity.Immunization>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/disclosures")
+    public Result<PageResult<com.example.medical.common.audit.AuditLog>> myDisclosures(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        var pageable = org.springframework.data.domain.PageRequest.of(page - 1, size,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime"));
+        var result = auditLogRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
+                pageable);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
     }
 }

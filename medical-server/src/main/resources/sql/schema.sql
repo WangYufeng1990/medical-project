@@ -500,6 +500,25 @@ CREATE TABLE IF NOT EXISTS vital_sign (
     INDEX idx_vs_patient_id (patient_id)
 );
 
+CREATE TABLE IF NOT EXISTS refill_request (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    prescription_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by BIGINT DEFAULT NULL,
+    reviewed_at TIMESTAMP NULL DEFAULT NULL,
+    reason VARCHAR(500) DEFAULT NULL,
+    review_notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_rr_patient_id (patient_id),
+    INDEX idx_rr_status (status)
+);
+
 CREATE TABLE IF NOT EXISTS immunization (
     id BIGINT NOT NULL AUTO_INCREMENT,
     patient_id BIGINT NOT NULL,

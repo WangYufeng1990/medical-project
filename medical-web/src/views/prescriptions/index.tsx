@@ -5,6 +5,7 @@ import { getPatientPage } from '../../api/patient'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
+import { getPendingRefillRequests, approveRefillRequest, denyRefillRequest } from '../../api/refill'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -23,6 +24,21 @@ export default function Prescriptions() {
   const [cdsWarnings, setCdsWarnings] = useState<any[]>([])
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
+
+  const { data: refillRequests } = useQuery({
+    queryKey: ['prescriptions', 'refill-requests'],
+    queryFn: () => getPendingRefillRequests().then(r => r ?? []),
+  })
+
+  const approveRefill = useMutation({
+    mutationFn: (id: number) => approveRefillRequest(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions', 'refill-requests'] }),
+  })
+
+  const denyRefill = useMutation({
+    mutationFn: (params: { id: number; notes?: string }) => denyRefillRequest(params.id, params.notes),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions', 'refill-requests'] }),
+  })
 
   const { data: pageData } = useQuery({
     queryKey: ['prescriptions', 'list', { page, size: PAGE_SIZE }],
@@ -170,6 +186,30 @@ export default function Prescriptions() {
 
   return (
     <div>
+      {refillRequests && refillRequests.length > 0 && (
+        <div style={{ marginBottom: 20, padding: 16, background: '#fef0f0', borderRadius: 8, border: '1px solid #fde2e2' }}>
+          <h3 style={{ margin: '0 0 12px 0', color: '#E6A23C' }}>Pending Refill Requests ({refillRequests.length})</h3>
+          <table className={styles.table} style={{ background: '#fff' }}>
+            <thead><tr><th>ID</th><th>Patient</th><th>Prescription</th><th>Reason</th><th>Requested</th><th></th></tr></thead>
+            <tbody>{refillRequests.map((r: any) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{r.patientId}</td>
+                <td>{r.prescriptionId}</td>
+                <td>{r.reason || '-'}</td>
+                <td>{r.requestedAt?.substring(0, 16)}</td>
+                <td style={{ display: 'flex', gap: 4 }}>
+                  <button className={styles.btnSm} disabled={approveRefill.isPending} onClick={() => approveRefill.mutate(r.id)}>Approve</button>
+                  <button className={styles.btnSmDanger} disabled={denyRefill.isPending} onClick={() => {
+                    const notes = prompt('Denial reason (optional):')
+                    denyRefill.mutate({ id: r.id, notes: notes || undefined })
+                  }}>Deny</button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
       <h2 style={{ marginBottom: 20 }}>Prescriptions</h2>
       <button className={styles.btnPrimary} onClick={() => openForm()} style={{ marginBottom: 16 }}>+ Add Prescription</button>
       <table className={styles.table}>

@@ -26,6 +26,7 @@ import PatientConsent from './views/patient/consent'
 import PatientVitals from './views/patient/vitals'
 import PatientProblems from './views/patient/problems'
 import PatientImmunizations from './views/patient/immunizations'
+import PatientDisclosures from './views/patient/disclosures'
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
 import PatientLab from './views/patient/lab'
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="vitals" element={<PatientVitals />} />
         <Route path="problems" element={<PatientProblems />} />
         <Route path="immunizations" element={<PatientImmunizations />} />
+        <Route path="disclosures" element={<PatientDisclosures />} />
       </Route>
     </Routes>
   )
