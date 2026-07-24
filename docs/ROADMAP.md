@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-24) — 22 gaps identified, 14 resolved (A1–A6 A7 A8 A9 B1 B2 B3 D1–D5)**
+> **Status: Audit complete (2026-07-24) — 22 gaps identified, 16 resolved (A1–A6 A7 A8 A9 B1 B2 B3 B9 B11 D1–D5)**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1613,9 +1613,9 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 | # | Feature | Severity | Current State |
 |---|---------|----------|---------------|
-| B9 | **Prescription Refill Requests** | 🟡 MEDIUM | Patients can view prescriptions but cannot request refills. Standard patient portal feature. |
+| B9 | **Prescription Refill Requests** | 🟡 MEDIUM | ✅ Fixed — `RefillRequest` entity. Patient creates request, doctor approves/denies. Buttons on both staff and patient prescription pages. |
 | B10 | **New Patient Self-Registration** | ⚪ LOW | No self-service registration. All patients created by staff. |
-| B11 | **HIPAA Accounting of Disclosures** | 🟡 MEDIUM | Audit log exists (staff-facing) but no patient-facing "who viewed my record" report. HIPAA §164.528 requirement. `GET /api/v1/patient/me/disclosures?from=&to=`. |
+| B11 | **HIPAA Accounting of Disclosures** | 🟡 MEDIUM | ✅ Fixed — `GET /patient/me/disclosures` queries audit_log by patientId. Patient portal `/patient/disclosures` page. |
 | B12 | **Advance Directives** | ⚪ LOW | Living will, DNR/DNI, healthcare proxy. Required for Medicare/Medicaid hospitals; less critical for outpatient. |
 | B13 | **Appointment Reminders** | ⚪ LOW | SMS/email reminders. Requires messaging infra not in stack. |
 
