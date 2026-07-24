@@ -1652,6 +1652,13 @@ Priority 5 — Refill requests + Accounting of Disclosures            ~1 round
 Priority 6 — Referrals + Formulary + Prior Auth + Superbill         ~2 rounds
 ```
 
+## Post-Round 36: Superbill Auto-Fill (2026-07-24)
+
+| # | Issue | Fix | Commit |
+|---|-------|-----|--------|
+| Fix | Superbill form required manual entry of all fields | Select patient → loads appointments → select appointment auto-fills CPT, ICD-10 hint (from chief complaint), visit type, suggested fee | `04f5570` |
+| ⚠️ Note | Appointment lacks `icd10_codes` field | `chiefComplaint` is free-text, not ICD-10 codes. Auto-filled ICD-10 needs manual correction. Future: add `icd10_codes` column to `appointment` table and seed data. | — |
+
 ## Post-Round 36: Appointment Fixes (2026-07-23)
 
 | # | Issue | Fix | Commit |
