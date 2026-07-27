@@ -11,19 +11,12 @@ const menuItems = [
   { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
   { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
-  { path: '/referrals', label: 'Referrals', icon: '🏥', roles: ['ADMIN','DOCTOR'] },
-  { path: '/prior-auths', label: 'Prior Auths', icon: '📋', roles: ['ADMIN','DOCTOR'] },
   { path: '/lab', label: 'Lab Results', icon: '🧪', roles: ['ADMIN','DOCTOR'] },
-  { path: '/loinc', label: 'LOINC Catalog', icon: '📋', roles: ['ADMIN','DOCTOR'] },
   { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
   { type: 'divider' } as any,
-  { path: '/emergency', label: 'Emergency Access', icon: '🚨', roles: ['ADMIN'] },
   { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
-  { path: '/system/menus', label: 'Menus', icon: '📋', roles: ['ADMIN'] },
-  { path: '/system/quality', label: 'eCQM Quality', icon: '📈', roles: ['ADMIN'] },
-  { path: '/system/keys', label: 'Key Management', icon: '🔐', roles: ['ADMIN'] },
-  { path: '/audit-logs', label: 'Audit Logs', icon: '📋', roles: ['ADMIN'] },
+  { path: '/audit-logs', label: 'Audit Logs', icon: '🛡', roles: ['ADMIN'] },
 ]
 
 export default function StaffLayout() {
