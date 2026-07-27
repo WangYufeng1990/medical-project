@@ -9,14 +9,6 @@ const items = [
   { path: '/patient/lab', label: 'Lab Results' },
   { path: '/patient/bills', label: 'Bills' },
   { path: '/patient/chat', label: 'Messages' },
-  { path: '/patient/consent', label: 'Consent' },
-  { path: '/patient/immunizations', label: 'Immunizations' },
-  { path: '/patient/vitals', label: 'Vital Signs' },
-  { path: '/patient/problems', label: 'Problem List' },
-  { path: '/patient/referrals', label: 'Referrals' },
-  { path: '/patient/care-plans', label: 'Care Plans' },
-  { path: '/patient/prior-auths', label: 'Prior Auths' },
-  { path: '/patient/disclosures', label: 'Disclosures' },
 ]
 
 export default function PatientLayout() {
