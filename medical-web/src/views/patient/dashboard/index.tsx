@@ -1,26 +1,27 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
+import styles from '../../dashboard/style.module.css'
 
 const overviewCards = [
-  { label: 'Appointments', key: 'apt', path: '/patient/appointments', color: '#67C23A' },
-  { label: 'Prescriptions', key: 'rx', path: '/patient/prescriptions', color: '#F56C6C' },
-  { label: 'Bills', key: 'bill', path: '/patient/bills', color: '#E6A23C' },
+  { label: 'Appointments', key: 'apt', path: '/patient/appointments', color: '#10b981' },
+  { label: 'Prescriptions', key: 'rx', path: '/patient/prescriptions', color: '#ef4444' },
+  { label: 'Bills', key: 'bill', path: '/patient/bills', color: '#f59e0b' },
 ]
 
 const healthCards = [
-  { label: '🫀 Vital Signs', path: '/patient/vitals' },
-  { label: '📋 Problem List', path: '/patient/problems' },
-  { label: '💉 Immunizations', path: '/patient/immunizations' },
-  { label: '🧪 Lab Results', path: '/patient/lab' },
-  { label: '📝 Care Plans', path: '/patient/care-plans' },
+  { label: 'Vital Signs', path: '/patient/vitals', icon: '🫀', color: '#10b981' },
+  { label: 'Problem List', path: '/patient/problems', icon: '📋', color: '#6366f1' },
+  { label: 'Immunizations', path: '/patient/immunizations', icon: '💉', color: '#8b5cf6' },
+  { label: 'Lab Results', path: '/patient/lab', icon: '🧪', color: '#06b6d4' },
+  { label: 'Care Plans', path: '/patient/care-plans', icon: '📝', color: '#64748b' },
 ]
 
 const accountCards = [
-  { label: '🏥 Referrals', path: '/patient/referrals' },
-  { label: '📄 Prior Auths', path: '/patient/prior-auths' },
-  { label: '✍️ Consent', path: '/patient/consent' },
-  { label: '🛡 Disclosures', path: '/patient/disclosures' },
+  { label: 'Referrals', path: '/patient/referrals', icon: '🏥', color: '#3b82f6' },
+  { label: 'Prior Auths', path: '/patient/prior-auths', icon: '📄', color: '#f59e0b' },
+  { label: 'Consent', path: '/patient/consent', icon: '✍️', color: '#10b981' },
+  { label: 'Disclosures', path: '/patient/disclosures', icon: '🛡', color: '#64748b' },
 ]
 
 export default function PatientDashboard() {
@@ -34,35 +35,35 @@ export default function PatientDashboard() {
   const counts: any = { apt: aptData?.total ?? 0, rx: rxData?.total ?? 0, bill: billData?.total ?? 0 }
 
   return (<div>
-    <h2 style={{ marginBottom: 20 }}>Welcome, {info.name || 'Patient'}</h2>
+    <h2 className={styles.welcome}>Welcome, {info.name || 'Patient'}</h2>
+    <p className={styles.welcomeSub}>Your health at a glance</p>
 
-    <h3 style={{ fontSize: 14, color: '#606266', marginBottom: 12 }}>Overview</h3>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 24 }}>
+    <div className={styles.sectionTitle} style={{ marginTop: 24 }}>Overview</div>
+    <div className={styles.patientGrid}>
       {overviewCards.map(c => (
-        <div key={c.label} onClick={() => navigate(c.path)}
-          style={{ background: '#fff', padding: 20, borderRadius: 8, cursor: 'pointer', borderTop: `3px solid ${c.color}` }}>
-          <div style={{ fontSize: 14, color: '#909399', marginBottom: 8 }}>{c.label}</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{counts[c.key]}</div>
+        <div key={c.label} className={styles.patientCard} onClick={() => navigate(c.path)} style={{ borderTopColor: c.color }}>
+          <div className={styles.label}>{c.label}</div>
+          <div className={styles.patientStatValue}>{counts[c.key]}</div>
         </div>
       ))}
     </div>
 
-    <h3 style={{ fontSize: 14, color: '#606266', margin: '24px 0 12px' }}>Health Records</h3>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 24 }}>
+    <div className={styles.sectionTitle}>Health Records</div>
+    <div className={styles.patientGrid}>
       {healthCards.map(c => (
-        <div key={c.label} onClick={() => navigate(c.path)}
-          style={{ background: '#fff', padding: 18, borderRadius: 8, cursor: 'pointer', borderTop: '3px solid #67C23A' }}>
-          <div style={{ fontSize: 14, color: '#606266' }}>{c.label}</div>
+        <div key={c.label} className={styles.patientFeatureCard} onClick={() => navigate(c.path)} style={{ borderLeftColor: c.color }}>
+          <span className={styles.patientFeatureIcon}>{c.icon}</span>
+          <span className={styles.patientFeatureLabel}>{c.label}</span>
         </div>
       ))}
     </div>
 
-    <h3 style={{ fontSize: 14, color: '#606266', margin: '24px 0 12px' }}>Account</h3>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+    <div className={styles.sectionTitle}>Account</div>
+    <div className={styles.patientGrid}>
       {accountCards.map(c => (
-        <div key={c.label} onClick={() => navigate(c.path)}
-          style={{ background: '#fff', padding: 18, borderRadius: 8, cursor: 'pointer', borderTop: '3px solid #409EFF' }}>
-          <div style={{ fontSize: 14, color: '#606266' }}>{c.label}</div>
+        <div key={c.label} className={styles.patientFeatureCard} onClick={() => navigate(c.path)} style={{ borderLeftColor: c.color }}>
+          <span className={styles.patientFeatureIcon}>{c.icon}</span>
+          <span className={styles.patientFeatureLabel}>{c.label}</span>
         </div>
       ))}
     </div>

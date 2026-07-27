@@ -1,5 +1,103 @@
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
-.card { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); cursor: pointer; border-top: 3px solid; transition: transform .15s, box-shadow .15s; }
-.card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
-.label { font-size: 14px; color: #909399; margin-bottom: 8px; }
-.value { font-size: 32px; font-weight: 700; color: #303133; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+.card {
+  background: #fff;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  cursor: pointer;
+  border-left: 4px solid;
+  transition: all .2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.1);
+}
+
+.statCard { min-height: 100px; }
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  letter-spacing: 0.01em;
+}
+
+.value {
+  font-size: 36px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.1;
+}
+
+.featureCard { min-height: 64px; justify-content: center; }
+
+.featureIcon {
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+
+.featureLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  letter-spacing: 0.01em;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 28px 0 12px;
+}
+
+.patientGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+.patientCard {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  border-top: 4px solid;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  transition: all .2s ease;
+}
+.patientCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.1);
+}
+
+.patientStatValue {
+  font-size: 32px;
+  font-weight: 800;
+  color: #111827;
+  margin: 4px 0 0;
+}
+
+.patientFeatureCard {
+  background: #fff;
+  padding: 18px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  border-left: 4px solid;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all .2s ease;
+}
+.patientFeatureCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.1);
+}
+
+.patientFeatureIcon { font-size: 20px; }
+.patientFeatureLabel { font-size: 14px; font-weight: 500; color: #374151; }
+
+.welcome { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+.welcomeSub { font-size: 13px; color: #9ca3af; margin-bottom: 0; }
