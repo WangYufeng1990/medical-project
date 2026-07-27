@@ -1577,7 +1577,7 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 
 # Round 36: Comprehensive Gap Analysis (Audit)
 
-> **Status: Audit complete (2026-07-27) — 22 gaps identified, 21 resolved (A1–A6 A7 A8 A9 B1–B9 B11 D1–D5)**
+> **Status: Audit complete (2026-07-27) — 22 gaps identified, 21 resolved, 1 deferred. All HIGH/MEDIUM gaps closed. Only 3 LOW gaps (B10/B12/B13) deferred.**
 > **Method: Full-stack review of 84 backend endpoints vs 70 frontend API functions vs UI views, plus US healthcare feature completeness audit**
 
 ## Gap Categories
@@ -1614,10 +1614,10 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 | # | Feature | Severity | Current State |
 |---|---------|----------|---------------|
 | B9 | **Prescription Refill Requests** | 🟡 MEDIUM | ✅ Fixed — `RefillRequest` entity. Patient creates request, doctor approves/denies. Buttons on both staff and patient prescription pages. |
-| B10 | **New Patient Self-Registration** | ⚪ LOW | No self-service registration. All patients created by staff. |
+| B10 | **New Patient Self-Registration** | ⚪ LOW | Deferred — current staff-created flow sufficient for clinic use case. |
 | B11 | **HIPAA Accounting of Disclosures** | 🟡 MEDIUM | ✅ Fixed — `GET /patient/me/disclosures` queries audit_log by patientId. Patient portal `/patient/disclosures` page. |
-| B12 | **Advance Directives** | ⚪ LOW | Living will, DNR/DNI, healthcare proxy. Required for Medicare/Medicaid hospitals; less critical for outpatient. |
-| B13 | **Appointment Reminders** | ⚪ LOW | SMS/email reminders. Requires messaging infra not in stack. |
+| B12 | **Advance Directives** | ⚪ LOW | Deferred — living will/DNR/DNI primarily needed for inpatient settings, not outpatient. |
+| B13 | **Appointment Reminders** | ⚪ LOW | Deferred — requires SMS/email infrastructure not in current stack. |
 
 ### D. Frontend Dead Code & Missing Modules
 
@@ -1644,12 +1644,16 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 ## Execution Priority
 
 ```
-Priority 1 — Quick wins (logout fix, dead code cleanup)           ~1 round
-Priority 2 — Staff export UI + Key management UI                    ~1 round
-Priority 3 — Vital Signs + Problem List entities                    ~1 round
-Priority 4 — Immunizations entity                                   ~1 round
-Priority 5 — Refill requests + Accounting of Disclosures            ~1 round
-Priority 6 — Referrals + Formulary + Prior Auth + Superbill         ~2 rounds
+Priority 1 — Quick wins (logout fix, dead code cleanup)            ✅ Complete
+Priority 2 — Staff export UI + Key management UI                   ✅ Complete
+Priority 3 — Vital Signs + Problem List entities                   ✅ Complete
+Priority 4 — Immunizations entity                                  ✅ Complete
+Priority 5 — Refill requests + Accounting of Disclosures           ✅ Complete
+Priority 6 — Referrals + Superbill + Care Plans + PA + Formulary   ✅ Complete
+──────────────────────────────────────────────────────────────────
+Deferred — B10 (self-registration), B12 (advance directives),
+           B13 (appointment reminders) — all LOW priority,
+           require external infra or inpatient context
 ```
 
 ## Post-Round 36: Superbill Auto-Fill (2026-07-24)
