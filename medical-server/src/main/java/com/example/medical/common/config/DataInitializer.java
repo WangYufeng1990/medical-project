@@ -49,6 +49,9 @@ public class DataInitializer implements CommandLineRunner {
         seedImmunizations();
         seedReferrals();
         seedCharges();
+        seedCarePlans();
+        seedPriorAuths();
+        seedFormularyEntries();
         log.info("Seed data initialized (admin, doctor1, patient1 — all BCrypt hashed)");
     }
 
@@ -768,5 +771,59 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 101L, 204L, 2L, "99214", "J45.30",
                 1, 100.00, "FOLLOW_UP", "DRAFT",
                 "Asthma follow-up with pulmonary function assessment", now);
+    }
+
+    private void seedCarePlans() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM care_plan", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO care_plan (patient_id, title, goal, interventions, start_date, target_date, status, created_by, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, "Hypertension Management", "Maintain BP < 130/80 mmHg",
+                "Daily BP monitoring; Low-sodium diet (<2g/day); Lisinopril 10mg daily; Walking 30min 5x/week",
+                LocalDate.of(2024, 3, 1), LocalDate.of(2026, 12, 31), "ACTIVE", 2L,
+                "BP improving; continue current regimen", now);
+        jdbcTemplate.update(sql, 100L, "Diabetes Type 2 Management", "HbA1c < 7.0%",
+                "Blood glucose monitoring BID; Metformin 500mg BID; Quarterly HbA1c; Annual eye exam; Foot exam at each visit",
+                LocalDate.of(2025, 1, 15), LocalDate.of(2026, 12, 31), "ACTIVE", 2L,
+                "HbA1c 7.1% at last check; titrating Metformin", now);
+        jdbcTemplate.update(sql, 103L, "Diabetes Type 2 Management", "HbA1c < 7.5%",
+                "Insulin therapy as prescribed; Carb counting; Weekly glucose log review; Podiatry referral",
+                LocalDate.of(2020, 6, 1), LocalDate.of(2026, 6, 1), "COMPLETED", 2L,
+                "Transitioned to new regimen; new plan created", now);
+    }
+
+    private void seedPriorAuths() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM prior_auth", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO prior_auth (patient_id, auth_type, item_name, item_code, insurance_payer, status, requested_at, requested_by, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(sql, 100L, "MEDICATION", "Lisinopril 20mg", "314076", "Blue Cross Blue Shield",
+                "PENDING", LocalDate.of(2026, 7, 10), 2L,
+                "Dose increase from 10mg requested", now);
+        jdbcTemplate.update(sql, 102L, "PROCEDURE", "Lumbar MRI", "72148", "UnitedHealthcare",
+                "PENDING", LocalDate.of(2026, 7, 5), 2L,
+                "Follow-up imaging for disc herniation; conservative treatment x6 months completed", now);
+    }
+
+    private void seedFormularyEntries() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM formulary_entry", Integer.class);
+        if (count != null && count > 0) return;
+
+        String sql = "INSERT INTO formulary_entry (rxnorm_code, drug_name, insurance_payer, tier, prior_auth_required, step_therapy_required, alternatives) " +
+                "VALUES (?,?,?,?,?,?,?)";
+        jdbcTemplate.update(sql, "6809", "Metformin HCl", "Blue Cross Blue Shield", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "308191", "Amoxicillin", "Blue Cross Blue Shield", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "5640", "Ibuprofen", "Blue Cross Blue Shield", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "435", "Albuterol", "Blue Cross Blue Shield", "2", 0, 0, "Levalbuterol");
+        jdbcTemplate.update(sql, "314076", "Lisinopril", "Blue Cross Blue Shield", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "23642", "Cetirizine", "Blue Cross Blue Shield", "2", 0, 1, "Loratadine;Fexofenadine");
+        jdbcTemplate.update(sql, "6809", "Metformin HCl", "Aetna", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "314076", "Lisinopril", "Aetna", "2", 0, 0, null);
+        jdbcTemplate.update(sql, "435", "Albuterol", "UnitedHealthcare", "1", 0, 0, null);
+        jdbcTemplate.update(sql, "64479", "Montelukast", "UnitedHealthcare", "3", 1, 1, "Zafirlukast");
     }
 }

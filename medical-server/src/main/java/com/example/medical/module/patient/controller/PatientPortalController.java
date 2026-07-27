@@ -73,6 +73,8 @@ public class PatientPortalController {
     private final com.example.medical.module.patient.repository.ImmunizationRepository immunizationRepository;
     private final com.example.medical.common.audit.repository.AuditLogRepository auditLogRepository;
     private final com.example.medical.module.appointment.repository.ReferralRepository referralRepository;
+    private final com.example.medical.module.patient.repository.CarePlanRepository carePlanRepository;
+    private final com.example.medical.module.billing.repository.PriorAuthRepository priorAuthRepository;
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
@@ -315,6 +317,16 @@ public class PatientPortalController {
     @GetMapping("/referrals")
     public Result<List<com.example.medical.module.appointment.entity.Referral>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/care-plans")
+    public Result<List<com.example.medical.module.patient.entity.CarePlan>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId()));
+    }
+
+    @GetMapping("/prior-auths")
+    public Result<List<com.example.medical.module.billing.entity.PriorAuth>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(priorAuthRepository.findByPatientIdOrderByRequestedAtDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/disclosures")

@@ -14,6 +14,8 @@ const items = [
   { path: '/patient/vitals', label: 'Vital Signs' },
   { path: '/patient/problems', label: 'Problem List' },
   { path: '/patient/referrals', label: 'Referrals' },
+  { path: '/patient/care-plans', label: 'Care Plans' },
+  { path: '/patient/prior-auths', label: 'Prior Auths' },
   { path: '/patient/disclosures', label: 'Disclosures' },
 ]
 

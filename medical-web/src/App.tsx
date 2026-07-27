@@ -28,7 +28,10 @@ import PatientProblems from './views/patient/problems'
 import PatientImmunizations from './views/patient/immunizations'
 import PatientDisclosures from './views/patient/disclosures'
 import PatientReferrals from './views/patient/referrals'
+import PatientCarePlans from './views/patient/carePlans'
+import PatientPriorAuths from './views/patient/priorAuths'
 import Referrals from './views/referrals'
+import PriorAuths from './views/priorAuths'
 
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
@@ -59,6 +62,7 @@ export default function App() {
         <Route path="system/quality" element={<AdminGuard><QualityMeasures /></AdminGuard>} />
         <Route path="system/keys" element={<AdminGuard><AdminKeys /></AdminGuard>} />
         <Route path="referrals" element={<Referrals />} />
+        <Route path="prior-auths" element={<PriorAuths />} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>
@@ -76,6 +80,8 @@ export default function App() {
         <Route path="immunizations" element={<PatientImmunizations />} />
         <Route path="disclosures" element={<PatientDisclosures />} />
         <Route path="referrals" element={<PatientReferrals />} />
+        <Route path="care-plans" element={<PatientCarePlans />} />
+        <Route path="prior-auths" element={<PatientPriorAuths />} />
       </Route>
     </Routes>
   )

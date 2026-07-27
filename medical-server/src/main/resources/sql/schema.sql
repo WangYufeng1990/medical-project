@@ -500,6 +500,60 @@ CREATE TABLE IF NOT EXISTS vital_sign (
     INDEX idx_vs_patient_id (patient_id)
 );
 
+CREATE TABLE IF NOT EXISTS care_plan (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    goal VARCHAR(200) DEFAULT NULL,
+    interventions VARCHAR(1000) DEFAULT NULL,
+    start_date DATE DEFAULT NULL,
+    target_date DATE DEFAULT NULL,
+    completed_date DATE DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_by BIGINT DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_cp_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS prior_auth (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    patient_id BIGINT NOT NULL,
+    auth_type VARCHAR(20) DEFAULT NULL,
+    item_name VARCHAR(200) DEFAULT NULL,
+    item_code VARCHAR(20) DEFAULT NULL,
+    insurance_payer VARCHAR(200) DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    requested_at DATE NOT NULL,
+    resolved_at DATE DEFAULT NULL,
+    auth_number VARCHAR(50) DEFAULT NULL,
+    requested_by BIGINT DEFAULT NULL,
+    notes VARCHAR(500) DEFAULT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_pa_patient_id (patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS formulary_entry (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    rxnorm_code VARCHAR(20) NOT NULL,
+    drug_name VARCHAR(200) NOT NULL,
+    insurance_payer VARCHAR(200) NOT NULL,
+    tier VARCHAR(20) NOT NULL,
+    prior_auth_required TINYINT DEFAULT 0,
+    step_therapy_required TINYINT DEFAULT 0,
+    alternatives VARCHAR(200) DEFAULT NULL,
+    PRIMARY KEY (id),
+    INDEX idx_fe_rxnorm_payer (rxnorm_code, insurance_payer)
+);
+
 CREATE TABLE IF NOT EXISTS referral (
     id BIGINT NOT NULL AUTO_INCREMENT,
     patient_id BIGINT NOT NULL,

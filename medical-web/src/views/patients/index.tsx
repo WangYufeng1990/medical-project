@@ -8,6 +8,7 @@ import { initiateEmergencyAccess } from '../../api/emergency'
 import { getVitalSigns, createVitalSign } from '../../api/vitalSign'
 import { getProblems, createProblem, updateProblem } from '../../api/problem'
 import { getImmunizations, createImmunization } from '../../api/immunization'
+import { getCarePlans, createCarePlan, updateCarePlan } from '../../api/carePlan'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -40,6 +41,8 @@ export default function Patients() {
   const [newProblem, setNewProblem] = useState({ snomedCode: '', snomedDisplay: '', icd10Code: '', onsetDate: '', severity: 'MODERATE', notes: '' })
   const [immunizations, setImmunizations] = useState<any[]>([])
   const [newImmunization, setNewImmunization] = useState({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
+  const [carePlans, setCarePlans] = useState<any[]>([])
+  const [newCarePlan, setNewCarePlan] = useState({ title: '', goal: '', interventions: '', targetDate: '', notes: '' })
 
   const { data: pageData } = useQuery({
     queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
@@ -90,6 +93,7 @@ export default function Patients() {
         try { setVitalSigns((await getVitalSigns(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setVitalSigns([]) }
         try { setProblems((await getProblems(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setProblems([]) }
         try { setImmunizations((await getImmunizations(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setImmunizations([]) }
+        try { setCarePlans((await getCarePlans(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setCarePlans([]) }
       }
     } else {
       setEditId(null); setForm({ ...emptyForm })
@@ -518,6 +522,32 @@ export default function Patients() {
                       })
                       setImmunizations((await getImmunizations(editId, { page: 1, size: 100 }))?.records ?? [])
                       setNewImmunization({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
+                    }}>+ Add</button>
+                  </div>
+                </div>
+              )}
+              {editId && (
+                <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
+                  <h4 style={{ marginBottom: 8 }}>Care Plans</h4>
+                  {carePlans.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No care plans.</p>}
+                  {carePlans.map((cp: any) => (
+                    <div key={cp.id} style={{ fontSize: 12, color: cp.status === 'COMPLETED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: cp.status === 'COMPLETED' ? '#f5f5f5' : '#fafafa', borderRadius: 4 }}>
+                      <strong style={{ textDecoration: cp.status === 'COMPLETED' ? 'line-through' : 'none' }}>{cp.title}</strong>
+                      <span style={{ marginLeft: 8, color: cp.status === 'ACTIVE' ? '#67C23A' : '#909399', fontSize: 10, fontWeight: 600 }}>[{cp.status}]</span>
+                      {cp.goal && <div style={{ color: '#409EFF', fontSize: 11 }}>Goal: {cp.goal}</div>}
+                      {cp.interventions && <div style={{ color: '#909399', fontSize: 11, marginTop: 2 }}>{cp.interventions}</div>}
+                      {cp.startDate && <span style={{ color: '#909399', fontSize: 10 }}>{cp.startDate}{cp.targetDate ? ` → ${cp.targetDate}` : ''}</span>}
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+                    <input value={newCarePlan.title} onChange={e => setNewCarePlan({ ...newCarePlan, title: e.target.value })} placeholder="Title" style={{ width: 140, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newCarePlan.goal} onChange={e => setNewCarePlan({ ...newCarePlan, goal: e.target.value })} placeholder="Goal" style={{ width: 160, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newCarePlan.interventions} onChange={e => setNewCarePlan({ ...newCarePlan, interventions: e.target.value })} placeholder="Interventions" style={{ width: 180, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <button type="button" className={styles.btnSm} disabled={!newCarePlan.title.trim()} onClick={async () => {
+                      if (!editId || !newCarePlan.title.trim()) return
+                      await createCarePlan(editId, { title: newCarePlan.title.trim(), goal: newCarePlan.goal.trim() || null, interventions: newCarePlan.interventions.trim() || null, targetDate: newCarePlan.targetDate || null, notes: newCarePlan.notes || null })
+                      setCarePlans((await getCarePlans(editId, { page: 1, size: 100 }))?.records ?? [])
+                      setNewCarePlan({ title: '', goal: '', interventions: '', targetDate: '', notes: '' })
                     }}>+ Add</button>
                   </div>
                 </div>

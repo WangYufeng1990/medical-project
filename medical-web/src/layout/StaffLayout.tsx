@@ -12,6 +12,7 @@ const menuItems = [
   { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
   { path: '/referrals', label: 'Referrals', icon: '🏥', roles: ['ADMIN','DOCTOR'] },
+  { path: '/prior-auths', label: 'Prior Auths', icon: '📋', roles: ['ADMIN','DOCTOR'] },
   { path: '/lab', label: 'Lab Results', icon: '🧪', roles: ['ADMIN','DOCTOR'] },
   { path: '/loinc', label: 'LOINC Catalog', icon: '📋', roles: ['ADMIN','DOCTOR'] },
   { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
