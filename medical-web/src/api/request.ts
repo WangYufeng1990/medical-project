@@ -73,6 +73,7 @@ request.interceptors.response.use(
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
+    if (err.response?.data?.message) return Promise.reject(new Error(err.response.data.message))
     return Promise.reject(err)
   }
 )

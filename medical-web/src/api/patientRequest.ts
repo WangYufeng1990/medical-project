@@ -61,6 +61,7 @@ patientRequest.interceptors.response.use(
       localStorage.removeItem('patientToken')
       window.location.href = '/patient/login'
     }
+    if (err.response?.data?.message) return Promise.reject(new Error(err.response.data.message))
     return Promise.reject(err)
   }
 )
