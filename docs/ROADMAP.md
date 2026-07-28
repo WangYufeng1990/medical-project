@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: 35 Rounds Complete. Round 36 gaps identified (2026-07-20).**
+> **Status: Round 36 complete (21/22 gaps resolved). Round 37 audit complete — 49 findings across 30+ files.**
 
 ---
 
@@ -1670,6 +1670,91 @@ Deferred — B10 (self-registration), B12 (advance directives),
 | Bug | Past appointments stay "scheduled" after server restart | `AppointmentScheduler` now runs `markNoShows()` on `ApplicationReadyEvent` startup, not just 1am cron | `6f75b57` |
 | Bug | Cancel button shown for no-show appointments | Patient portal `canCancel()` now excludes status 4 (no-show) alongside 2/3 | `77db804` |
 | Bug | Doctor/admin can book past appointment times | `AppointmentService.create/update()` reject `appointmentTime < now` with 400. Frontend `datetime-local` gets `min={now}` | `7025aad` |
+
+---
+
+# Round 37: Frontend US Healthcare Standards Review (Audit)
+
+> **Status: Audit complete (2026-07-28) — 49 findings across 30+ files, 0 implemented**
+> **Method: 4-agent parallel review of clinical, patient portal, admin/feature views, and infrastructure**
+
+## 🔴 CRITICAL — Security & Compliance
+
+| # | Issue | Location |
+|---|-------|----------|
+| C1 | Token refresh `_retry` not set — concurrent 401 infinite loop | `request.ts`, `patientRequest.ts` |
+| C2 | Encryption keys in plaintext `<input>` fields | `AdminKeys.tsx` |
+| C3 | CDS network error silently caught → dangerous Rx saved | `prescriptions/index.tsx` |
+| C4 | EPCS controlled substance: no 2FA/DEA verification | prescriptions page |
+| C5 | Chat SSE JWT in URL query string → server log leakage | `useChatSse.ts` |
+| C6 | Patient password change: no confirmation field | `patient/profile/index.tsx` |
+| C7 | Payment amount: no validation (negative/0/NaN accepted) | `patient/bills/index.tsx` |
+| C8 | 7 views have zero loading state (empty table on load) | users, roles, referrals, priorAuths, adminKeys, charges, patients |
+| C9 | All 10 admin/feature views lack mutation `onError` | global |
+
+## 🟡 HIGH — UX & Data Quality
+
+| # | Issue | Location |
+|---|-------|----------|
+| H1 | No 429 rate limit handling (no retry/message) | `request.ts`, `patientRequest.ts` |
+| H2 | No session inactivity auto-logout | global |
+| H3 | Login: no account lockout feedback (attempts/timer) | login pages |
+| H4 | `confirm()`/`prompt()`/`alert()` — inaccessible, blocking | 6 views |
+| H5 | Doctor ID is free-text input, not dropdown | appointments, prescriptions |
+| H6 | Patient displayed as raw ID instead of name | refill requests, draft charges |
+| H7 | All forms lack client-side validation | patients, billing, appointments, profile |
+| H8 | `patientRequest.ts` does not unwrap `res.data.data` | `patientRequest.ts` |
+| H9 | Patient logout does not call server-side endpoint | `PatientLayout.tsx` |
+| H10 | Delete button visible for transmitted/dispensed Rx | `prescriptions/index.tsx` |
+| H11 | ICD-10 auto-fill uses `chiefComplaint` (text) not coded diagnosis | `billing/index.tsx` |
+| H12 | 7 views lack empty-state message ("No records found") | users, roles, referrals, priorAuths, adminKeys, charges, patients |
+
+## 🟠 MEDIUM — Clinical & Workflow Quality
+
+| # | Issue | Location |
+|---|-------|----------|
+| M1 | Fee schedule hardcoded (5 CPT codes, 4 visit types) | `billing/index.tsx` |
+| M2 | Rx `refills` no max validation (controlled = 0, non-controlled ≤11) | prescriptions |
+| M3 | Prescription date defaults empty, not today | prescriptions |
+| M4 | Magic number `[2,3,4]` status checks instead of named constants | appointments, billing |
+| M5 | Lab non-numeric results ("Positive") break trend calculation | lab views |
+| M6 | Lab abnormal flags (H/HH/L/LL/A) have no legend | lab views |
+| M7 | Consent types shown as raw codes ("TREATMENT" vs readable) | consent |
+| M8 | Patient consent view is read-only — no revoke action | consent |
+| M9 | `getPatientPage({size:999})` in 3 views — performance risk | referrals, priorAuths, charges |
+| M10 | `parseJwt` silently returns `{}` on failure | `utils/auth.ts` |
+| M11 | Dashboard clinical cards all route to `/patients` | `dashboard/index.tsx` |
+| M12 | `patientInfo` from localStorage (stale), not API | patient/dashboard, patient/lab |
+| M13 | Billing table lacks claim number column | `billing/index.tsx` |
+| M14 | Appointment conflict detection exists backend but no UI display | appointments |
+| M15 | Lab results no pagination — full dataset loaded in memory | lab views |
+| M16 | Rx Save button not disabled during CDS check — double-submit | prescriptions |
+| M17 | LOINC filtering is client-side, not server-side | `lab/LabResults.tsx` |
+| M18 | PriorAuth approve uses `prompt()` for auth number | `priorAuths/index.tsx` |
+
+## ⚪ LOW — Technical Debt
+
+| # | Issue | Location |
+|---|-------|----------|
+| L1 | Widespread `any` types — no TypeScript safety | global |
+| L2 | `patientInfo` not cleared on logout | `PatientLayout.tsx` |
+| L3 | Patient tokens not cleared on staff logout | `StaffLayout.tsx` |
+| L4 | CarePlan `targetDate` state exists but no input field | patients detail |
+| L5 | Immunization `manufacturer`/`site`/`route` state exists but no UI | patients detail |
+| L6 | `\|\|` used on potentially-0/false values | multiple |
+| L7 | Charges page route not registered in App.tsx | `App.tsx` |
+| L8 | Dashboard `patientInfo` stale after profile update | patient/dashboard |
+| L9 | Lab trend arrows not screen-reader accessible | lab views |
+| L10 | `medicalHistory` field in emptyForm but unused by UI | patients detail |
+
+## Execution Priority
+
+```
+P0 — Security/Compliance (C1-C9)                                    ~1 round
+P1 — UX & Data Quality (H1-H12)                                     ~1 round
+P2 — Clinical Quality (M1-M18)                                      ~1 round
+P3 — Technical Debt (L1-L10)                                        ~1 round
+```
 
 ## Stats
 
