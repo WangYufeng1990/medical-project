@@ -1756,6 +1756,12 @@ P2 — Clinical Quality (M1-M18)                                      ~1 round
 P3 — Technical Debt (L1-L10)                                        ~1 round
 ```
 
+## Post-Round 37: Dashboard Navigation Improvements (2026-07-28)
+
+| # | Issue | Plan | Status |
+|---|-------|------|--------|
+| L6 | Dashboard clinical cards (Vital Signs, Problem List, Immunizations, Care Plans) all route to `/patients` list — misleading UX. | Add `?tab=xxx` query param support to patients page. Clicking "Problem List" on dashboard → `/patients?tab=problems`. When clicking a patient row, auto-focus the corresponding tab (problems/vitals/immunizations/care-plans). Requires: update dashboard card paths + patients page URL param handling. | Pending |
+
 ## Stats
 
 - **84 backend endpoints** audited, **70 frontend API functions** mapped, **26 routes** checked
