@@ -18,7 +18,7 @@ export default function Roles() {
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
-  const onError = () => alert('Operation failed')
+  const onError = (err: any) => alert(err?.message || 'Operation failed')
 
   const saveMutation = useMutation({
     mutationFn: (params: { id?: number; data: any }) =>

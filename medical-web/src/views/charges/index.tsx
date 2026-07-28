@@ -51,13 +51,13 @@ export default function Charges() {
   const createMutation = useMutation({
     mutationFn: (d: any) => createCharge(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['charges'] }) },
-    onError: () => alert('Operation failed'),
+    onError: (err: any) => alert(err?.message || 'Operation failed'),
   })
 
   const convertMutation = useMutation({
     mutationFn: (id: number) => convertCharge(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['charges', 'billing'] }) },
-    onError: () => alert('Conversion failed'),
+    onError: (err: any) => alert(err?.message || 'Conversion failed'),
   })
 
   const handleCreate = (e: FormEvent) => {

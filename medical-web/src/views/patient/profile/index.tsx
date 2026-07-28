@@ -59,7 +59,7 @@ export default function PatientProfile() {
       queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
       alert('Password changed')
     },
-    onError: () => alert('Password change failed. Check your current password.'),
+    onError: (err: any) => alert(err?.message || 'Password change failed'),
   })
 
   return (<div>

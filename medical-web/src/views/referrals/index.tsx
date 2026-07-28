@@ -15,7 +15,7 @@ export default function Referrals() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
 
-  const onError = () => alert('Operation failed')
+  const onError = (err: any) => alert(err?.message || 'Operation failed')
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['referrals', 'list', { page, size: PAGE_SIZE }],
