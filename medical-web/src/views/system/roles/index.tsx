@@ -12,22 +12,25 @@ export default function Roles() {
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...ef })
 
-  const { data: pageData } = useQuery({
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['roles', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getRolePage({ page, size: PAGE_SIZE }),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
+  const onError = () => alert('Operation failed')
 
   const saveMutation = useMutation({
     mutationFn: (params: { id?: number; data: any }) =>
       params.id != null ? updateRole(params.id, params.data) : createRole(params.data),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['roles'] }) },
+    onError,
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteRole(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roles'] }),
+    onError,
   })
 
   const openForm = (row?: any) => { if (row) { setEditId(row.id); setForm(row) } else { setEditId(null); setForm({ ...ef }) }; setShowForm(true) }
@@ -37,6 +40,7 @@ export default function Roles() {
     saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
 
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>
     <h2>Roles</h2>
     <button className={styles.btnPrimary} onClick={() => openForm()}>+ Add</button>

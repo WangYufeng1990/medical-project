@@ -143,7 +143,7 @@ export default function Prescriptions() {
         setShowCdsModal(true)
       }
     } catch {
-      doSave(payload)
+      alert('CDS check unavailable — cannot verify drug safety. Please try again.')
     }
   }
 

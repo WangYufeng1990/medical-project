@@ -15,7 +15,9 @@ export default function Referrals() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
 
-  const { data: pageData } = useQuery({
+  const onError = () => alert('Operation failed')
+
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['referrals', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getReferralPage({ page, size: PAGE_SIZE }),
   })
@@ -30,15 +32,18 @@ export default function Referrals() {
   const createMutation = useMutation({
     mutationFn: (d: any) => createReferral(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['referrals'] }) },
+    onError,
   })
 
   const updateMutation = useMutation({
     mutationFn: (params: { id: number; data: any }) => updateReferral(params.id, params.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['referrals'] }),
+    onError,
   })
 
   const handleCreate = (e: FormEvent) => { e.preventDefault(); createMutation.mutate({ ...form, patientId: Number(form.patientId) }) }
 
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>
     <h2 style={{ marginBottom: 20 }}>Referrals</h2>
     <button className={styles.btnPrimary} onClick={() => { setForm({ ...emptyForm }); setShowForm(true) }} style={{ marginBottom: 16 }}>+ New Referral</button>

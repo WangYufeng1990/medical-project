@@ -31,10 +31,18 @@ export default function PatientBills() {
     setPayForm({ paymentAmount: amount, paymentMethod: 'CREDIT_CARD' })
   }
 
+  const [payError, setPayError] = useState('')
+
   const handlePay = (e: FormEvent) => {
     e.preventDefault()
     if (!payId) return
-    payMutation.mutate({ id: payId, data: { paymentAmount: Number(payForm.paymentAmount), paymentMethod: payForm.paymentMethod } })
+    const amount = Number(payForm.paymentAmount)
+    if (isNaN(amount) || amount <= 0) { setPayError('Amount must be a positive number'); return }
+    const bill = data.find((b: any) => b.id === payId)
+    const max = bill?.patientResponsibility ?? bill?.totalCharge ?? Infinity
+    if (amount > max) { setPayError(`Amount cannot exceed $${max}`); return }
+    setPayError('')
+    payMutation.mutate({ id: payId, data: { paymentAmount: amount, paymentMethod: payForm.paymentMethod } })
   }
 
   return (<div>
@@ -63,7 +71,8 @@ export default function PatientBills() {
             <option value="CREDIT_CARD">Credit Card</option><option value="HSA">HSA/FSA</option><option value="CHECK">Check</option><option value="ONLINE">Online Payment</option>
           </select>
         </div>
-        <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setPayId(null)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Pay</button></div>
+        {payError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{payError}</div>}
+        <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setPayId(null); setPayError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary}>Pay</button></div>
       </form>
     </div></div>}
   </div>)

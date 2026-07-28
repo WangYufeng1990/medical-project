@@ -14,7 +14,9 @@ export default function PriorAuths() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
 
-  const { data: pageData } = useQuery({
+  const onError = () => alert('Operation failed')
+
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['priorAuths', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getPriorAuths({ page, size: PAGE_SIZE }),
   })
@@ -29,15 +31,18 @@ export default function PriorAuths() {
   const createMutation = useMutation({
     mutationFn: (d: any) => createPriorAuth(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['priorAuths'] }) },
+    onError,
   })
 
   const updateMutation = useMutation({
     mutationFn: (params: { id: number; data: any }) => updatePriorAuth(params.id, params.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['priorAuths'] }),
+    onError,
   })
 
   const handleCreate = (e: FormEvent) => { e.preventDefault(); createMutation.mutate({ ...form, patientId: Number(form.patientId) }) }
 
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>
     <h2 style={{ marginBottom: 20 }}>Prior Authorizations</h2>
     <button className={styles.btnPrimary} onClick={() => { setForm({ ...emptyForm }); setShowForm(true) }} style={{ marginBottom: 16 }}>+ New Prior Auth</button>

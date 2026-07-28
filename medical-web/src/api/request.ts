@@ -37,6 +37,7 @@ request.interceptors.response.use(
   async (err: any) => {
     const originalRequest = err.config
     if (err.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
       const refreshToken = localStorage.getItem('refreshToken')
       if (refreshToken) {
         if (!isRefreshing) {

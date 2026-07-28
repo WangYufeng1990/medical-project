@@ -13,27 +13,32 @@ export default function Users() {
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
 
-  const { data: pageData } = useQuery({
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['users', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getUserPage({ page, size: PAGE_SIZE }),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
+  const onError = () => alert('Operation failed. Please try again.')
+
   const saveMutation = useMutation({
     mutationFn: (params: { id?: number; data: any }) =>
       params.id != null ? updateUser(params.id, params.data) : createUser(params.data),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onError,
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteUser(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onError,
   })
 
   const unlockMutation = useMutation({
     mutationFn: (id: number) => unlockUser(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onError,
   })
 
   const openForm = async (row?: any) => {
@@ -46,6 +51,8 @@ export default function Users() {
     e.preventDefault()
     saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
+
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
 
   return (<div>
     <h2 style={{ marginBottom: 20 }}>Users</h2>

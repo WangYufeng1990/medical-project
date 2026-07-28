@@ -73,8 +73,8 @@ export default function AdminKeys() {
 
       {showRotate && <div className={styles.modalOverlay} onClick={() => setShowRotate(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Rotate Encryption Key</h3>
         <form onSubmit={handleRotate} className={styles.formGrid}>
-          <div className={styles.formGroup}><label>Old Key (current)</label><input value={rotateForm.oldKey} onChange={e => setRotateForm({ ...rotateForm, oldKey: e.target.value })} placeholder="Current AES key" /></div>
-          <div className={styles.formGroup}><label>New Key</label><input value={rotateForm.newKey} onChange={e => setRotateForm({ ...rotateForm, newKey: e.target.value })} placeholder="New AES key (base64, 32 bytes)" /></div>
+          <div className={styles.formGroup}><label>Old Key (current)</label><input type="password" value={rotateForm.oldKey} onChange={e => setRotateForm({ ...rotateForm, oldKey: e.target.value })} placeholder="Current AES key" /></div>
+          <div className={styles.formGroup}><label>New Key</label><input type="password" value={rotateForm.newKey} onChange={e => setRotateForm({ ...rotateForm, newKey: e.target.value })} placeholder="New AES key (base64, 32 bytes)" /></div>
           <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowRotate(false)}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={rotateMutation.isPending || !rotateForm.newKey || !rotateForm.oldKey}>Rotate</button></div>
         </form>
       </div></div>}
