@@ -19,7 +19,7 @@ export default function Charges() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
 
-  const { data: pageData } = useQuery({
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['charges', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getChargePage({ page, size: PAGE_SIZE }),
   })
@@ -51,11 +51,13 @@ export default function Charges() {
   const createMutation = useMutation({
     mutationFn: (d: any) => createCharge(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['charges'] }) },
+    onError: () => alert('Operation failed'),
   })
 
   const convertMutation = useMutation({
     mutationFn: (id: number) => convertCharge(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['charges', 'billing'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['charges', 'billing'] }) },
+    onError: () => alert('Conversion failed'),
   })
 
   const handleCreate = (e: FormEvent) => {
@@ -71,6 +73,7 @@ export default function Charges() {
     })
   }
 
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>
     <h2 style={{ marginBottom: 20 }}>Charge Capture (Superbill)</h2>
     <button className={styles.btnPrimary} onClick={() => { setForm({ ...emptyForm }); setShowForm(true) }} style={{ marginBottom: 16 }}>+ New Charge</button>

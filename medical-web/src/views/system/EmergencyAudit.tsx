@@ -24,7 +24,10 @@ export default function EmergencyAudit() {
   const reviewMutation = useMutation({
     mutationFn: (id: number) => reviewEmergencyAccess(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emergency'] }),
+    onError: () => alert('Review failed'),
   })
+
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
 
   const handleSearch = () => {
     const filters: any = {}

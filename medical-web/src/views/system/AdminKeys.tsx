@@ -8,7 +8,7 @@ export default function AdminKeys() {
   const [showRotate, setShowRotate] = useState(false)
   const [rotateForm, setRotateForm] = useState({ newKey: '', oldKey: '' })
 
-  const { data: history } = useQuery({
+  const { data: history, isLoading } = useQuery({
     queryKey: ['keys', 'history'],
     queryFn: () => getKeyHistory().then(r => r ?? []),
   })
@@ -21,6 +21,7 @@ export default function AdminKeys() {
   const rotateMutation = useMutation({
     mutationFn: (data: { newKey: string; oldKey: string }) => rotateKey(data),
     onSuccess: () => { setShowRotate(false); queryClient.invalidateQueries({ queryKey: ['keys'] }) },
+    onError: () => alert('Key rotation failed. Check that keys are correct.'),
   })
 
   const handleRotate = (e: FormEvent) => {
@@ -28,6 +29,7 @@ export default function AdminKeys() {
     if (rotateForm.newKey && rotateForm.oldKey) rotateMutation.mutate(rotateForm)
   }
 
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>Key Management</h2>

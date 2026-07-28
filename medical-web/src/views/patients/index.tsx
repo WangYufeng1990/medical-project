@@ -44,12 +44,14 @@ export default function Patients() {
   const [carePlans, setCarePlans] = useState<any[]>([])
   const [newCarePlan, setNewCarePlan] = useState({ title: '', goal: '', interventions: '', targetDate: '', notes: '' })
 
-  const { data: pageData } = useQuery({
+  const { data: pageData, isLoading } = useQuery({
     queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => getPatientPage({ page, size: PAGE_SIZE }),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
+
+  const onError = () => alert('Operation failed. Please try again.')
 
   const saveMutation = useMutation({
     mutationFn: (params: { id?: number; data: any }) =>
@@ -58,11 +60,13 @@ export default function Patients() {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['patients'] })
     },
+    onError,
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deletePatient(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['patients'] }),
+    onError,
   })
 
   const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
@@ -177,6 +181,8 @@ export default function Patients() {
       alert(err?.response?.data?.message || 'Failed to revoke consent')
     }
   }
+
+  if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
 
   return (
     <div>
