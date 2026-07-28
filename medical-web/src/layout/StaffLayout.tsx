@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
 import { logout } from '../api/auth'
 import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
@@ -49,11 +49,10 @@ export default function StaffLayout() {
           {visibleItems.map((item, i) => {
             if (item.type === 'divider') return <hr key={i} className={styles.divider} />
             return (
-              <div key={item.path}
-                className={`${styles.menuItem} ${location.pathname.startsWith(item.path) ? styles.active : ''}`}
-                onClick={() => navigate(item.path)}>
+              <Link key={item.path} to={item.path}
+                className={`${styles.menuItem} ${location.pathname.startsWith(item.path) ? styles.active : ''}`}>
                 <span>{item.icon}</span> {item.label}
-              </div>
+              </Link>
             )
           })}
         </nav>

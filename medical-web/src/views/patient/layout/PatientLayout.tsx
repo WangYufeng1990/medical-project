@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
 
 const items = [
@@ -21,8 +21,8 @@ export default function PatientLayout() {
       <aside style={{ width: 200, background: '#1f2937', color: '#fff', padding: 20 }}>
         <h3 style={{ marginBottom: 16 }}>{info.name || 'Patient'}</h3>
         {items.map(i => (
-          <div key={i.path} style={{ padding: '8px 0', cursor: 'pointer', color: loc.pathname === i.path ? '#409EFF' : '#d1d5db' }}
-            onClick={() => navigate(i.path)}>{i.label}</div>
+          <Link key={i.path} to={i.path} style={{ padding: '8px 0', cursor: 'pointer', color: loc.pathname === i.path ? '#409EFF' : '#d1d5db', textDecoration: 'none', display: 'block' }}
+            >{i.label}</Link>
         ))}
         <div style={{ marginTop: 24, padding: '8px 0', color: '#93c5fd', cursor: 'pointer', fontSize: 14 }}
           onClick={async () => {

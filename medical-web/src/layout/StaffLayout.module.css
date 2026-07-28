@@ -1,6 +1,6 @@
 .sidebar { width: 220px; background: #1f2937; color: #fff; display: flex; flex-direction: column; }
 .logo { font-size: 18px; font-weight: bold; padding: 20px 16px; border-bottom: 1px solid #374151; }
-.menuItem { padding: 12px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: background .2s; }
+.menuItem { padding: 12px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: background .2s; text-decoration: none; color: inherit; }
 .menuItem:hover { background: #374151; }
 .active { background: var(--primary, #409EFF); }
 .divider { border: none; border-top: 1px solid #374151; margin: 8px 0; }
