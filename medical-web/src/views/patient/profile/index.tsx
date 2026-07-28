@@ -64,7 +64,7 @@ export default function PatientProfile() {
   return (<div>
     <h2 style={{ marginBottom: 20 }}>My Profile
       {!editing && <button className={styles.btnPrimary} style={{ marginLeft: 16 }} onClick={() => setEditing(true)}>Edit</button>}
-      {!editing && <button className={styles.btnSm} style={{ marginLeft: 8 }} onClick={() => setShowPwd(!showPwd)}>Change Password</button>}
+      {!editing && <button className={styles.btnSm} style={{ marginLeft: 8 }} onClick={() => setShowPwd(true)}>Change Password</button>}
     </h2>
     <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 700, marginTop: 16 }}>
       {editing ? (
@@ -92,8 +92,7 @@ export default function PatientProfile() {
       )}
     </div>
 
-    {showPwd && <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 500, marginTop: 16 }}>
-      <h3 style={{ marginBottom: 16 }}>Change Password</h3>
+    {showPwd && <div className={styles.modalOverlay} onClick={() => { setShowPwd(false); setPwdError('') }}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Change Password</h3>
       <form onSubmit={e => {
         e.preventDefault()
         if (pwdForm.newPassword !== pwdForm.confirmPassword) { setPwdError('Passwords do not match'); return }
@@ -101,15 +100,15 @@ export default function PatientProfile() {
         setPwdError('')
         pwdMutation.mutate(pwdForm)
       }} className={styles.formGrid}>
-        <div className={styles.formGroup}><label>Current Password</label><input type="password" value={pwdForm.oldPassword} onChange={e => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} /></div>
+        <div className={styles.formGroup}><label>Current Password</label><input type="password" value={pwdForm.oldPassword} onChange={e => setPwdForm({ ...pwdForm, oldPassword: e.target.value })} autoFocus /></div>
         <div className={styles.formGroup}><label>New Password</label><input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({ ...pwdForm, newPassword: e.target.value })} /></div>
         <div className={styles.formGroup}><label>Confirm New Password</label><input type="password" value={pwdForm.confirmPassword} onChange={e => setPwdForm({ ...pwdForm, confirmPassword: e.target.value })} /></div>
         {pwdError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{pwdError}</div>}
         <div className={styles.formActions}>
           <button type="button" className={styles.btnSm} onClick={() => { setShowPwd(false); setPwdError('') }}>Cancel</button>
-          <button type="submit" className={styles.btnPrimary} disabled={!pwdForm.oldPassword || !pwdForm.newPassword || !pwdForm.confirmPassword}>Save</button>
+          <button type="submit" className={styles.btnPrimary} disabled={pwdMutation.isPending || !pwdForm.oldPassword || !pwdForm.newPassword || !pwdForm.confirmPassword}>Save</button>
         </div>
       </form>
-    </div>}
+    </div></div>}
   </div>)
 }
