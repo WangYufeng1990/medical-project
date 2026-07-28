@@ -35,6 +35,7 @@ export default function Profile() {
       setPwdError('')
       alert('Password changed')
     },
+    onError: () => alert('Password change failed. Check your current password.'),
   })
 
   const handlePwdSubmit = (e: React.FormEvent) => {
