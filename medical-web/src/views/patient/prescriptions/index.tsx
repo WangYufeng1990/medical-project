@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { PAGE_SIZE } from '../../../utils/labels'
+import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
 
 export default function PatientPrescriptions() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
 
   const { data: pageData } = useQuery({
     queryKey: ['me', 'prescriptions', 'list', { page, size: PAGE_SIZE }],
@@ -39,8 +41,8 @@ export default function PatientPrescriptions() {
           <td style={{ color: r.rxStatus === 'active' ? '#67C23A' : '#909399', fontWeight: 600 }}>{r.rxStatus}</td>
           <td>
             {r.rxStatus === 'active' && !requestedIds.has(r.id) && (
-              <button className={styles.btnSm} disabled={refillMutation.isPending} onClick={() => {
-                if (confirm('Request a refill for this prescription?')) refillMutation.mutate({ prescriptionId: r.id, reason: 'Refill requested by patient' })
+              <button className={styles.btnSm} disabled={refillMutation.isPending} onClick={async () => {
+                if (await confirm('Request a refill for this prescription?')) refillMutation.mutate({ prescriptionId: r.id, reason: 'Refill requested by patient' })
               }}>Request Refill</button>
             )}
             {reqStatus && <span style={{ fontSize: 11, color: reqStatus === 'APPROVED' ? '#67C23A' : reqStatus === 'DENIED' ? '#F56C6C' : '#E6A23C', fontWeight: 600 }}>{reqStatus}</span>}

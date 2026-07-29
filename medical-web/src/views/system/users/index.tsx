@@ -2,11 +2,13 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getUserPage, getUserById, createUser, updateUser, deleteUser, unlockUser } from '../../../api/user'
 import { PAGE_SIZE } from '../../../utils/labels'
+import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
 const emptyForm: any = { username: '', password: '', realName: '', phone: '', email: '', gender: 1, status: 1, npi: '', stateLicenseNumber: '', licenseState: '', deaNumber: '', taxonomyCode: '', credentials: '', specialty: '' }
 
 export default function Users() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const currentUserId = Number(localStorage.getItem('userId') || '0')
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
@@ -66,9 +68,9 @@ export default function Users() {
         <td onClick={e => e.stopPropagation()}>
           {r.lockedUntil && new Date(r.lockedUntil) > new Date() &&
             <button className={styles.btnSm} style={{ color: '#67C23A' }}
-              onClick={() => { if (confirm('Unlock this account?')) unlockMutation.mutate(r.id) }}>Unlock</button>}
+              onClick={async () => { if (await confirm('Unlock this account?')) unlockMutation.mutate(r.id) }}>Unlock</button>}
           <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
-          {r.id !== currentUserId && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>))}
+          {r.id !== currentUserId && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>))}
         {data.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No users found</td></tr>}
         </tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>

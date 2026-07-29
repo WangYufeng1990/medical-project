@@ -4,12 +4,14 @@ import { getAppointmentPage, getAppointmentById, createAppointment, updateAppoin
 import { getPatientPage } from '../../api/patient'
 import { getDoctors } from '../../api/user'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', status: 0 }
 
 export default function Appointments() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -70,7 +72,7 @@ export default function Appointments() {
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.duration}m</td><td>{r.visitType}</td>
             <td><span style={{ color: APPOINTMENT_STATUS_COLOR[r.status] ?? '#909399', fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
             <td onClick={e => e.stopPropagation()}>{[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>}
-              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>
+              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>
         ))}</tbody>
       </table>
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>

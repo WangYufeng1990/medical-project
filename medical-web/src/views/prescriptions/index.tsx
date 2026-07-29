@@ -8,6 +8,7 @@ import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
 import { getPendingRefillRequests, approveRefillRequest, denyRefillRequest } from '../../api/refill'
 import { PAGE_SIZE } from '../../utils/labels'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
@@ -15,6 +16,7 @@ const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes:
 
 export default function Prescriptions() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -225,8 +227,8 @@ export default function Prescriptions() {
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
-              {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
-              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus) && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
+              {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
+              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus) && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
             </td></tr>
         ))}</tbody>
       </table>

@@ -4,6 +4,7 @@ import { getChargePage, createCharge, convertCharge } from '../../api/charge'
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
 import { PAGE_SIZE } from '../../utils/labels'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const FEE_SCHEDULE: any = {
@@ -15,6 +16,7 @@ const emptyForm: any = { patientId: '', appointmentId: '', cptCodes: '', icd10Co
 
 export default function Charges() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
@@ -86,7 +88,7 @@ export default function Charges() {
           <td><span style={{ color: r.status === 'DRAFT' ? '#E6A23C' : '#67C23A', fontWeight: 600 }}>{r.status}</span></td>
           <td>
             {r.status === 'DRAFT' && (
-              <button className={styles.btnSm} disabled={convertMutation.isPending} onClick={() => { if (confirm('Convert to Bill?')) convertMutation.mutate(r.id) }}>
+              <button className={styles.btnSm} disabled={convertMutation.isPending} onClick={async () => { if (await confirm('Convert to Bill?')) convertMutation.mutate(r.id) }}>
                 Convert to Bill
               </button>
             )}

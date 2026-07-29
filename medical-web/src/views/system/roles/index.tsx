@@ -2,11 +2,13 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getRolePage, createRole, updateRole, deleteRole } from '../../../api/role'
 import { PAGE_SIZE } from '../../../utils/labels'
+import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
 const ef: any = { roleName: '', roleCode: '', description: '', status: 1 }
 
 export default function Roles() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -47,7 +49,7 @@ export default function Roles() {
     <table className={styles.table}><thead><tr><th>ID</th><th>Name</th><th>Code</th><th></th></tr></thead>
       <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.roleName}</td><td>{r.roleCode}</td>
         <td onClick={e => e.stopPropagation()}><button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
-          <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button></td></tr>))}
+          <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button></td></tr>))}
         {data.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No roles found</td></tr>}
         </tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
