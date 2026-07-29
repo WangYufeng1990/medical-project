@@ -44,7 +44,7 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long>, JpaSpec
     @Query(value = "SELECT DISTINCT u.* FROM sys_user u " +
             "INNER JOIN sys_user_role ur ON u.id = ur.user_id " +
             "INNER JOIN sys_role r ON ur.role_id = r.id " +
-            "WHERE r.role_code IN ('ADMIN', 'DOCTOR') AND u.status = 1 AND u.is_deleted = 0 " +
+            "WHERE r.role_code = 'DOCTOR' AND u.status = 1 AND u.is_deleted = 0 " +
             "ORDER BY u.real_name", nativeQuery = true)
     List<SysUser> findDoctors();
 }
