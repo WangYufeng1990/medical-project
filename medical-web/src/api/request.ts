@@ -73,6 +73,11 @@ request.interceptors.response.use(
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
+    if (err.response?.status === 429) {
+      const retryAfter = err.response.headers['retry-after']
+      const msg = retryAfter ? `Rate limited. Try again in ${retryAfter}s.` : 'Too many requests. Please wait.'
+      return Promise.reject(new Error(msg))
+    }
     if (err.response?.data?.message) return Promise.reject(new Error(err.response.data.message))
     return Promise.reject(err)
   }

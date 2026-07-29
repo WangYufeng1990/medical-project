@@ -61,7 +61,9 @@ export default function Referrals() {
             {(r.status === 'SCHEDULED' || r.status === 'COMPLETED') && <button className={styles.btnSm} onClick={() => updateMutation.mutate({ id: r.id, data: { status: 'CLOSED' } })}>Close</button>}
           </td>
         </tr>
-      ))}</tbody>
+      ))}
+      {data.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No referrals found</td></tr>}
+      </tbody>
     </table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 

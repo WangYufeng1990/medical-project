@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
+import { getUserPage } from '../../api/user'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
@@ -50,6 +51,11 @@ export default function Prescriptions() {
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
     queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+  })
+
+  const { data: doctors } = useQuery({
+    queryKey: ['users', 'all'],
+    queryFn: () => getUserPage({ page: 1, size: 999 }).then(r => r.records ?? []),
   })
 
   const saveMutation = useMutation({
@@ -220,7 +226,7 @@ export default function Prescriptions() {
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
               {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
-              <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
+              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus) && <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
             </td></tr>
         ))}</tbody>
       </table>
@@ -237,7 +243,11 @@ export default function Prescriptions() {
                 {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
               </select>
             </div>
-            <div className={styles.formGroup}><label>Doctor ID</label><input value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })} /></div>
+            <div className={styles.formGroup}><label>Doctor</label>
+              <select value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
+                <option value="">-- Select --</option>
+                {(doctors ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
+              </select></div>
             <div className={styles.formGroup}><label>Diagnosis</label><input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} /></div>
             <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
             <div className={styles.formGroup}><label>Date</label><input type="date" value={form.prescriptionDate} onChange={e => setForm({ ...form, prescriptionDate: e.target.value })} /></div>

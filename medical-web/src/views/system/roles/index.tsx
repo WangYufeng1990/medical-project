@@ -47,7 +47,9 @@ export default function Roles() {
     <table className={styles.table}><thead><tr><th>ID</th><th>Name</th><th>Code</th><th></th></tr></thead>
       <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.roleName}</td><td>{r.roleCode}</td>
         <td onClick={e => e.stopPropagation()}><button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>
-          <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button></td></tr>))}</tbody></table>
+          <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button></td></tr>))}
+        {data.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No roles found</td></tr>}
+        </tbody></table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>{editId ? 'Edit' : 'Add'} Role</h3>
       <form onSubmit={handleSubmit}>

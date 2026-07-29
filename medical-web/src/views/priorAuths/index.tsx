@@ -64,7 +64,9 @@ export default function PriorAuths() {
             {r.status === 'APPROVED' && <span style={{ fontSize: 11, color: '#909399' }}>Auth #{r.authNumber}</span>}
           </td>
         </tr>
-      ))}</tbody>
+      ))}
+      {data.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>No prior auths found</td></tr>}
+      </tbody>
     </table>
     <div className={styles.pagination}><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 

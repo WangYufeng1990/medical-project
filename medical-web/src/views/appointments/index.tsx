@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
+import { getPatientPage } from '../../api/patient'
+import { getUserPage } from '../../api/user'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -19,6 +21,16 @@ export default function Appointments() {
     queryFn: () => getAppointmentPage({ page, size: PAGE_SIZE }),
   })
   const data = pageData?.records ?? []
+
+  const { data: patients } = useQuery({
+    queryKey: ['patients', 'all'],
+    queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+  })
+
+  const { data: doctors } = useQuery({
+    queryKey: ['users', 'all'],
+    queryFn: () => getUserPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+  })
   const total = pageData?.total ?? 0
 
   const saveMutation = useMutation({
@@ -64,8 +76,16 @@ export default function Appointments() {
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
       {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>{editId ? (viewOnly ? 'View' : 'Edit') : 'Add'} Appointment</h3>
         <form onSubmit={handleSubmit} className={styles.formGrid}>
-          <div className={styles.formGroup}><label>Patient ID</label><input disabled={viewOnly} value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })} /></div>
-          <div className={styles.formGroup}><label>Doctor ID</label><input disabled={viewOnly} value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })} /></div>
+          <div className={styles.formGroup}><label>Patient</label>
+            <select disabled={viewOnly} value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
+              <option value="">-- Select --</option>
+              {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} (MRN: {p.mrn})</option>)}
+            </select></div>
+          <div className={styles.formGroup}><label>Doctor</label>
+            <select disabled={viewOnly} value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
+              <option value="">-- Select --</option>
+              {(doctors ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
+            </select></div>
           <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} min={new Date().toISOString().slice(0, 16)} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Visit Type</label>
             <select disabled={viewOnly} value={form.visitType} onChange={e => setForm({ ...form, visitType: e.target.value })}>
