@@ -36,7 +36,7 @@ export default function PatientLayout() {
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
-        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={() => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); navigate('/patient/login') }}>
+        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch {}; localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }}>
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>

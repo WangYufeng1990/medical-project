@@ -82,6 +82,18 @@ public class PatientAuthController {
                 patient.getId(), patient.getName(), auth.getUsername()));
     }
 
+    @PostMapping("/logout")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGOUT")
+    public Result<Void> logout(@org.springframework.security.core.annotation.AuthenticationPrincipal com.example.medical.security.LoginUser loginUser) {
+        if (loginUser != null) {
+            auditLogWriter.writeAsync(loginUser.getUserId(), loginUser.getUsername(), loginUser.getUserId(),
+                    "auth", "PATIENT_LOGOUT", loginUser.getUsername(), "Patient logged out",
+                    httpRequest != null ? httpRequest.getRemoteAddr() : "unknown",
+                    java.time.Instant.now());
+        }
+        return Result.ok();
+    }
+
     @PostMapping("/refresh")
     @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH")
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
