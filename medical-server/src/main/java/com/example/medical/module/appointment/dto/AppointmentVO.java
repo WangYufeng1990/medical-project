@@ -23,6 +23,7 @@ public class AppointmentVO {
     private String department;
     private Integer duration;
     private String cptCode;
+    private String icd10Codes;
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
     private String description;
@@ -35,6 +36,7 @@ public class AppointmentVO {
                 a.getDoctorId(), doctorName, a.getAppointmentTime(),
                 a.getStatus(), a.getVisitType(), a.getChiefComplaint(),
                 a.getDepartment(), a.getDuration(), a.getCptCode(),
+                a.getIcd10Codes(),
                 a.getCheckInTime(), a.getCheckOutTime(),
                 a.getDescription(), a.getNotes(), a.getCreateTime());
     }

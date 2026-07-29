@@ -204,37 +204,37 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedAppointments() {
         String sql = "INSERT INTO appointment (id, patient_id, doctor_id, appointment_time, status, visit_type, " +
-                "chief_complaint, department, duration, cpt_code, description, notes, create_time, update_time) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                "chief_complaint, department, duration, cpt_code, icd10_codes, description, notes, create_time, update_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         LocalDateTime now = LocalDateTime.now();
 
         jdbcTemplate.update(sql,
                 200L, 100L, 2L, LocalDateTime.of(2026, 5, 15, 9, 0), 3, "FOLLOW_UP",
-                "Routine blood pressure check", "Cardiology", 30, "99213",
+                "Routine blood pressure check", "Cardiology", 30, "99213", "I10",
                 "Follow-up for hypertension",
                 "Blood pressure 130/85, stable. Continue current medication.", now, now);
 
         jdbcTemplate.update(sql,
                 201L, 100L, 2L, LocalDateTime.of(2026, 5, 20, 10, 30), 3, "URGENT_CARE",
-                "Fever and sore throat x3 days", "Family Medicine", 30, "99203",
+                "Fever and sore throat x3 days", "Family Medicine", 30, "99203", "J06.9",
                 "Fever and sore throat",
                 "Diagnosed with upper respiratory infection. Prescribed antibiotics.", now, now);
 
         jdbcTemplate.update(sql,
                 202L, 100L, 2L, LocalDateTime.of(2026, 5, 28, 14, 0), 0, "ANNUAL_PHYSICAL",
-                "Annual diabetes checkup and wellness exam", "Family Medicine", 45, "99214",
+                "Annual diabetes checkup and wellness exam", "Family Medicine", 45, "99214", "E11.9;Z00.00",
                 "Annual diabetes checkup", null, now, now);
 
         jdbcTemplate.update(sql,
                 203L, 100L, 2L, LocalDateTime.of(2026, 6, 15, 8, 30), 0, "FOLLOW_UP",
-                "Blood sugar recheck post medication adjustment", "Family Medicine", 30, "99213",
+                "Blood sugar recheck post medication adjustment", "Family Medicine", 30, "99213", "E11.9",
                 "Blood sugar recheck",
                 "Patient needs to fast for 8h before test", now, now);
 
         jdbcTemplate.update(sql,
                 204L, 101L, 2L, LocalDateTime.of(2026, 5, 22, 11, 0), 3, "CONSULTATION",
                 "Persistent allergy symptoms, suspected environmental triggers",
-                "Allergy & Immunology", 45, "99244",
+                "Allergy & Immunology", 45, "99244", "J45.30",
                 "Allergy consultation",
                 "Skin prick test positive for dust mites and pollen. Prescribed antihistamines.", now, now);
     }

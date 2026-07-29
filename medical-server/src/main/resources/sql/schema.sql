@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS appointment (
     department VARCHAR(50) DEFAULT NULL,
     duration INT DEFAULT NULL,
     cpt_code VARCHAR(10) DEFAULT NULL,
+    icd10_codes VARCHAR(200) DEFAULT NULL,
     check_in_time TIMESTAMP DEFAULT NULL,
     check_out_time TIMESTAMP DEFAULT NULL,
     description VARCHAR(500) DEFAULT NULL,

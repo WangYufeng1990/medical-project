@@ -58,7 +58,7 @@ export default function Billing() {
     const appt = apptList.find((a: any) => String(a.id) === apptId)
     if (!appt) return
     const cpt = appt.cptCode || ''
-    const icd = appt.chiefComplaint || ''
+    const icd = appt.icd10Codes || appt.chiefComplaint || ''
     const visit = appt.visitType || 'FOLLOW_UP'
     const suggestedFee = FEE_SCHEDULE[cpt] || FEE_SCHEDULE[visit] || 90
     setForm(prev => ({ ...prev, cptCodes: cpt, icd10Codes: icd, billType: visit === 'ANNUAL_PHYSICAL' ? 'PROFESSIONAL' : 'PROFESSIONAL', totalCharge: String(suggestedFee) }))

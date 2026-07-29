@@ -23,6 +23,7 @@ public class AppointmentFormDTO {
     private String department;
     private Integer duration;
     private String cptCode;
+    private String icd10Codes;
     private String description;
     private String notes;
     private Integer status;
@@ -37,6 +38,7 @@ public class AppointmentFormDTO {
         a.setDepartment(department);
         a.setDuration(duration);
         a.setCptCode(cptCode);
+        a.setIcd10Codes(icd10Codes);
         a.setDescription(description);
         a.setNotes(notes);
         a.setStatus(status != null ? status : 0);
@@ -52,6 +54,7 @@ public class AppointmentFormDTO {
         a.setDepartment(department);
         a.setDuration(duration);
         a.setCptCode(cptCode);
+        a.setIcd10Codes(icd10Codes);
         a.setDescription(description);
         a.setNotes(notes);
         a.setStatus(status);

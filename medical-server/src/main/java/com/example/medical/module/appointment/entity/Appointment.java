@@ -48,6 +48,9 @@ public class Appointment extends BaseEntity {
     @Column(name = "cpt_code", length = 10)
     private String cptCode;
 
+    @Column(name = "icd10_codes", length = 200)
+    private String icd10Codes;
+
     @Column(name = "check_in_time")
     private LocalDateTime checkInTime;
 
