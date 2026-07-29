@@ -1756,6 +1756,12 @@ P2 — Clinical Quality (M1-M18)                                      ~1 round
 P3 — Technical Debt (L1-L10)                                        ~1 round
 ```
 
+## Post-Round 37: Password Reset / Recovery (2026-07-29)
+
+| # | Issue | Plan | Status |
+|---|-------|------|--------|
+| Gap | No password reset/recovery flow for patients or staff. If user forgets password, they are permanently locked out with no self-service recovery. | Add `POST /api/v1/patient/forgot-password` (sends reset email/token) + `POST /api/v1/patient/reset-password` (token-based reset). Frontend: "Forgot Password?" link on login page → email input → reset token → new password form. Requires email sending infrastructure. For dev mode, show reset token on console. | Pending |
+
 ## Post-Round 37: Dashboard Navigation Improvements (2026-07-28)
 
 | # | Issue | Plan | Status |
