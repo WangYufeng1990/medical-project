@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import patientRequest from '../../../api/patientRequest'
+import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -15,6 +16,9 @@ export default function PatientLayout() {
   const navigate = useNavigate()
   const loc = useLocation()
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+
+  const handleLogout = () => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }
+  useIdleTimeout(handleLogout)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>

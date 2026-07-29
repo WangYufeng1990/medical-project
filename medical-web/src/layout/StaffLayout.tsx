@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
 import { logout } from '../api/auth'
 import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
+import { useIdleTimeout } from '../utils/useIdleTimeout'
 import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
@@ -37,6 +38,8 @@ export default function StaffLayout() {
     localStorage.removeItem('username')
     navigate('/login')
   }
+
+  useIdleTimeout(handleLogout)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>

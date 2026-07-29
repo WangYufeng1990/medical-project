@@ -129,7 +129,7 @@ export default function Billing() {
             <thead><tr><th>ID</th><th>Patient</th><th>Appt</th><th>CPT</th><th>Amount</th><th></th></tr></thead>
             <tbody>{draftCharges.map((c: any) => (
               <tr key={c.id}>
-                <td>{c.id}</td><td>{c.patientId}</td><td>{c.appointmentId ?? '-'}</td><td>{c.cptCodes || '-'}</td><td>${c.chargeAmount}</td>
+                <td>{c.id}</td><td>{(patients ?? []).find((p: any) => p.id === c.patientId)?.name ?? `#${c.patientId}`}</td><td>{c.appointmentId ?? '-'}</td><td>{c.cptCodes || '-'}</td><td>${c.chargeAmount}</td>
                 <td><button className={styles.btnSm} disabled={convertMutation.isPending} onClick={() => { if (confirm('Convert this charge to a bill?')) convertMutation.mutate(c.id) }}>Convert to Bill</button></td>
               </tr>
             ))}</tbody>

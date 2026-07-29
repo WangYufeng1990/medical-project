@@ -200,7 +200,7 @@ export default function Prescriptions() {
             <tbody>{refillRequests.map((r: any) => (
               <tr key={r.id}>
                 <td>{r.id}</td>
-                <td>{r.patientId}</td>
+                <td>{((patients ?? []) as any[]).find((p: any) => p.id === r.patientId)?.name ?? `#${r.patientId}`}</td>
                 <td>{r.prescriptionId}</td>
                 <td>{r.reason || '-'}</td>
                 <td>{r.requestedAt?.substring(0, 16)}</td>
