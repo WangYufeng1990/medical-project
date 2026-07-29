@@ -1,4 +1,5 @@
 import { useState, FormEvent } from 'react'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill, deleteBill } from '../../api/bill'
 import { getPatientPage } from '../../api/patient'
@@ -24,6 +25,7 @@ export default function Billing() {
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CASH' })
   const [denyBillId, setDenyBillId] = useState<number | null>(null)
   const [denyReason, setDenyReason] = useState('')
+  const { confirm } = useConfirm()
 
   const { data: pageData } = useQuery({
     queryKey: ['billing', 'list', { page, size: PAGE_SIZE, patientId: filterPatientId ? Number(filterPatientId) : undefined }],
@@ -130,7 +132,7 @@ export default function Billing() {
             <tbody>{draftCharges.map((c: any) => (
               <tr key={c.id}>
                 <td>{c.id}</td><td>{(patients ?? []).find((p: any) => p.id === c.patientId)?.name ?? `#${c.patientId}`}</td><td>{c.appointmentId ?? '-'}</td><td>{c.cptCodes || '-'}</td><td>${c.chargeAmount}</td>
-                <td><button className={styles.btnSm} disabled={convertMutation.isPending} onClick={() => { if (confirm('Convert this charge to a bill?')) convertMutation.mutate(c.id) }}>Convert to Bill</button></td>
+                <td><button className={styles.btnSm} disabled={convertMutation.isPending} onClick={async () => { if (await confirm('Convert this charge to a bill?')) convertMutation.mutate(c.id) }}>Convert to Bill</button></td>
               </tr>
             ))}</tbody>
           </table>
@@ -153,11 +155,11 @@ export default function Billing() {
             <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
             <td onClick={e => e.stopPropagation()}>
-              {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={() => { if (confirm('Submit claim?')) submitMutation.mutate(r.id) }}>Submit</button>}
+              {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (await confirm('Submit claim?')) submitMutation.mutate(r.id) }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}
               {r.claimStatus === 'PENDING' && <button className={styles.btnSm} onClick={() => { setPayBillId(r.id); setPayForm({ paymentAmount: '', paymentMethod: 'CASH' }) }}>Pay</button>}
               {r.claimStatus === 'PENDING' && <button className={styles.btnSmDanger} onClick={() => { setDenyBillId(r.id); setDenyReason('') }}>Deny</button>}
-              <button className={styles.btnSmDanger} onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
+              <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>
             </td></tr>
         ))}</tbody>
       </table>

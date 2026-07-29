@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
+import { useConfirm } from '../../../utils/ConfirmDialog'
 import { APPOINTMENT_STATUS, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
 export default function PatientAppointments() {
+  const { confirm } = useConfirm()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
 
@@ -25,8 +27,8 @@ export default function PatientAppointments() {
 
   const canCancel = (s: number) => s !== 2 && s !== 3 && s !== 4
 
-  const handleCancel = (id: number) => {
-    if (confirm('Cancel this appointment?')) cancelMutation.mutate(id)
+  const handleCancel = async (id: number) => {
+    if (await confirm('Cancel this appointment?')) cancelMutation.mutate(id)
   }
 
   return (<div>

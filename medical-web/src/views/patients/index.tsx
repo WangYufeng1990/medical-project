@@ -10,6 +10,7 @@ import { getProblems, createProblem, updateProblem } from '../../api/problem'
 import { getImmunizations, createImmunization } from '../../api/immunization'
 import { getCarePlans, createCarePlan, updateCarePlan } from '../../api/carePlan'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', medicalHistory: '', allergies: '', patientStatus: 'active' }
@@ -17,6 +18,7 @@ const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth
 export default function Patients() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -110,8 +112,8 @@ export default function Patients() {
     saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
 
-  const handleDelete = (id: number) => {
-    if (!confirm('Delete this patient?')) return
+  const handleDelete = async (id: number) => {
+    if (!(await confirm('Delete this patient?'))) return
     deleteMutation.mutate(id)
   }
 
@@ -170,7 +172,7 @@ export default function Patients() {
   }
 
   const handleRevokeConsent = async (id: number) => {
-    if (!confirm('Revoke this consent?')) return
+    if (!(await confirm('Revoke this consent?'))) return
     try {
       await revokeConsent(id)
       if (consentPatient) {
