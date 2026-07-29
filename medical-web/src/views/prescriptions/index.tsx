@@ -27,6 +27,7 @@ export default function Prescriptions() {
   const [cdsWarnings, setCdsWarnings] = useState<any[]>([])
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
+  const [formError, setFormError] = useState('')
 
   const { data: refillRequests } = useQuery({
     queryKey: ['prescriptions', 'refill-requests'],
@@ -129,6 +130,11 @@ export default function Prescriptions() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!form.patientId) { setFormError('Patient is required'); return }
+    if (!form.doctorId) { setFormError('Doctor is required'); return }
+    if (!form.diagnosis) { setFormError('Diagnosis is required'); return }
+    if (!form.items?.some((it: any) => it.drugName)) { setFormError('At least one drug item is required'); return }
+    setFormError('')
     const payload = {
       ...form,
       patientId: Number(form.patientId),
@@ -284,7 +290,8 @@ export default function Prescriptions() {
           ))}
           <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>
 
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
+          {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
         </form>
       </div></div>}
 

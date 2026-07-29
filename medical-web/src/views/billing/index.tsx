@@ -25,6 +25,7 @@ export default function Billing() {
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CASH' })
   const [denyBillId, setDenyBillId] = useState<number | null>(null)
   const [denyReason, setDenyReason] = useState('')
+  const [formError, setFormError] = useState('')
   const { confirm } = useConfirm()
 
   const { data: pageData } = useQuery({
@@ -106,6 +107,9 @@ export default function Billing() {
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
+    if (!form.patientId) { setFormError('Patient is required'); return }
+    if (!form.totalCharge || Number(form.totalCharge) <= 0) { setFormError('Total charge must be a positive number'); return }
+    setFormError('')
     createMutation.mutate({
       ...form,
       patientId: Number(form.patientId),
@@ -192,7 +196,8 @@ export default function Billing() {
           <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
           <div className={styles.formGroup}><label>Insurance Payer</label><input value={form.insurancePayerName} onChange={e => setForm({ ...form, insurancePayerName: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Copay</label><input type="number" step="0.01" value={form.copayAmount} onChange={e => setForm({ ...form, copayAmount: e.target.value })} /></div>
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
+          {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
         </form>
       </div></div>}
 

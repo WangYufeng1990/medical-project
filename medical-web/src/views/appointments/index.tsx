@@ -17,6 +17,7 @@ export default function Appointments() {
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
+  const [formError, setFormError] = useState('')
 
   const { data: pageData } = useQuery({
     queryKey: ['appointments', 'list', { page, size: PAGE_SIZE }],
@@ -58,6 +59,10 @@ export default function Appointments() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
+    if (!form.patientId) { setFormError('Patient is required'); return }
+    if (!form.doctorId) { setFormError('Doctor is required'); return }
+    if (!form.appointmentTime) { setFormError('Appointment time is required'); return }
+    setFormError('')
     saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
   }
 
@@ -100,7 +105,8 @@ export default function Appointments() {
           {editId && <div className={styles.formGroup}><label>Status</label>
             <select disabled={viewOnly} value={form.status} onChange={e => setForm({ ...form, status: Number(e.target.value) })}>
               {Object.entries(APPOINTMENT_STATUS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div>}
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button>}</div></form></div></div>}
+          {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button>}</div></form></div></div>}
     </div>
   )
 }
