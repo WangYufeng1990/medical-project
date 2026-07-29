@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
 import { getPatientPage } from '../../api/patient'
-import { getUserPage } from '../../api/user'
+import { getDoctors } from '../../api/user'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -29,7 +29,7 @@ export default function Appointments() {
 
   const { data: doctors } = useQuery({
     queryKey: ['users', 'all'],
-    queryFn: () => getUserPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+    queryFn: () => getDoctors().then(r => r ?? []),
   })
   const total = pageData?.total ?? 0
 

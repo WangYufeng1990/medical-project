@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPrescriptionPage, getPrescriptionById, createPrescription, deletePrescription, transmitPrescription, cancelPrescription } from '../../api/prescription'
 import { getPatientPage } from '../../api/patient'
-import { getUserPage } from '../../api/user'
+import { getDoctors } from '../../api/user'
 import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
@@ -55,7 +55,7 @@ export default function Prescriptions() {
 
   const { data: doctors } = useQuery({
     queryKey: ['users', 'all'],
-    queryFn: () => getUserPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+    queryFn: () => getDoctors().then(r => r ?? []),
   })
 
   const saveMutation = useMutation({

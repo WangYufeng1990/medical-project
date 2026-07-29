@@ -19,6 +19,16 @@ import org.springframework.web.bind.annotation.*;
 public class SysUserController {
 
     private final SysUserService sysUserService;
+    private final com.example.medical.module.system.repository.SysUserRepository sysUserRepository;
+
+    @GetMapping("/doctors")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    public Result<java.util.List<java.util.Map<String, Object>>> doctors() {
+        var list = sysUserRepository.findDoctors().stream()
+                .map(u -> java.util.Map.<String, Object>of("id", u.getId(), "username", u.getUsername(), "realName", u.getRealName() != null ? u.getRealName() : u.getUsername()))
+                .toList();
+        return Result.ok(list);
+    }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
