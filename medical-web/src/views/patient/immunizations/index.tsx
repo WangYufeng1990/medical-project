@@ -7,7 +7,7 @@ const STATUS_COLOR: any = { completed: '#67C23A', refused: '#F56C6C', contraindi
 export default function PatientImmunizations() {
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'immunizations'],
-    queryFn: () => patientRequest.get('/patient/me/immunizations').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/immunizations').then(r => r ?? []),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>

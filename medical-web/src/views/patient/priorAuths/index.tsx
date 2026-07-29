@@ -7,7 +7,7 @@ const STATUS_COLOR: any = { PENDING: '#E6A23C', APPROVED: '#67C23A', DENIED: '#F
 export default function PatientPriorAuths() {
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'prior-auths'],
-    queryFn: () => patientRequest.get('/patient/me/prior-auths').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/prior-auths').then(r => r ?? []),
   })
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>

@@ -22,7 +22,7 @@ export default function PatientChat() {
 
   const loadConversations = useCallback(() => {
     patientRequest.get('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
-      .then(r => setConversations(r.data.data.records ?? []))
+      .then(r => setConversations(r.records ?? []))
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
@@ -30,9 +30,9 @@ export default function PatientChat() {
   const loadMessages = useCallback((partnerId: number, page: number) => {
     return patientRequest.get(`/patient/me/messages/${partnerId}`, { params: { page, size: 50 } })
       .then(r => {
-        const batch = (r.data.data.records ?? []).reverse()
+        const batch = (r.records ?? []).reverse()
         setMessages(prev => page === 1 ? batch : [...batch, ...prev])
-        setMsgTotal(r.data.data.total ?? 0)
+        setMsgTotal(r.total ?? 0)
       })
   }, [])
 

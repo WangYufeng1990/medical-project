@@ -32,7 +32,7 @@ export default function PatientLayout() {
           onClick={async () => {
             try {
               const res = await patientRequest.get('/patient/me/export')
-              const exportData = res.data?.data
+              const exportData = res
               const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
               const url = URL.createObjectURL(blob)
               const date = new Date().toISOString().slice(0, 10)

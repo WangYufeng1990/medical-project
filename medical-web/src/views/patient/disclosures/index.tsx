@@ -9,7 +9,7 @@ export default function PatientDisclosures() {
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['me', 'disclosures', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/disclosures?page=${page}&size=${PAGE_SIZE}`).then(r => r.data.data),
+    queryFn: () => patientRequest.get(`/patient/me/disclosures?page=${page}&size=${PAGE_SIZE}`).then(r => r),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0

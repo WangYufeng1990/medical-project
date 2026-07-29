@@ -12,14 +12,14 @@ export default function PatientPrescriptions() {
 
   const { data: pageData } = useQuery({
     queryKey: ['me', 'prescriptions', 'list', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/prescriptions?page=${page}&size=${PAGE_SIZE}`).then(r => r.data.data),
+    queryFn: () => patientRequest.get(`/patient/me/prescriptions?page=${page}&size=${PAGE_SIZE}`).then(r => r),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
   const { data: refillRequests } = useQuery({
     queryKey: ['me', 'refill-requests'],
-    queryFn: () => patientRequest.get('/patient/me/refill-requests').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/refill-requests').then(r => r ?? []),
   })
 
   const refillMutation = useMutation({

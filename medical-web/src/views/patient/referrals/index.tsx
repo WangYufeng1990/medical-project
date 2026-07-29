@@ -8,7 +8,7 @@ const STATUS_COLOR: any = { PENDING: '#E6A23C', SCHEDULED: '#409EFF', COMPLETED:
 export default function PatientReferrals() {
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'referrals'],
-    queryFn: () => patientRequest.get('/patient/me/referrals').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/referrals').then(r => r ?? []),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>

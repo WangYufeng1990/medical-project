@@ -34,7 +34,7 @@ export default function PatientProfile() {
 
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: () => patientRequest.get('/patient/me').then(r => r.data.data),
+    queryFn: () => patientRequest.get('/patient/me').then(r => r),
   })
 
   useEffect(() => {

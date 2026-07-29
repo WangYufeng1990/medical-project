@@ -5,7 +5,7 @@ import styles from '../../shared.module.css'
 export default function PatientProblems() {
   const { data: problems, isLoading } = useQuery({
     queryKey: ['me', 'problems'],
-    queryFn: () => patientRequest.get('/patient/me/problems').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/problems').then(r => r ?? []),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>

@@ -21,7 +21,10 @@ function onRefreshed(token: string) {
 }
 
 patientRequest.interceptors.response.use(
-  (res: any) => res,
+  (res: any) => {
+    if (res.data?.code === 200) return res.data.data
+    return Promise.reject(new Error(res.data?.message || 'Request failed'))
+  },
   async (err: any) => {
     const originalRequest = err.config
     if (err.response?.status === 401 && !originalRequest._retry) {

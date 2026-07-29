@@ -28,7 +28,7 @@ export default function PatientDashboard() {
   const navigate = useNavigate()
   const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
 
-  const fetchCount = (url: string) => patientRequest.get(url).then(r => r.data.data)
+  const fetchCount = (url: string) => patientRequest.get(url).then(r => r)
   const { data: aptData } = useQuery({ queryKey: ['me', 'apt-count'], queryFn: () => fetchCount('/patient/me/appointments?page=1&size=1') })
   const { data: rxData } = useQuery({ queryKey: ['me', 'rx-count'], queryFn: () => fetchCount('/patient/me/prescriptions?page=1&size=1') })
   const { data: billData } = useQuery({ queryKey: ['me', 'bill-count'], queryFn: () => fetchCount('/patient/me/bills?page=1&size=1') })

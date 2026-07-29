@@ -13,7 +13,7 @@ export default function PatientLab() {
 
   const { data: allData, isLoading } = useQuery({
     queryKey: ['me', 'lab'],
-    queryFn: () => patientRequest.get('/patient/me/observations').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/observations').then(r => r ?? []),
   })
   const allObservations = allData ?? []
 

@@ -6,7 +6,7 @@ import styles from '../../shared.module.css'
 export default function PatientConsent() {
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'consent'],
-    queryFn: () => patientRequest.get('/patient/me/consent').then(r => r.data.data ?? []),
+    queryFn: () => patientRequest.get('/patient/me/consent').then(r => r ?? []),
   })
   const list = data ?? []
 
