@@ -4,7 +4,7 @@ export function parseJwt(token: string): any {
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
     const json = atob(base64)
     return JSON.parse(json)
-  } catch { return {} }
+  } catch { console.warn('Failed to parse JWT token'); return {} }
 }
 
 export function getUserRoles(): string[] {

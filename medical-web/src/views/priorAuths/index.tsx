@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPriorAuths, createPriorAuth, updatePriorAuth } from '../../api/priorAuth'
 import { getPatientPage } from '../../api/patient'
 import { PAGE_SIZE } from '../../utils/labels'
+import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const STATUS_COLOR: any = { PENDING: '#E6A23C', APPROVED: '#67C23A', DENIED: '#F56C6C' }
@@ -15,6 +16,7 @@ export default function PriorAuths() {
   const [form, setForm] = useState({ ...emptyForm })
 
   const onError = (err: any) => alert(err?.message || 'Operation failed')
+  const { prompt: promptDialog } = useConfirm()
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['priorAuths', 'list', { page, size: PAGE_SIZE }],
@@ -57,7 +59,7 @@ export default function PriorAuths() {
           <td>
             {r.status === 'PENDING' && (
               <>
-                <button className={styles.btnSm} onClick={() => { const n = prompt('Auth number:'); if (n) updateMutation.mutate({ id: r.id, data: { status: 'APPROVED', authNumber: n, resolvedAt: new Date().toISOString().slice(0, 10) } }) }}>Approve</button>
+                <button className={styles.btnSm} onClick={async () => { const n = await promptDialog('Auth number:'); if (n) updateMutation.mutate({ id: r.id, data: { status: 'APPROVED', authNumber: n, resolvedAt: new Date().toISOString().slice(0, 10) } }) }}>Approve</button>
                 <button className={styles.btnSmDanger} onClick={() => updateMutation.mutate({ id: r.id, data: { status: 'DENIED', resolvedAt: new Date().toISOString().slice(0, 10) } })}>Deny</button>
               </>
             )}

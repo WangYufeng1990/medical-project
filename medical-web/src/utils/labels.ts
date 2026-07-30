@@ -29,6 +29,14 @@ export const LANGUAGE_OPTIONS = ['en', 'es', 'zh']
 
 export const EMERGENCY_RELATION_OPTIONS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Other']
 
+export const TERMINAL_APPOINTMENT_STATUSES = [2, 3, 4]
+export const CONSENT_TYPE_LABELS: Record<string, string> = {
+  TREATMENT: 'Treatment Consent',
+  RESEARCH: 'Research Participation',
+  DATA_SHARING: 'Data Sharing',
+  MARKETING: 'Marketing Communications',
+}
+
 export const PAGE_SIZE = 10
 
 export const BILL_STATUS_COLOR: Record<string, string> = {

@@ -152,12 +152,13 @@ export default function Billing() {
       </div>
 
       <table className={styles.table}>
-        <thead><tr><th>ID</th><th>Patient</th><th>Type</th><th>Status</th><th>Total</th><th>Ins Pay</th><th>Patient Resp</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>Patient</th><th>Type</th><th>Status</th><th>Total</th><th>Ins Pay</th><th>Patient Resp</th><th>Claim#</th><th></th></tr></thead>
         <tbody>{data.map(r => (
           <tr key={r.id} className={styles.clickableRow}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.billType}</td>
             <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
+            <td style={{ fontSize: 11 }}>{r.insuranceClaimNumber || '-'}</td>
             <td onClick={e => e.stopPropagation()}>
               {r.claimStatus === 'DRAFT' && <button className={styles.btnSm} onClick={async () => { if (await confirm('Submit claim?')) submitMutation.mutate(r.id) }}>Submit</button>}
               {r.claimStatus === 'SUBMITTED' && <button className={styles.btnSm} onClick={() => { setAdjudicateId(r.id); setAdjForm({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' }) }}>Adjudicate</button>}

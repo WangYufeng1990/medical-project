@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
 import { getPatientPage } from '../../api/patient'
 import { getDoctors } from '../../api/user'
-import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../utils/labels'
+import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR, TERMINAL_APPOINTMENT_STATUSES } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
@@ -73,11 +73,11 @@ export default function Appointments() {
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Time</th><th>Duration</th><th>Type</th><th>Status</th><th></th></tr></thead>
         <tbody>{data.map(r => (
-          <tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r, [2, 3, 4].includes(r.status))}>
+          <tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r, TERMINAL_APPOINTMENT_STATUSES.includes(r.status))}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.appointmentTime}</td><td>{r.duration}m</td><td>{r.visitType}</td>
             <td><span style={{ color: APPOINTMENT_STATUS_COLOR[r.status] ?? '#909399', fontWeight: 600 }}>{APPOINTMENT_STATUS[r.status] ?? r.status}</span></td>
-            <td onClick={e => e.stopPropagation()}>{[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>}
-              {[2, 3, 4].includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>
+            <td onClick={e => e.stopPropagation()}>{TERMINAL_APPOINTMENT_STATUSES.includes(r.status) ? null : <button className={styles.btnSm} onClick={() => openForm(r)}>Edit</button>}
+              {TERMINAL_APPOINTMENT_STATUSES.includes(r.status) ? null : <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}</td></tr>
         ))}</tbody>
       </table>
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>

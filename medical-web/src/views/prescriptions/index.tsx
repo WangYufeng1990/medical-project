@@ -12,7 +12,7 @@ import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
 const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
-const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: '', prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
+const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: new Date().toISOString().slice(0, 10), prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
   const queryClient = useQueryClient()
@@ -28,6 +28,7 @@ export default function Prescriptions() {
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
   const [formError, setFormError] = useState('')
+  const [cdsChecking, setCdsChecking] = useState(false)
 
   const { data: refillRequests } = useQuery({
     queryKey: ['prescriptions', 'refill-requests'],
@@ -145,6 +146,7 @@ export default function Prescriptions() {
       }))
     }
     try {
+      setCdsChecking(true)
       const cdsItems = form.items.filter((it: any) => it.drugName).map((it: any) => ({
         rxnormCode: it.rxnormCode || '', drugName: it.drugName
       }))
@@ -157,6 +159,7 @@ export default function Prescriptions() {
         setShowCdsModal(true)
       }
     } catch {
+      setCdsChecking(false)
       alert('CDS check unavailable — cannot verify drug safety. Please try again.')
     }
   }
@@ -291,7 +294,7 @@ export default function Prescriptions() {
           <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>
 
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary}>Save</button></div>
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={cdsChecking}>{cdsChecking ? 'Checking...' : 'Save'}</button></div>
         </form>
       </div></div>}
 
