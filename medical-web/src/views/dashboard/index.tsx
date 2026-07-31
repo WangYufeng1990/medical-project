@@ -13,9 +13,9 @@ const statCards = [
 
 const clinicalCards = [
   { label: 'Vital Signs', path: '/lab', icon: '🫀', color: '#10b981' },
-  { label: 'Problem List', path: '/patients', icon: '📋', color: '#6366f1' },
-  { label: 'Immunizations', path: '/patients', icon: '💉', color: '#8b5cf6' },
-  { label: 'Care Plans', path: '/patients', icon: '📝', color: '#06b6d4' },
+  { label: 'Problem List', path: '/patients?tab=problems', icon: '📋', color: '#6366f1' },
+  { label: 'Immunizations', path: '/patients?tab=immunizations', icon: '💉', color: '#8b5cf6' },
+  { label: 'Care Plans', path: '/patients?tab=care-plans', icon: '📝', color: '#06b6d4' },
   { label: 'LOINC Catalog', path: '/loinc', icon: '🔬', color: '#64748b' },
 ]
 

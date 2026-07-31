@@ -15,7 +15,13 @@ const items = [
 export default function PatientLayout() {
   const navigate = useNavigate()
   const loc = useLocation()
-  const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const { data: profile } = useQuery({
+    queryKey: ['me', 'profile'],
+    queryFn: () => patientRequest.get('/patient/me').then(r => r),
+    staleTime: 60_000,
+  })
+  const info = profile || cachedInfo
 
   const handleLogout = () => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }
   useIdleTimeout(handleLogout)

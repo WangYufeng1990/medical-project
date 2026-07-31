@@ -1,5 +1,5 @@
-import { useState, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, FormEvent, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { getPatientPage, getPatientById, createPatient, updatePatient, deletePatient, getPatientHistory, addPatientHistory, getPatientAllergies, addPatientAllergy, resolvePatientAllergy } from '../../api/patient'
@@ -19,6 +19,7 @@ export default function Patients() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
+  const [searchParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -45,6 +46,15 @@ export default function Patients() {
   const [newImmunization, setNewImmunization] = useState({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
   const [carePlans, setCarePlans] = useState<any[]>([])
   const [newCarePlan, setNewCarePlan] = useState({ title: '', goal: '', interventions: '', targetDate: '', notes: '' })
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && editId) {
+      setTimeout(() => {
+        document.getElementById(`section-${tab}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
+    }
+  }, [editId, searchParams])
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['patients', 'list', { page, size: PAGE_SIZE }],
@@ -409,7 +419,7 @@ export default function Patients() {
               {editId && (
                 <>
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
-                    <h4 style={{ marginBottom: 8 }}>Vital Signs</h4>
+                    <h4 id="section-vitals" style={{ marginBottom: 8 }}>Vital Signs</h4>
                     {vitalSigns.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No vital signs recorded.</p>}
                     {vitalSigns.map((v: any) => (
                       <div key={v.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
@@ -446,7 +456,7 @@ export default function Patients() {
                     </div>
                   </div>
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
-                    <h4 style={{ marginBottom: 8 }}>Problem List</h4>
+                    <h4 id="section-problems" style={{ marginBottom: 8 }}>Problem List</h4>
                     {problems.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No active problems.</p>}
                     {problems.map((p: any) => (
                       <div key={p.id} style={{ fontSize: 12, color: p.status === 'RESOLVED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: p.status === 'RESOLVED' ? '#f5f5f5' : '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -495,7 +505,7 @@ export default function Patients() {
               )}
               {editId && (
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
-                  <h4 style={{ marginBottom: 8 }}>Immunizations</h4>
+                  <h4 id="section-immunizations" style={{ marginBottom: 8 }}>Immunizations</h4>
                   {immunizations.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No immunizations recorded.</p>}
                   {immunizations.map((r: any) => (
                     <div key={r.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -536,7 +546,7 @@ export default function Patients() {
               )}
               {editId && (
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
-                  <h4 style={{ marginBottom: 8 }}>Care Plans</h4>
+                  <h4 id="section-care-plans" style={{ marginBottom: 8 }}>Care Plans</h4>
                   {carePlans.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No care plans.</p>}
                   {carePlans.map((cp: any) => (
                     <div key={cp.id} style={{ fontSize: 12, color: cp.status === 'COMPLETED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: cp.status === 'COMPLETED' ? '#f5f5f5' : '#fafafa', borderRadius: 4 }}>
