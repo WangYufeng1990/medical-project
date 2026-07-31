@@ -65,6 +65,21 @@ public class ConsentController {
         return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(loginUser.getUserId()));
     }
 
+    @PutMapping("/patient/me/consent/{id}/revoke")
+    @PreAuthorize("hasRole('PATIENT')")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "consent", action = "REVOKE")
+    public Result<Void> revokeMyConsent(@PathVariable Long id, @AuthenticationPrincipal LoginUser loginUser) {
+        Consent c = consentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Consent not found"));
+        if (!c.getPatientId().equals(loginUser.getUserId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "Not your consent");
+        }
+        c.setStatus("revoked");
+        consentRepository.save(c);
+        return Result.ok();
+    }
+
     @Data
     static class ConsentRequest {
         @NotBlank private String consentType;

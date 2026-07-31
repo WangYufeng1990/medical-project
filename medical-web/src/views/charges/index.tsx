@@ -3,14 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getChargePage, createCharge, convertCharge } from '../../api/charge'
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
-import { PAGE_SIZE } from '../../utils/labels'
+import { PAGE_SIZE, FEE_SCHEDULE } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
-
-const FEE_SCHEDULE: any = {
-  '99203': 100, '99213': 90, '99214': 130, '99244': 200,
-  'NEW_PATIENT': 120, 'FOLLOW_UP': 90, 'ANNUAL_PHYSICAL': 150, 'PROCEDURE': 250,
-}
 
 const emptyForm: any = { patientId: '', appointmentId: '', cptCodes: '', icd10Codes: '', chargeAmount: '', visitType: '', notes: '' }
 

@@ -5,10 +5,8 @@ import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill,
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
 import { getChargePage, convertCharge } from '../../api/charge'
-import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../utils/labels'
+import { PAGE_SIZE, BILL_STATUS_COLOR, FEE_SCHEDULE } from '../../utils/labels'
 import styles from '../shared.module.css'
-
-const FEE_SCHEDULE: any = { '99203': 100, '99213': 90, '99214': 130, '99244': 200, 'NEW_PATIENT': 120, 'FOLLOW_UP': 90, 'ANNUAL_PHYSICAL': 150, 'PROCEDURE': 250 }
 
 const emptyForm: any = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
 

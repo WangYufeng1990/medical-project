@@ -37,6 +37,11 @@ export const CONSENT_TYPE_LABELS: Record<string, string> = {
   MARKETING: 'Marketing Communications',
 }
 
+export const FEE_SCHEDULE: Record<string, number> = {
+  '99203': 100, '99213': 90, '99214': 130, '99244': 200,
+  'NEW_PATIENT': 120, 'FOLLOW_UP': 90, 'ANNUAL_PHYSICAL': 150, 'PROCEDURE': 250,
+}
+
 export const PAGE_SIZE = 10
 
 export const BILL_STATUS_COLOR: Record<string, string> = {

@@ -285,7 +285,7 @@ export default function Prescriptions() {
               <div className={styles.formGroup}><label>Frequency</label><input value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
               <div className={styles.formGroup}><label>Duration</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="days" /></div>
               <div className={styles.formGroup}><label>Qty</label><input value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="30" /></div>
-              <div className={styles.formGroup}><label>Refills</label><input value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
+              <div className={styles.formGroup}><label>Refills</label><input type="number" min="0" max={form.prescriptionType === 'CONTROLLED' ? 0 : 11} value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
               <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 2 }}>
                 {form.items.length > 1 && <button type="button" className={styles.btnSmDanger} style={{ margin: 0 }} onClick={() => removeItem(idx)}>✕</button>}
               </div>
