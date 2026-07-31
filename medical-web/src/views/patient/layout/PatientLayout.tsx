@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 
