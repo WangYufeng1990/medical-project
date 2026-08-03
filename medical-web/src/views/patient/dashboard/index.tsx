@@ -26,7 +26,13 @@ const accountCards = [
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
-  const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const { data: profile } = useQuery({
+    queryKey: ['me', 'profile'],
+    queryFn: () => patientRequest.get('/patient/me').then(r => r),
+    staleTime: 60_000,
+  })
+  const info = profile || cachedInfo
 
   const fetchCount = (url: string) => patientRequest.get(url).then(r => r)
   const { data: aptData } = useQuery({ queryKey: ['me', 'apt-count'], queryFn: () => fetchCount('/patient/me/appointments?page=1&size=1') })

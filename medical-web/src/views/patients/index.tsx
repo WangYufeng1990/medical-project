@@ -13,7 +13,7 @@ import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labe
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', medicalHistory: '', allergies: '', patientStatus: 'active' }
+const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active' }
 
 export default function Patients() {
   const navigate = useNavigate()
@@ -525,6 +525,9 @@ export default function Patients() {
                     <input value={newImmunization.administrationDate} type="date" onChange={e => setNewImmunization({ ...newImmunization, administrationDate: e.target.value })} style={{ width: 110, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <input value={newImmunization.doseNumber} onChange={e => setNewImmunization({ ...newImmunization, doseNumber: e.target.value })} placeholder="Dose #" style={{ width: 64, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <input value={newImmunization.lotNumber} onChange={e => setNewImmunization({ ...newImmunization, lotNumber: e.target.value })} placeholder="Lot" style={{ width: 80, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.manufacturer} onChange={e => setNewImmunization({ ...newImmunization, manufacturer: e.target.value })} placeholder="Mfr" style={{ width: 90, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.site} onChange={e => setNewImmunization({ ...newImmunization, site: e.target.value })} placeholder="Site" style={{ width: 70, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newImmunization.route} onChange={e => setNewImmunization({ ...newImmunization, route: e.target.value })} placeholder="Route" style={{ width: 70, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <button type="button" className={styles.btnSm} disabled={!newImmunization.vaccineName.trim()} onClick={async () => {
                       if (!editId || !newImmunization.vaccineName.trim()) return
                       await createImmunization(editId, {
@@ -561,6 +564,7 @@ export default function Patients() {
                     <input value={newCarePlan.title} onChange={e => setNewCarePlan({ ...newCarePlan, title: e.target.value })} placeholder="Title" style={{ width: 140, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <input value={newCarePlan.goal} onChange={e => setNewCarePlan({ ...newCarePlan, goal: e.target.value })} placeholder="Goal" style={{ width: 160, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <input value={newCarePlan.interventions} onChange={e => setNewCarePlan({ ...newCarePlan, interventions: e.target.value })} placeholder="Interventions" style={{ width: 180, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
+                    <input value={newCarePlan.targetDate} type="date" onChange={e => setNewCarePlan({ ...newCarePlan, targetDate: e.target.value })} style={{ width: 130, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                     <button type="button" className={styles.btnSm} disabled={!newCarePlan.title.trim()} onClick={async () => {
                       if (!editId || !newCarePlan.title.trim()) return
                       await createCarePlan(editId, { title: newCarePlan.title.trim(), goal: newCarePlan.goal.trim() || null, interventions: newCarePlan.interventions.trim() || null, targetDate: newCarePlan.targetDate || null, notes: newCarePlan.notes || null })

@@ -32,6 +32,7 @@ import PatientCarePlans from './views/patient/carePlans'
 import PatientPriorAuths from './views/patient/priorAuths'
 import Referrals from './views/referrals'
 import PriorAuths from './views/priorAuths'
+import Charges from './views/charges'
 
 import LabResults from './views/lab/LabResults'
 import LoincCatalog from './views/lab/LoincCatalog'
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="prescriptions" element={<Prescriptions />} />
         <Route path="chat" element={<Chat />} />
         <Route path="billing" element={<Billing />} />
+        <Route path="charges" element={<Charges />} />
         <Route path="profile" element={<Profile />} />
         <Route path="emergency" element={<AdminGuard><EmergencyAudit /></AdminGuard>} />
         <Route path="audit-logs" element={<AdminGuard><AuditLogs /></AdminGuard>} />

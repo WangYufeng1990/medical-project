@@ -100,7 +100,8 @@ export default function PatientLab() {
                   )
                 })}
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, color: trendDirection === '↓' ? '#67C23A' : trendDirection === '↑' ? '#E6A23C' : '#909399' }}>
+                  <div role="img" aria-label={trendDirection === '↑' ? 'Trend increasing' : trendDirection === '↓' ? 'Trend decreasing' : 'Trend stable'}
+                    style={{ fontSize: 24, color: trendDirection === '↓' ? '#67C23A' : trendDirection === '↑' ? '#E6A23C' : '#909399' }}>
                     {trendDirection}
                   </div>
                 </div>

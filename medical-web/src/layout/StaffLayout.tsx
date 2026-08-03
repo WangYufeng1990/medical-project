@@ -13,6 +13,7 @@ const menuItems = [
   { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
   { path: '/prescriptions', label: 'Prescriptions', icon: '💊', roles: ['ADMIN','DOCTOR'] },
   { path: '/billing', label: 'Billing', icon: '💰', roles: ['ADMIN','DOCTOR'] },
+  { path: '/charges', label: 'Charges', icon: '🧾', roles: ['ADMIN','DOCTOR'] },
   { path: '/lab', label: 'Lab Results', icon: '🧪', roles: ['ADMIN','DOCTOR'] },
   { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
   { type: 'divider' } as any,
@@ -37,6 +38,9 @@ export default function StaffLayout() {
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('userId')
     localStorage.removeItem('username')
+    localStorage.removeItem('patientToken')
+    localStorage.removeItem('patientRefreshToken')
+    localStorage.removeItem('patientInfo')
     navigate('/login')
   }
 
