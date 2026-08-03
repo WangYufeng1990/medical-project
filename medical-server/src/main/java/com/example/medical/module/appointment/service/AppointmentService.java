@@ -104,14 +104,19 @@ public class AppointmentService {
         appointmentRepository.deleteById(id);
     }
 
-    private void checkConflict(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
+    public List<AppointmentVO> findConflicts(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
         LocalDateTime windowStart = appointmentTime.minusMinutes(30);
         LocalDateTime windowEnd = appointmentTime.plusMinutes(30);
-        List<Appointment> conflicts = appointmentRepository
-                .findConflicting(doctorId, windowStart, windowEnd);
-        boolean hasConflict = conflicts.stream()
-                .anyMatch(a -> !a.getId().equals(excludeId));
-        if (hasConflict) {
+        return appointmentRepository
+                .findConflicting(doctorId, windowStart, windowEnd)
+                .stream()
+                .filter(a -> excludeId == null || !a.getId().equals(excludeId))
+                .map(this::toVO)
+                .toList();
+    }
+
+    private void checkConflict(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
+        if (!findConflicts(doctorId, appointmentTime, excludeId).isEmpty()) {
             throw new BusinessException(ResultCode.CONFLICT,
                     "Doctor has a conflicting appointment within 30 minutes of this time");
         }

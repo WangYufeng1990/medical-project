@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment } from '../../api/appointment'
+import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment, getAppointmentConflicts } from '../../api/appointment'
 import { getPatientPage } from '../../api/patient'
 import { getDoctors } from '../../api/user'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR, TERMINAL_APPOINTMENT_STATUSES } from '../../utils/labels'
@@ -34,6 +34,12 @@ export default function Appointments() {
     queryKey: ['users', 'all'],
     queryFn: () => getDoctors().then(r => r ?? []),
   })
+
+  const { data: conflicts } = useQuery({
+    queryKey: ['appointments', 'conflicts', { doctorId: form.doctorId, time: form.appointmentTime, editId }],
+    queryFn: () => getAppointmentConflicts({ doctorId: Number(form.doctorId), time: form.appointmentTime, excludeId: editId ?? undefined }),
+    enabled: !!form.doctorId && !!form.appointmentTime && !viewOnly,
+  })
   const total = pageData?.total ?? 0
 
   const saveMutation = useMutation({
@@ -43,6 +49,7 @@ export default function Appointments() {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
     },
+    onError: (err: any) => setFormError(err?.message || 'Save failed'),
   })
 
   const deleteMutation = useMutation({
@@ -105,8 +112,14 @@ export default function Appointments() {
           {editId && <div className={styles.formGroup}><label>Status</label>
             <select disabled={viewOnly} value={form.status} onChange={e => setForm({ ...form, status: Number(e.target.value) })}>
               {Object.entries(APPOINTMENT_STATUS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div>}
+          {!viewOnly && conflicts && conflicts.length > 0 && (
+            <div style={{ gridColumn: 'span 2', background: '#fef0f0', border: '1px solid #fbc4c4', color: '#F56C6C', fontSize: 12, padding: '8px 10px', borderRadius: 4 }}>
+              ⚠️ Doctor already has {conflicts.length} appointment(s) within 30 minutes:{' '}
+              {conflicts.map((c: any) => `${c.appointmentTime} (${c.patientName})`).join('; ')}
+            </div>
+          )}
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button>}</div></form></div></div>}
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending || (conflicts?.length ?? 0) > 0}>Save</button>}</div></form></div></div>}
     </div>
   )
 }

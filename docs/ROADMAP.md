@@ -1726,7 +1726,7 @@ Deferred — B10 (self-registration), B12 (advance directives),
 | M11 | ✅ Dashboard clinical cards use ?tab= routing + auto-scroll | `dashboard/index.tsx`, `patients/index.tsx` |
 | M12 | ✅ PatientLayout fetches name from API, localStorage fallback | `PatientLayout.tsx` |
 | M13 | ✅ Claim# column added to billing table | `billing/index.tsx` |
-| M14 | Appointment conflict detection exists backend but no UI display | appointments |
+| M14 | ✅ Appointment conflict detection — inline warning in form + saveMutation onError (Round 39) | appointments |
 | M15 | Lab results no pagination — full dataset loaded in memory | lab views |
 | M16 | ✅ Save button disabled + "Checking..." during CDS check | prescriptions |
 | M17 | LOINC filtering is client-side, not server-side | `lab/LabResults.tsx` |
@@ -1851,3 +1851,37 @@ Frontend (EventSource)
 ### Verified
 - `npx vite build` ✅
 - Known trade-off: multi-tab refresh rotation can invalidate a sibling tab's refresh token (pre-existing with rotation; idle 30-min + 2h access TTL makes collisions rare)
+
+---
+
+# Round 39: Appointment Conflict UI (M14) ✅ Complete
+
+> **Status: Complete (2026-08-03) — M14 fix**
+
+## Problem
+
+Backend rejected conflicting appointments (409) but the appointments form had no conflict display — and `saveMutation` had no `onError`, so the 409 message was invisible to users.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `AppointmentController.java` | Modify | New `GET /api/v1/appointments/conflicts?doctorId=&time=&excludeId=` (ADMIN,DOCTOR) — literal route wins over `/{id}` |
+| `AppointmentService.java` | Modify | `findConflicts()` public method reusing `findConflicting` (excludes cancelled, filters `excludeId`); `checkConflict` refactored to reuse it |
+| `api/appointment.ts` | Modify | `getAppointmentConflicts(params)` |
+| `appointments/index.tsx` | Modify | `useQuery(['appointments','conflicts',...])` enabled when doctor+time set; inline red warning listing conflicting appointments (time + patient); Save disabled while conflicts exist; `saveMutation.onError` displays server 409 message |
+
+## Flow
+
+```
+User picks doctor + time in form
+  → GET /appointments/conflicts (React Query, keyed by doctor/time/editId)
+  → conflicts shown inline: "Doctor already has N appointment(s) within 30 minutes: 2026-08-03T14:30 (Name)"
+  → Save disabled while conflicts exist (backend would 409 anyway)
+  → any other submit failure now surfaces via saveMutation onError
+```
+
+## Verified
+
+- `mvn compile` ✅, `npx vite build` ✅
+- React Query v5 resets data on key change — no stale conflict display

@@ -2,6 +2,8 @@ package com.example.medical.module.appointment.controller;
 
 import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
+import java.time.LocalDateTime;
+import java.util.List;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
@@ -27,6 +29,14 @@ public class AppointmentController {
         Page<AppointmentVO> result = appointmentService.page(page, size, status, patientId);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1, result.getContent()));
+    }
+
+    @GetMapping("/conflicts")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    public Result<List<AppointmentVO>> conflicts(@RequestParam Long doctorId,
+                                                           @RequestParam LocalDateTime time,
+                                                           @RequestParam(required = false) Long excludeId) {
+        return Result.ok(appointmentService.findConflicts(doctorId, time, excludeId));
     }
 
     @GetMapping("/{id}")
