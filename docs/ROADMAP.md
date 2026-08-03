@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 45 resolved (8 CRITICAL fixed, 12 HIGH fixed, 15 MEDIUM fixed, 3 LOW fixed). 1 CRITICAL backend-dependent deferred (C4), 3 MEDIUM pending (M14/M15/M17).**
+> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 47 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 9 LOW). 1 CRITICAL backend-dependent deferred (C4). 2 LOW remaining (L1 any types, L6 `||` misuse).**
 
 ---
 
@@ -1737,15 +1737,15 @@ Deferred — B10 (self-registration), B12 (advance directives),
 | # | Issue | Location |
 |---|-------|----------|
 | L1 | Widespread `any` types — no TypeScript safety | global |
-| L2 | `patientInfo` not cleared on logout | `PatientLayout.tsx` |
-| L3 | Patient tokens not cleared on staff logout | `StaffLayout.tsx` |
-| L4 | CarePlan `targetDate` state exists but no input field | patients detail |
-| L5 | Immunization `manufacturer`/`site`/`route` state exists but no UI | patients detail |
+| L2 | ✅ `patientInfo` cleared on patient logout | `PatientLayout.tsx` |
+| L3 | ✅ Patient tokens cleared on staff logout | `StaffLayout.tsx` |
+| L4 | ✅ CarePlan `targetDate` input field added | patients detail |
+| L5 | ✅ Immunization `manufacturer`/`site`/`route` inputs added | patients detail |
 | L6 | `\|\|` used on potentially-0/false values | multiple |
-| L7 | Charges page route not registered in App.tsx | `App.tsx` |
-| L8 | Dashboard `patientInfo` stale after profile update | patient/dashboard |
-| L9 | Lab trend arrows not screen-reader accessible | lab views |
-| L10 | `medicalHistory` field in emptyForm but unused by UI | patients detail |
+| L7 | ✅ Charges route registered + sidebar nav item | `App.tsx`, `StaffLayout.tsx` |
+| L8 | ✅ Dashboard profile via useQuery (localStorage fallback) | patient/dashboard |
+| L9 | ✅ Lab trend arrows `role=img` + aria-label | lab views |
+| L10 | ✅ Unused `medicalHistory`/`allergies` removed from emptyForm | patients detail |
 
 ## Execution Priority
 
