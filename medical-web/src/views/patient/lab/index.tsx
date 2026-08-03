@@ -68,6 +68,9 @@ export default function PatientLab() {
           <option value="">All tests</option>
           {(catalog ?? []).map((c: any) => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
         </select>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: '#909399', alignItems: 'center' }}>
+          Flag: <span style={{ color: '#F56C6C' }}>HH/LL Critical</span> <span style={{ color: '#E6A23C' }}>H/L Abnormal</span> <span style={{ color: '#909399' }}>N Normal</span> <span style={{ color: '#409EFF' }}>A</span>
+        </div>
       </div>
 
       {isLoading && <p style={{ color: '#909399', fontSize: 13 }}>Loading...</p>}
