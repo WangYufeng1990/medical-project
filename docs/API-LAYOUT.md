@@ -152,7 +152,8 @@ All require `PATIENT` role.
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
-| GET | `/observations` | `?loinc=` (optional) | My lab results. Without `?loinc=` returns all; with param returns trend for specific test |
+| GET | `/observations` | `?loinc=&page=1&size=20` | My lab results — `PageResult<Observation>`; `loinc` filters server-side |
+| GET | `/observations/trend` | `?loinc=` (required) | Full history of one test (bounded single-test dataset) for trend rendering |
 | GET | `/consent` | — | My consent records |
 | PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified. DRAFT is not payable |
 | PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
@@ -300,12 +301,13 @@ Requires `ADMIN` or `DOCTOR`. Mirth Connect JSON integration for ADT and lab res
 
 ### Lab Results — `/api/v1/patients/{id}/observations` + `/api/v1/loinc`
 
-Requires `ADMIN` or `DOCTOR`. Lab trend analysis and LOINC catalog.
+Requires `ADMIN` or `DOCTOR` (catalog also `PATIENT`). Lab trend analysis and LOINC catalog.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/patients/{id}/observations` | `?loinc=` (optional) | Lab results by patient. With `?loinc=` returns trend for specific test; without returns all results |
-| GET | `/loinc/catalog` | — | Full LOINC dictionary |
+| GET | `/patients/{id}/observations` | `?loinc=&page=1&size=20` | Paginated lab results (`PageResult<Observation>`); `loinc` filters server-side |
+| GET | `/patients/{id}/observations/trend` | `?loinc=` (required) | Full history of one test for trend rendering |
+| GET | `/loinc/catalog` | — | Full LOINC dictionary (ADMIN,DOCTOR,PATIENT) |
 | GET | `/loinc/panel/{parentCode}` | path | LOINC codes grouped by panel (CBC/BMP/LIPID) |
 
 ### FHIR Observation — `/api/v1/fhir/Observation`

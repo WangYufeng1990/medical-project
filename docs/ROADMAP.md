@@ -1727,9 +1727,9 @@ Deferred — B10 (self-registration), B12 (advance directives),
 | M12 | ✅ PatientLayout fetches name from API, localStorage fallback | `PatientLayout.tsx` |
 | M13 | ✅ Claim# column added to billing table | `billing/index.tsx` |
 | M14 | ✅ Appointment conflict detection — inline warning in form + saveMutation onError (Round 39) | appointments |
-| M15 | Lab results no pagination — full dataset loaded in memory | lab views |
+| M15 | ✅ Lab results paginated — server-side page/size + dedicated /trend endpoint (Round 40) | lab views |
 | M16 | ✅ Save button disabled + "Checking..." during CDS check | prescriptions |
-| M17 | LOINC filtering is client-side, not server-side | `lab/LabResults.tsx` |
+| M17 | ✅ LOINC filtering server-side — `loinc` param on paginated endpoint (Round 40) | `lab/LabResults.tsx` |
 | M18 | ✅ PriorAuth prompt() → useConfirm().prompt() modal | `priorAuths/index.tsx` |
 
 ## ⚪ LOW — Technical Debt
@@ -1885,3 +1885,39 @@ User picks doctor + time in form
 
 - `mvn compile` ✅, `npx vite build` ✅
 - React Query v5 resets data on key change — no stale conflict display
+
+---
+
+# Round 40: Lab Results Pagination (M15) + Server-Side LOINC Filter (M17) ✅ Complete
+
+> **Status: Complete (2026-08-03) — M15 + M17 fix**
+
+## Problem
+
+`GET /patients/{patientId}/observations` returned the patient's **entire lab history in one response** — loaded into memory and rendered client-side. LOINC filtering was also client-side (`allList.filter(...)`). At scale this means unbounded payloads and browser-side computation.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `ObservationRepository.java` | Modify | Page-returning variants of both finder methods |
+| `LabAnalysisService.java` | Modify | New `pageObservations()` (PageResult, loinc filter applied in SQL); `getTrend()` now requires loinc (blank → empty) |
+| `LabResultController.java` | Modify | `GET /patients/{patientId}/observations` → `Result<PageResult<Observation>>` (`?loinc=&page=&size=`, default size 20); new `GET /patients/{patientId}/observations/trend?loinc=` returning full history of one test; `/loinc/catalog` opened to PATIENT (public reference data, needed for the filter dropdown) |
+| `PatientPortalController.java` | Modify | Same pagination + `/patient/me/observations/trend` mirror |
+| `api/observation.ts` | Modify | `getObservations(patientId, params)`; new `getObservationTrend()` |
+| `lab/LabResults.tsx` | Modify | Table mode: server-side pagination (Prev/Next/Total, size 20); trend mode: `/trend` full history drives both the trend panel and table; filter dropdown sourced from LOINC catalog (server filters) |
+| `views/patient/lab/index.tsx` | Modify | Same pattern via `patientRequest` |
+
+## Design
+
+```
+No test selected  → GET /observations?page=&size=20   → paginated table (+ Prev/Next)
+Test selected     → GET /observations/trend?loinc=X   → full history of X → trend panel + table
+```
+
+The trend deliberately uses a dedicated endpoint rather than the paginated one: a trend needs the full history of a single test, which is bounded by definition and not a pagination problem.
+
+## Verified
+
+- `mvn compile` ✅, `npx vite build` ✅
+- M17 closed as a side effect: LOINC filtering is now server-side (SQL), not client-side

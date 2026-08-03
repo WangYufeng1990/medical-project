@@ -78,9 +78,19 @@ public class PatientPortalController {
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
-    public Result<List<Observation>> myObservations(
+    public Result<PageResult<Observation>> myObservations(
             @AuthenticationPrincipal LoginUser loginUser,
-            @RequestParam(required = false) String loinc) {
+            @RequestParam(required = false) String loinc,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "20") long size) {
+        return Result.ok(labAnalysisService.pageObservations(loginUser.getUserId(), loinc, page, size));
+    }
+
+    @GetMapping("/observations/trend")
+    @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
+    public Result<List<Observation>> myObservationsTrend(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam String loinc) {
         return Result.ok(labAnalysisService.getTrend(loginUser.getUserId(), loinc));
     }
 

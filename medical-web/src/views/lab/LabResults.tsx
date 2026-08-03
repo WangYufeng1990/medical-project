@@ -1,46 +1,49 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getPatientPage } from '../../api/patient'
-import { getObservations } from '../../api/observation'
+import { getObservations, getObservationTrend, getLoincCatalog } from '../../api/observation'
 import styles from '../shared.module.css'
 
 const FLAG_COLOR: Record<string, string> = {
   N: '#67C23A', H: '#E6A23C', L: '#E6A23C', HH: '#F56C6C', LL: '#F56C6C', A: '#F56C6C',
 }
 
+const LAB_PAGE_SIZE = 20
+
 export default function LabResults() {
   const [searchParams, setSearchParams] = useSearchParams()
   const loincParam = searchParams.get('loinc') || ''
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
     queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
   })
 
-  const { data: allObservations, isLoading } = useQuery({
-    queryKey: ['observations', selectedPatientId],
-    queryFn: () => getObservations(selectedPatientId!),
-    enabled: selectedPatientId != null,
+  const { data: catalog } = useQuery({
+    queryKey: ['loinc', 'catalog'],
+    queryFn: getLoincCatalog,
   })
-  const allList = allObservations ?? []
 
-  const list = loincParam
-    ? allList.filter(o => o.loincCode === loincParam)
-    : allList
-
-  const distinctLoincs = useMemo(() => {
-    return [...new Set(allList.map(o => o.loincCode))]
-      .map(code => {
-        const o = allList.find(x => x.loincCode === code)
-        return { code, display: o?.loincDisplay ?? code }
-      })
-      .sort((a, b) => a.display.localeCompare(b.display))
-  }, [allList])
+  // Table mode: server-side pagination. Trend mode: full history of one test.
+  const { data: pageData, isLoading: pageLoading } = useQuery({
+    queryKey: ['observations', 'list', { patientId: selectedPatientId, page }],
+    queryFn: () => getObservations(selectedPatientId!, { page, size: LAB_PAGE_SIZE }),
+    enabled: selectedPatientId != null && !loincParam,
+  })
+  const { data: trendData, isLoading: trendLoading } = useQuery({
+    queryKey: ['observations', 'trend', { patientId: selectedPatientId, loinc: loincParam }],
+    queryFn: () => getObservationTrend(selectedPatientId!, loincParam),
+    enabled: selectedPatientId != null && !!loincParam,
+  })
+  const isLoading = loincParam ? trendLoading : pageLoading
+  const allList = loincParam ? (trendData ?? []) : (pageData?.records ?? [])
+  const total = pageData?.total ?? 0
 
   const grouped: Record<string, any[]> = {}
-  list.forEach(o => {
+  allList.forEach(o => {
     const date = o.effectiveDate ? o.effectiveDate.substring(0, 16) : 'Unknown'
     if (!grouped[date]) grouped[date] = []
     grouped[date].push(o)
@@ -58,11 +61,12 @@ export default function LabResults() {
     : null
 
   const title = loincParam
-    ? `Lab Results — ${list[0]?.loincDisplay ?? loincParam} Trend`
+    ? `Lab Results — ${allList[0]?.loincDisplay ?? loincParam} Trend`
     : 'Lab Results'
 
   const handleLoincChange = (code: string) => {
     setSearchParams(code ? { loinc: code } : {})
+    setPage(1)
   }
 
   return (
@@ -75,18 +79,19 @@ export default function LabResults() {
           const v = Number(e.target.value)
           setSelectedPatientId(v)
           setSearchParams({})
+          setPage(1)
         }} style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
           <option value="">-- Select Patient --</option>
           {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name} (MRN: {p.mrn})</option>)}
         </select>
 
-        {allList.length > 0 && (
+        {selectedPatientId != null && (
           <>
             <label style={{ fontSize: 13, color: '#606266', marginLeft: 8 }}>Filter by test:</label>
             <select value={loincParam} onChange={e => handleLoincChange(e.target.value)}
               style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
               <option value="">All tests</option>
-              {distinctLoincs.map(l => <option key={l.code} value={l.code}>{l.display}</option>)}
+              {(catalog ?? []).map((c: any) => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
             </select>
           </>
         )}
@@ -97,16 +102,16 @@ export default function LabResults() {
 
       {isLoading && <p style={{ color: '#909399', fontSize: 13 }}>Loading...</p>}
 
-      {!isLoading && selectedPatientId && list.length === 0 && (
+      {!isLoading && selectedPatientId && allList.length === 0 && (
         <p style={{ color: '#909399', fontSize: 13 }}>No lab results found for this patient.</p>
       )}
 
-      {!isLoading && list.length > 0 && (
+      {!isLoading && allList.length > 0 && (
         <>
           {loincParam && trendDirection && dateEntries.length >= 2 && (
             <div style={{ marginBottom: 16, padding: 16, background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #409EFF' }}>
               <div style={{ fontSize: 13, color: '#606266', marginBottom: 8 }}>
-                Trend for <strong>{list[0]?.loincDisplay ?? loincParam}</strong>
+                Trend for <strong>{allList[0]?.loincDisplay ?? loincParam}</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
                 {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]: [string, any[]]) => {
@@ -159,6 +164,15 @@ export default function LabResults() {
               )}
             </tbody>
           </table>
+
+          {!loincParam && total > LAB_PAGE_SIZE && (
+            <div className={styles.pagination}>
+              <span>Total: {total}</span>
+              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</button>
+              <span>Page {page}</span>
+              <button disabled={page * LAB_PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+            </div>
+          )}
         </>
       )}
     </div>

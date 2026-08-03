@@ -1,10 +1,14 @@
 package com.example.medical.module.patient.service;
 
+import com.example.medical.common.result.PageResult;
 import com.example.medical.module.patient.entity.LoincCatalog;
 import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.repository.LoincCatalogRepository;
 import com.example.medical.module.patient.repository.ObservationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -17,9 +21,19 @@ public class LabAnalysisService {
     private final ObservationRepository observationRepository;
     private final LoincCatalogRepository loincCatalogRepository;
 
+    public PageResult<Observation> pageObservations(Long patientId, String loincCode, long page, long size) {
+        Pageable pageable = PageRequest.of((int) (page - 1), (int) size);
+        Page<Observation> result = (loincCode == null || loincCode.isBlank())
+                ? observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId, pageable)
+                : observationRepository.findByPatientIdAndLoincCodeOrderByEffectiveDateDesc(patientId, loincCode, pageable);
+        return PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent());
+    }
+
+    /** Full history of a single test — bounded by definition, needed for trend rendering. */
     public List<Observation> getTrend(Long patientId, String loincCode) {
         if (loincCode == null || loincCode.isBlank()) {
-            return observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId);
+            return List.of();
         }
         return observationRepository
                 .findByPatientIdAndLoincCodeOrderByEffectiveDateDesc(patientId, loincCode);
