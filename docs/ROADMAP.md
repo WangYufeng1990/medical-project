@@ -1922,6 +1922,10 @@ The trend deliberately uses a dedicated endpoint rather than the paginated one: 
 - `mvn compile` ✅, `npx vite build` ✅
 - M17 closed as a side effect: LOINC filtering is now server-side (SQL), not client-side
 
+### Infrastructure (2026-08-03): `.nvmrc` for medical-web
+
+Shell default Node is v16.20.2 (`~/.nvm/alias/default` = 16), which cannot run Vite 5 (requires 18+). Added `medical-web/.nvmrc` (`23`) so `nvm use` resolves to v23.0.0; builds must run with that Node. Non-invasive — existing projects using the global default are unaffected.
+
 ### Runtime Verification (2026-08-03, H2)
 
 Added patient 101 lab dataset (4 dates × 7 tests = 28 results, HbA1c 7.8→7.5→7.2→6.9) to `DataInitializer` and rebuilt the stale H2 file DB (`CREATE TABLE IF NOT EXISTS` never added the Round 37 H11 `icd10_codes` column to the 7/30 file DB — application failed to boot with `Column A1_0.ICD10_CODES not found`; old DB backed up to `/tmp/backup_medical_dev_0803.mv.db`).
