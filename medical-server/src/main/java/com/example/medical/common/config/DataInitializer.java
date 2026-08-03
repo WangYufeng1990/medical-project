@@ -435,7 +435,32 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 103L, "24606-6", "Mammogram", "Screening mammogram completed", null,
                 null, "N", "final", mammoDate, now);
 
-        log.info("Observation seed data: 42 results (4-date trends for p100/p103 + mammogram)");
+        // === Patient 101: 4 dates × 7 tests (28 results) — pagination dataset (>20/page) ===
+        // HbA1c improves across visits: 7.8 → 7.5 → 7.2 → 6.9 (downward trend)
+        LocalDateTime[] p101visits = {
+                LocalDateTime.of(2026, 6, 10, 8, 30), LocalDateTime.of(2026, 6, 24, 8, 30),
+                LocalDateTime.of(2026, 7, 8, 8, 30), LocalDateTime.of(2026, 7, 22, 8, 30),
+        };
+        String[][] p101rows = {
+                {"7.8", "128", "130", "82", "7.1", "4.8", "14.3"},
+                {"7.5", "121", "128", "80", "6.9", "4.8", "14.4"},
+                {"7.2", "115", "126", "79", "6.6", "4.9", "14.2"},
+                {"6.9", "108", "124", "78", "6.4", "4.9", "14.5"},
+        };
+        String[] p101glucoseFlag = {"H", "H", "N", "N"};
+        String[] p101codes = {"4548-4", "2345-7", "8480-6", "8462-4", "6690-2", "789-8", "718-7"};
+        String[] p101displays = {"HbA1c", "Glucose", "Systolic BP", "Diastolic BP", "WBC", "RBC", "HGB"};
+        String[] p101units = {"%", "mg/dL", "mmHg", "mmHg", "10*3/uL", "10*6/uL", "g/dL"};
+        String[] p101ranges = {"<5.7", "70-99", "<140", "<90", "4.0-11.0", "4.5-5.9", "13.5-17.5"};
+        for (int v = 0; v < p101rows.length; v++) {
+            for (int c = 0; c < p101codes.length; c++) {
+                String flag = c == 0 ? "H" : c == 1 ? p101glucoseFlag[v] : "N";
+                jdbcTemplate.update(sql, 101L, p101codes[c], p101displays[c], p101rows[v][c],
+                        p101units[c], p101ranges[c], flag, "final", p101visits[v], now);
+            }
+        }
+
+        log.info("Observation seed data: 70 results (4-date trends for p100/p101/p103 + mammogram)");
     }
 
     private void seedLoincCatalog() {

@@ -1921,3 +1921,18 @@ The trend deliberately uses a dedicated endpoint rather than the paginated one: 
 
 - `mvn compile` ✅, `npx vite build` ✅
 - M17 closed as a side effect: LOINC filtering is now server-side (SQL), not client-side
+
+### Runtime Verification (2026-08-03, H2)
+
+Added patient 101 lab dataset (4 dates × 7 tests = 28 results, HbA1c 7.8→7.5→7.2→6.9) to `DataInitializer` and rebuilt the stale H2 file DB (`CREATE TABLE IF NOT EXISTS` never added the Round 37 H11 `icd10_codes` column to the 7/30 file DB — application failed to boot with `Column A1_0.ICD10_CODES not found`; old DB backed up to `/tmp/backup_medical_dev_0803.mv.db`).
+
+| Check | Result |
+|-------|--------|
+| `GET /patients/101/observations?page=1&size=20` | total=28, 20 records, dates sorted desc ✅ |
+| `page=2` | 8 records ✅ |
+| `?loinc=4548-4` (server-side filter) | total=4, all HbA1c ✅ |
+| `GET /patients/101/observations/trend?loinc=4548-4` | 4 records, 7.8→6.9 (downward) ✅ |
+| `GET /patients/100/observations` (30 rows) | total=30, 20/page ✅ |
+| Patient portal `me/observations` + `me/observations/trend` | pagination + trend work (patient2/p101) ✅ |
+
+Note: integration endpoints (`/integration/*`) require **both** `Authorization: Bearer` (ADMIN/DOCTOR) and `X-Integration-Key` — the class-level `@PreAuthorize` on `IntegrationController` predates the API-key check; not part of this round.
