@@ -10,23 +10,31 @@ interface MessageVO {
 }
 
 export function useChatSse(
-  token: string | null,
+  getTicket: () => Promise<string>,
   currentUserId: number,
   onMessage: (msg: MessageVO) => void
 ) {
   const onMessageRef = useRef(onMessage)
   onMessageRef.current = onMessage
+  const getTicketRef = useRef(getTicket)
+  getTicketRef.current = getTicket
 
   useEffect(() => {
-    if (!token) return
-
     let es: EventSource | null = null
     let reconnectTimer: ReturnType<typeof setTimeout>
     let stopped = false
 
-    function connect() {
+    async function connect() {
       if (stopped) return
-      es = new EventSource(`/api/v1/chat/subscribe?token=${encodeURIComponent(token!)}`)
+      // Tickets are single-use, so fetch a fresh one per connection attempt.
+      const ticket = await getTicketRef.current().catch(() => null)
+      if (!ticket) {
+        // Session expired or server down — SSE is best-effort, stop retrying.
+        stopped = true
+        return
+      }
+      if (stopped) return
+      es = new EventSource(`/api/v1/chat/subscribe?ticket=${encodeURIComponent(ticket)}`)
 
       es.addEventListener('new_message', (e: MessageEvent) => {
         try {
@@ -50,5 +58,5 @@ export function useChatSse(
       clearTimeout(reconnectTimer)
       es?.close()
     }
-  }, [token])
+  }, [])
 }

@@ -205,9 +205,13 @@ Requires `ADMIN` or `DOCTOR`.
 | GET | `/{partnerId}` | `?page=1&size=50` | Paginated messages with partner (auto-read) |
 | POST | `/` | body: MessageFormDTO | Send a message |
 
-### Chat SSE — `/api/v1/chat/subscribe`
+### Chat SSE Ticket — `POST /api/v1/chat/sse-ticket`
 
-Server-Sent Events endpoint for real-time message push. Token passed via query param (`?token=<jwt>`) since browser `EventSource` does not support custom headers. Returns `text/event-stream` with `new_message` events.
+Requires `ADMIN`/`DOCTOR`/`PATIENT` (Bearer JWT via header). Returns `{ "ticket": "<random>", "expiresIn": 30 }` — a single-use, 30-second ticket bound to the caller's userId. The JWT never appears in a URL.
+
+### Chat SSE — `GET /api/v1/chat/subscribe?ticket=<ticket>`
+
+Server-Sent Events endpoint for real-time message push. `permitAll` in the security chain — authentication is the single-use ticket obtained from `POST /api/v1/chat/sse-ticket` (EventSource cannot send Authorization headers). Invalid/expired/reused ticket → 401. Returns `text/event-stream` with `new_message` events.
 
 ### Chat (Patient) — `/api/v1/patient/me/messages`
 

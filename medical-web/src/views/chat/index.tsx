@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getConversations, getMessages, sendMessage } from '../../api/chat'
+import { getConversations, getMessages, sendMessage, getSseTicket } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
 import styles from './style.module.css'
@@ -75,7 +75,7 @@ export default function Chat() {
     loadConversations()
   }, [selectedPartner, loadConversations])
 
-  useChatSse(token, currentUserId, handleSseMessage)
+  useChatSse(() => getSseTicket().then(r => (r as any).ticket), currentUserId, handleSseMessage)
 
   useEffect(() => {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight

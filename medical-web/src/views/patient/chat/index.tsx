@@ -66,7 +66,7 @@ export default function PatientChat() {
     loadConversations()
   }, [selectedPartner, loadConversations])
 
-  useChatSse(token, currentUserId, handleSseMessage)
+  useChatSse(() => patientRequest.post('/chat/sse-ticket', null, { silent: true } as any).then(r => (r as any).ticket), currentUserId, handleSseMessage)
 
   useEffect(() => {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight
