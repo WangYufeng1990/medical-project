@@ -1,21 +1,31 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { SESSION_WARNING_MINUTES, SESSION_TIMEOUT_MINUTES } from './labels'
 
-const IDLE_MINUTES = 30
-
+// Healthcare-standard idle session: warn before logout, any activity extends the
+// session (sliding), so users are never silently kicked after a break.
 export function useIdleTimeout(onTimeout: () => void) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const [warningVisible, setWarningVisible] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const warnRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const reset = useCallback(() => {
+    setWarningVisible(false)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    if (warnRef.current) clearTimeout(warnRef.current)
+    warnRef.current = setTimeout(() => setWarningVisible(true), SESSION_WARNING_MINUTES * 60 * 1000)
+    timeoutRef.current = setTimeout(onTimeout, SESSION_TIMEOUT_MINUTES * 60 * 1000)
+  }, [onTimeout])
 
   useEffect(() => {
-    const reset = () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(onTimeout, IDLE_MINUTES * 60 * 1000)
-    }
     const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
     events.forEach(e => window.addEventListener(e, reset))
     reset()
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (warnRef.current) clearTimeout(warnRef.current)
       events.forEach(e => window.removeEventListener(e, reset))
     }
-  }, [onTimeout])
+  }, [reset])
+
+  return { warningVisible, reset }
 }

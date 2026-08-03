@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 44 resolved (7 CRITICAL fixed, 12 HIGH fixed, 15 MEDIUM fixed, 3 LOW fixed). 3 backend-dependent deferred (C4/C5), 3 MEDIUM pending (M14/M15/M17).**
+> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 45 resolved (8 CRITICAL fixed, 12 HIGH fixed, 15 MEDIUM fixed, 3 LOW fixed). 1 CRITICAL backend-dependent deferred (C4), 3 MEDIUM pending (M14/M15/M17).**
 
 ---
 
@@ -1686,7 +1686,7 @@ Deferred — B10 (self-registration), B12 (advance directives),
 | C2 | ✅ Password fields type=password | `AdminKeys.tsx` |
 | C3 | ✅ CDS error now blocks save (was silent bypass) | `prescriptions/index.tsx` |
 | C4 | EPCS controlled substance: no 2FA/DEA verification (backend needed) | prescriptions page |
-| C5 | Chat SSE JWT in URL query string (backend needed) | `useChatSse.ts` |
+| C5 | ✅ Chat SSE JWT in URL query string — replaced with single-use 30s ticket exchange (Round 38) | `useChatSse.ts` |
 | C6 | ✅ Password confirm field + match/length validation | `patient/profile/index.tsx`, `profile/index.tsx` |
 | C7 | ✅ Payment amount validation (positive, ≤balance) | `patient/bills/index.tsx` |
 | C8 | ✅ Loading states (isLoading check) added to all views | users, roles, referrals, priorAuths, adminKeys, EmergencyAudit, patients, charges |
@@ -1773,3 +1773,81 @@ P3 — Technical Debt (L1-L10)                                        ~1 round
 - **84 backend endpoints** audited, **70 frontend API functions** mapped, **26 routes** checked
 - **21 gaps** found: 8 backend-only, 13 missing clinical features, 5 dead code
 - **7 endpoints** intentionally backend-only (interop/external)
+
+---
+
+# Round 38: Chat SSE Token Security — JWT Out of the URL ✅ Complete
+
+> **Status: Complete (2026-08-03) — C5 fix**
+
+## Problem
+
+`useChatSse.ts` opened `new EventSource('/api/v1/chat/subscribe?token=<jwt>')` — the full JWT in the URL query string. URLs land in access logs, proxy logs, and browser history; a leaked JWT grants full API access. `SecurityConfig.sseTokenFilter` existed solely to convert that query param back into a Bearer header.
+
+## Fix: Single-Use Short-Lived Ticket Exchange
+
+EventSource cannot send Authorization headers, so the JWT is exchanged for a random, 30-second, single-use ticket via a normal authenticated HTTP call:
+
+```
+Frontend (axios, Bearer header)
+  → POST /api/v1/chat/sse-ticket            (JWT validated normally)
+  → { ticket: <random 32-hex>, expiresIn: 30 }
+Frontend (EventSource)
+  → GET /api/v1/chat/subscribe?ticket=...   (permitAll, ticket → userId)
+```
+
+- **Ticket**: `UUID.randomUUID()` (122-bit random), bound to userId server-side, 30s TTL, consumed on first use (`TICKETS.remove()`). Replay after use/expiry → 401.
+- **Reconnect**: each connection attempt fetches a fresh ticket; ticket fetch failure stops retry (session dead — interceptor redirects to login).
+- **JWT never touches a URL.**
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `ChatSseController.java` | Modify | `POST /api/v1/chat/sse-ticket` (class-level `@PreAuthorize` moved to this method); `subscribe()` now validates/consumes `?ticket=` instead of SecurityContext principal |
+| `SseTicketVO.java` | **New** | `{ ticket, expiresIn }` response DTO |
+| `SecurityConfig.java` | Modify | Removed `sseTokenFilter` (query-param→Bearer wrapper); `/api/v1/chat/subscribe` added to permitAll |
+| `useChatSse.ts` | Modify | `token` param → `getTicket` callback; fresh ticket per connect/reconnect; ref-stored callback (effect deps `[]`) |
+| `api/chat.ts` | Modify | Added `getSseTicket()` |
+| `views/chat/index.tsx`, `views/patient/chat/index.tsx` | Modify | Pass ticket fetcher (`request` / `patientRequest`) |
+
+## Security Notes
+
+- Residual risk: a ticket leaked in logs is a 30s window to hijack the user's SSE stream only — no API access, no JWT. Industry-standard pattern for EventSource auth.
+- `subscribe` is permitAll by design — the ticket *is* the authentication; identity binding is server-side.
+- C4 (EPCS 2FA) remains deferred by design: production environments outsource controlled-substance signing to third-party APIs (Surescripts) with their own 2FA.
+
+## Verified
+
+- Backend `mvn compile` ✅
+- Frontend `npx vite build` ✅ (note: `package.json` lost its `build`/`dev` scripts after Round 33 — run `npx vite build` / `npx vite --force` directly)
+- No `?token=` or `sseTokenFilter` references remain
+
+## Post-Round 38: Session UX — No More Silent Kicks (2026-08-03)
+
+> **Status: Complete.** Three fixes so users are never "kicked offline" by background activity or idle timeouts.
+
+### 1. Silent 401 for background requests (`request.ts`, `patientRequest.ts`)
+
+**Problem**: the interceptor redirected to login on ANY failed 401 — including background requests like the SSE ticket fetch. An idle user on the chat page got kicked by reconnect activity they never triggered.
+
+**Fix**: per-request `{ silent: true }` flag — refresh is still attempted (so SSE recovers when possible), but the login redirect is skipped for silent requests; the SSE hook just stops quietly. Only user-initiated requests can redirect to login. Applied to `getSseTicket()` (staff) and the patient chat view's ticket call.
+
+### 2. Idle session warning dialog (`useIdleTimeout.ts`, `layout/SessionWarningModal.tsx`)
+
+**Problem**: 30-min idle timeout logged users out silently — no warning, no way to extend.
+
+**Fix**: healthcare-standard warning flow — warning dialog at **25 min** ("Session will expire in 5 minutes"), logout at **30 min**. Any activity (mousemove/keydown/click/touch/scroll) or the **Continue Session** button resets both timers (sliding session). `SESSION_WARNING_MINUTES` / `SESSION_TIMEOUT_MINUTES` in `utils/labels.ts`. Wired into `StaffLayout` + `PatientLayout`.
+
+### 3. Proactive token refresh at 80% TTL (`request.ts`, `patientRequest.ts`, `utils/auth.ts`)
+
+**Problem**: refresh was reactive — only on 401. Users could hit a failed request before the silent refresh kicked in.
+
+**Fix**: `scheduleProactiveRefresh()` schedules a timer at **80% of the access-token TTL** (`scheduleDelayMs()` in `utils/auth.ts`), refreshes via the existing endpoints, and reschedules. Called on login (both pages) and after every successful interceptor refresh. Tokens re-read at fire time to survive rotation; failures fall back to the existing 401 chain.
+
+### Files
+`request.ts`, `patientRequest.ts`, `utils/auth.ts`, `utils/labels.ts`, `utils/useIdleTimeout.ts`, `layout/SessionWarningModal.tsx` (new), `layout/StaffLayout.tsx`, `views/patient/layout/PatientLayout.tsx`, `views/login/index.tsx`, `views/patient/login/index.tsx`, `api/chat.ts`, `views/patient/chat/index.tsx`
+
+### Verified
+- `npx vite build` ✅
+- Known trade-off: multi-tab refresh rotation can invalidate a sibling tab's refresh token (pre-existing with rotation; idle 30-min + 2h access TTL makes collisions rare)

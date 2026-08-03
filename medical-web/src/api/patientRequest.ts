@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { scheduleDelayMs } from '../utils/auth'
 
 const patientRequest = axios.create({ baseURL: '/api/v1', timeout: 15000 })
 
@@ -40,6 +41,7 @@ patientRequest.interceptors.response.use(
             if (res.data.data.refreshToken) {
               localStorage.setItem('patientRefreshToken', res.data.data.refreshToken)
             }
+            scheduleProactiveRefresh()
             onRefreshed(newToken)
             isRefreshing = false
             originalRequest.headers.Authorization = `Bearer ${newToken}`
@@ -49,7 +51,7 @@ patientRequest.interceptors.response.use(
             refreshSubscribers = []
             localStorage.removeItem('patientToken')
             localStorage.removeItem('patientRefreshToken')
-            window.location.href = '/patient/login'
+            if (!originalRequest.silent) window.location.href = '/patient/login'
             return Promise.reject(err)
           }
         } else {
@@ -62,7 +64,7 @@ patientRequest.interceptors.response.use(
         }
       }
       localStorage.removeItem('patientToken')
-      window.location.href = '/patient/login'
+      if (!originalRequest.silent) window.location.href = '/patient/login'
     }
     if (err.response?.status === 429) {
       const retryAfter = err.response.headers['retry-after']
@@ -73,5 +75,29 @@ patientRequest.interceptors.response.use(
     return Promise.reject(err)
   }
 )
+
+let proactiveTimer: ReturnType<typeof setTimeout> | null = null
+
+// Refresh the patient access token at 80% of its TTL so expiry never surfaces
+// as a visible 401. Tokens are re-read at fire time to survive rotation.
+export function scheduleProactiveRefresh() {
+  if (proactiveTimer) clearTimeout(proactiveTimer)
+  const token = localStorage.getItem('patientToken')
+  if (!token) return
+  proactiveTimer = setTimeout(async () => {
+    const refreshToken = localStorage.getItem('patientRefreshToken')
+    if (refreshToken) {
+      try {
+        const res = await axios.post('/api/v1/patient/refresh', { refreshToken })
+        const newToken = res.data.data.token
+        localStorage.setItem('patientToken', newToken)
+        if (res.data.data.refreshToken) {
+          localStorage.setItem('patientRefreshToken', res.data.data.refreshToken)
+        }
+      } catch { /* leave tokens; the 401 chain handles stale sessions */ }
+    }
+    scheduleProactiveRefresh()
+  }, scheduleDelayMs(token))
+}
 
 export default patientRequest

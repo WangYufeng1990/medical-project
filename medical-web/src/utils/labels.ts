@@ -44,6 +44,9 @@ export const FEE_SCHEDULE: Record<string, number> = {
 
 export const PAGE_SIZE = 10
 
+export const SESSION_WARNING_MINUTES = 25
+export const SESSION_TIMEOUT_MINUTES = 30
+
 export const BILL_STATUS_COLOR: Record<string, string> = {
   DRAFT: '#909399', SUBMITTED: '#409EFF', PENDING: '#E6A23C', PAID: '#67C23A', DENIED: '#F56C6C',
 }

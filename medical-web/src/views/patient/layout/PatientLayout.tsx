@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import patientRequest from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
+import SessionWarningModal from '../../../layout/SessionWarningModal'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -25,7 +26,7 @@ export default function PatientLayout() {
   const info = profile || cachedInfo
 
   const handleLogout = () => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }
-  useIdleTimeout(handleLogout)
+  const { warningVisible, reset } = useIdleTimeout(handleLogout)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -51,6 +52,7 @@ export default function PatientLayout() {
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>
+      <SessionWarningModal visible={warningVisible} onContinue={reset} onLogout={handleLogout} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { scheduleProactiveRefresh } from '../../../api/patientRequest'
 import styles from '../../login/style.module.css'
 
 export default function PatientLogin() {
@@ -17,6 +18,7 @@ export default function PatientLogin() {
       localStorage.setItem('patientToken', data.token)
       if (data.refreshToken) localStorage.setItem('patientRefreshToken', data.refreshToken)
       localStorage.setItem('patientInfo', JSON.stringify({ patientId: data.patientId, name: data.name, username: data.username }))
+      scheduleProactiveRefresh()
       navigate('/patient/dashboard')
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Login failed')

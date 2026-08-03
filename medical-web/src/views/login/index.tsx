@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../../api/auth'
+import { scheduleProactiveRefresh } from '../../api/request'
 import styles from './style.module.css'
 
 export default function Login() {
@@ -17,6 +18,7 @@ export default function Login() {
       localStorage.setItem('refreshToken', data.refreshToken || '')
       localStorage.setItem('username', data.username)
       localStorage.setItem('userId', String(data.userId))
+      scheduleProactiveRefresh()
       navigate('/dashboard')
     } catch (err: any) {
       setError(err?.message || 'Login failed')

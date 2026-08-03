@@ -3,6 +3,7 @@ import { hasAnyRole, getUserRoles } from '../utils/auth'
 import { logout } from '../api/auth'
 import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
 import { useIdleTimeout } from '../utils/useIdleTimeout'
+import SessionWarningModal from './SessionWarningModal'
 import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
@@ -39,7 +40,7 @@ export default function StaffLayout() {
     navigate('/login')
   }
 
-  useIdleTimeout(handleLogout)
+  const { warningVisible, reset } = useIdleTimeout(handleLogout)
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -78,6 +79,7 @@ export default function StaffLayout() {
       <main className={styles.main}>
         <Outlet />
       </main>
+      <SessionWarningModal visible={warningVisible} onContinue={reset} onLogout={handleLogout} />
     </div>
   )
 }

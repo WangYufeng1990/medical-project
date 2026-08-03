@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { scheduleDelayMs } from '../utils/auth'
 
 const request = axios.create({ baseURL: '/api/v1', timeout: 15000 })
 
@@ -49,6 +50,7 @@ request.interceptors.response.use(
             if (res.data.data.refreshToken) {
               localStorage.setItem('refreshToken', res.data.data.refreshToken)
             }
+            scheduleProactiveRefresh()
             onRefreshed(newToken)
             isRefreshing = false
             originalRequest.headers.Authorization = `Bearer ${newToken}`
@@ -58,7 +60,7 @@ request.interceptors.response.use(
             refreshSubscribers = []
             localStorage.removeItem('token')
             localStorage.removeItem('refreshToken')
-            window.location.href = '/login'
+            if (!originalRequest.silent) window.location.href = '/login'
             return Promise.reject(err)
           }
         } else {
@@ -71,7 +73,7 @@ request.interceptors.response.use(
         }
       }
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      if (!originalRequest.silent) window.location.href = '/login'
     }
     if (err.response?.status === 429) {
       const retryAfter = err.response.headers['retry-after']
@@ -82,5 +84,29 @@ request.interceptors.response.use(
     return Promise.reject(err)
   }
 )
+
+let proactiveTimer: ReturnType<typeof setTimeout> | null = null
+
+// Refresh the access token at 80% of its TTL so expiry never surfaces as a
+// visible 401. Tokens are re-read at fire time to survive rotation.
+export function scheduleProactiveRefresh() {
+  if (proactiveTimer) clearTimeout(proactiveTimer)
+  const token = localStorage.getItem('token')
+  if (!token) return
+  proactiveTimer = setTimeout(async () => {
+    const refreshToken = localStorage.getItem('refreshToken')
+    if (refreshToken) {
+      try {
+        const res = await axios.post('/api/v1/auth/refresh', { refreshToken })
+        const newToken = res.data.data.accessToken || res.data.data.token
+        localStorage.setItem('token', newToken)
+        if (res.data.data.refreshToken) {
+          localStorage.setItem('refreshToken', res.data.data.refreshToken)
+        }
+      } catch { /* leave tokens; the 401 chain handles stale sessions */ }
+    }
+    scheduleProactiveRefresh()
+  }, scheduleDelayMs(token))
+}
 
 export default request
