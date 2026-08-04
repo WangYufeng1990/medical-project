@@ -38,6 +38,7 @@ export default function StaffLayout() {
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('userId')
     localStorage.removeItem('username')
+    localStorage.removeItem('realName')
     localStorage.removeItem('patientToken')
     localStorage.removeItem('patientRefreshToken')
     localStorage.removeItem('patientInfo')
@@ -51,7 +52,7 @@ export default function StaffLayout() {
       <aside className={styles.sidebar}>
         <div className={styles.logo}>Medical System</div>
         <div style={{ padding: '0 16px 8px', fontSize: 12, color: '#9ca3af' }}>
-          {localStorage.getItem('username') || 'Staff'}
+          {localStorage.getItem('realName') || localStorage.getItem('username') || 'Staff'}
         </div>
         <nav>
           {visibleItems.map((item, i) => {
