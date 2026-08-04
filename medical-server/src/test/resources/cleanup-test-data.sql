@@ -9,7 +9,10 @@ DELETE FROM prescription_item WHERE prescription_id NOT IN (300, 301, 302);
 DELETE FROM prescription WHERE id NOT IN (300, 301, 302);
 DELETE FROM appointment WHERE id NOT IN (200, 201, 202, 203, 204);
 
--- Restore soft-deleted menu 14 needed by updateMenu test
+-- Restore menu 14 needed by updateMenu test (seed only defines 1-5, 10-13)
+INSERT INTO sys_menu (id, parent_id, menu_name, path, component, icon, type, permission, sort, status, create_time, update_time)
+SELECT 14, 0, 'Reports', '/reports', 'reports/index', 'DataAnalysis', 'MENU', 'report:list', 60, 1, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 14);
 UPDATE sys_menu SET is_deleted = 0 WHERE id = 14;
 
 -- Fix admin password to match test password
@@ -19,14 +22,19 @@ UPDATE sys_user SET force_logout_after = NULL WHERE username = 'admin';
 -- Clear password history so changePassword test passes
 DELETE FROM password_history WHERE user_id = 1;
 
--- Reset auto-increment to match test expectations
-ALTER TABLE sys_user AUTO_INCREMENT = 3;
-ALTER TABLE appointment AUTO_INCREMENT = 205;
-ALTER TABLE bill AUTO_INCREMENT = 503;
-ALTER TABLE prescription AUTO_INCREMENT = 303;
-ALTER TABLE prescription_item AUTO_INCREMENT = 406;
-ALTER TABLE sys_menu AUTO_INCREMENT = 100;
-ALTER TABLE patient AUTO_INCREMENT = 100;
+-- Reset identity counters (H2 syntax — MySQL-style AUTO_INCREMENT=N is silently
+-- ignored by H2, leaving counters at the first seeded id and colliding on insert)
+ALTER TABLE sys_user ALTER COLUMN id RESTART WITH 3;
+ALTER TABLE appointment ALTER COLUMN id RESTART WITH 205;
+ALTER TABLE bill ALTER COLUMN id RESTART WITH 503;
+ALTER TABLE prescription ALTER COLUMN id RESTART WITH 303;
+ALTER TABLE prescription_item ALTER COLUMN id RESTART WITH 406;
+ALTER TABLE sys_menu ALTER COLUMN id RESTART WITH 100;
+ALTER TABLE patient ALTER COLUMN id RESTART WITH 104;
+
+-- AppointmentScheduler marks past scheduled appointments no-show on context
+-- startup — restore seed 202/203 to scheduled so the status filter test passes.
+UPDATE appointment SET status = 0 WHERE id IN (202, 203);
 
 -- Fix bill test: order 56 expects 2 PAID bills, only 1 in seed (500).
 -- createBill(order 58) creates DRAFT 503, submit(order 59) → SUBMITTED,
