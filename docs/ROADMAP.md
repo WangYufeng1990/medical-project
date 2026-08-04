@@ -1760,7 +1760,41 @@ P3 — Technical Debt (L1-L10)                                        ~1 round
 
 | # | Issue | Plan | Status |
 |---|-------|------|--------|
-| Gap | No password reset/recovery flow for patients or staff. If user forgets password, they are permanently locked out with no self-service recovery. | Add `POST /api/v1/patient/forgot-password` (sends reset email/token) + `POST /api/v1/patient/reset-password` (token-based reset). Frontend: "Forgot Password?" link on login page → email input → reset token → new password form. Requires email sending infrastructure. For dev mode, show reset token on console. | Pending |
+| Gap | No password reset/recovery flow for patients or staff. If user forgets password, they are permanently locked out with no self-service recovery. | Add `POST /api/v1/patient/forgot-password` (sends reset email/token) + `POST /api/v1/patient/reset-password` (token-based reset). Frontend: "Forgot Password?" link on login page → email input → reset token → new password form. Requires email sending infrastructure. For dev mode, show reset token on console. | ✅ Complete (Round 41) |
+
+---
+
+# Round 41: Patient Password Reset ✅ Complete
+
+> **Status: Complete (2026-08-04) — Post-Round 37 gap**
+
+## Goal
+
+Patients can self-service reset a forgotten password. No email infrastructure in scope — dev mode logs the reset token to the server console; production would swap the log for a mailer.
+
+## Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `PatientAuthController.java` | Modify | `POST /api/v1/patient/forgot-password` — 30-min single-use token in an in-memory map (same pattern as SSE tickets); **identical response whether or not the username exists** (no account enumeration). `POST /api/v1/patient/reset-password` — validates+consumes token, BCrypts new password, clears failed attempts/lock, sets `passwordChangedAt`. Both audited (`PATIENT_PASSWORD_RESET_REQUEST` / `PATIENT_PASSWORD_RESET`) |
+| `SecurityConfig.java` | Modify | Both endpoints added to permitAll |
+| `views/patient/forgotPassword/index.tsx` | **New** | Two-step page: username → reset token + new password + confirm. Raw axios (no auth interceptor — a 401 on an invalid token must not trigger the login redirect) |
+| `views/patient/login/index.tsx` | Modify | "Forgot Password?" link |
+| `App.tsx` | Modify | `/patient/forgot-password` route |
+
+## End-to-End Verification (H2)
+
+| Check | Result |
+|-------|--------|
+| forgot-password (patient2) | 200, token in server log ✅ |
+| forgot-password (nonexistent user) | 200 — no enumeration ✅ |
+| reset-password with token | 200 ✅ |
+| login with new password | 200, Maria Garcia ✅ |
+| login with old password | 401 ✅ |
+| token replay (second use) | 401 single-use ✅ |
+| weak password (`123`) | 400 — policy enforced ✅ |
+
+> Note: verification reset patient2's password to `NewPass@123`. Dev DB seeds recreate with `patient123` only on a fresh database.
 
 ## Post-Round 37: Dashboard Navigation Improvements (2026-07-28)
 

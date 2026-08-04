@@ -7,10 +7,12 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.common.validation.ValidPassword;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -24,13 +26,24 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/patient")
 @RequiredArgsConstructor
 public class PatientAuthController {
 
     private static final int LOCK_DURATION_MINUTES = 15;
+    private static final long RESET_TOKEN_TTL_MINUTES = 30;
+
+    /**
+     * Single-use password reset tokens. No email infrastructure in scope —
+     * dev logs the token; production would send it via the mailer.
+     */
+    private static final Map<String, ResetToken> RESET_TOKENS = new ConcurrentHashMap<>();
 
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
@@ -91,6 +104,39 @@ public class PatientAuthController {
                     httpRequest != null ? httpRequest.getRemoteAddr() : "unknown",
                     java.time.Instant.now());
         }
+        return Result.ok();
+    }
+
+    @PostMapping("/forgot-password")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_RESET_REQUEST")
+    public Result<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        // Respond identically whether or not the username exists — no account enumeration.
+        patientAuthRepository.findByUsername(request.getUsername()).ifPresent(auth -> {
+            RESET_TOKENS.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(LocalDateTime.now()));
+            String token = UUID.randomUUID().toString().replace("-", "");
+            RESET_TOKENS.put(token, new ResetToken(auth.getUsername(),
+                    LocalDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES)));
+            log.info("Password reset token for {}: {} (expires in {} min)",
+                    auth.getUsername(), token, RESET_TOKEN_TTL_MINUTES);
+        });
+        return Result.ok();
+    }
+
+    @PostMapping("/reset-password")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_RESET")
+    public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        ResetToken rt = RESET_TOKENS.remove(request.getToken());
+        if (rt == null || rt.expiresAt().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid or expired reset token");
+        }
+        PatientAuth auth = patientAuthRepository.findByUsername(rt.username())
+                .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid or expired reset token"));
+        auth.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        auth.setPasswordChangedAt(LocalDateTime.now());
+        auth.setFailedAttempts(0);
+        auth.setLockedUntil(null);
+        patientAuthRepository.save(auth);
         return Result.ok();
     }
 
@@ -204,6 +250,19 @@ public class PatientAuthController {
     static class RefreshRequest {
         @NotBlank private String refreshToken;
     }
+
+    @Data
+    static class ForgotPasswordRequest {
+        @NotBlank private String username;
+    }
+
+    @Data
+    static class ResetPasswordRequest {
+        @NotBlank private String token;
+        @NotBlank @ValidPassword private String newPassword;
+    }
+
+    private record ResetToken(String username, LocalDateTime expiresAt) {}
 
     @Data
     static class PatientLoginResponse {

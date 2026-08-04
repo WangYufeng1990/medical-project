@@ -153,6 +153,8 @@ All require `PATIENT` role.
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
 | GET | `/observations` | `?loinc=&page=1&size=20` | My lab results — `PageResult<Observation>`; `loinc` filters server-side |
+| POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
+| POST | `/patient/reset-password` | body: {token, newPassword} | Public. Resets password (policy-enforced), clears lockout; token single-use, 401 on invalid/expired/reused |
 | GET | `/observations/trend` | `?loinc=` (required) | Full history of one test (bounded single-test dataset) for trend rendering |
 | GET | `/consent` | — | My consent records |
 | PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified. DRAFT is not payable |

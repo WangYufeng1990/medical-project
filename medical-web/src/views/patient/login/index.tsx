@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
 import { scheduleProactiveRefresh } from '../../../api/patientRequest'
 import styles from '../../login/style.module.css'
@@ -33,6 +33,9 @@ export default function PatientLogin() {
         <input className={styles.input} placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} autoFocus />
         <input className={styles.input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
         <button className={styles.btn} type="submit">Login</button>
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <Link to="/patient/forgot-password" style={{ fontSize: 13, color: '#409EFF', textDecoration: 'none' }}>Forgot Password?</Link>
+        </div>
       </form>
     </div>
   )

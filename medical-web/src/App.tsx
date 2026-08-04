@@ -15,6 +15,7 @@ import Menus from './views/system/menus'
 import EmergencyAudit from './views/system/EmergencyAudit'
 import AuditLogs from './views/system/AuditLogs'
 import PatientLogin from './views/patient/login'
+import PatientForgotPassword from './views/patient/forgotPassword'
 import PatientLayout from './views/patient/layout/PatientLayout'
 import PatientDashboard from './views/patient/dashboard'
 import PatientProfile from './views/patient/profile'
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="prior-auths" element={<PriorAuths />} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
+      <Route path="/patient/forgot-password" element={<PatientForgotPassword />} />
       <Route path="/patient" element={<PatientAuthGuard><PatientLayout /></PatientAuthGuard>}>
         <Route index element={<Navigate to="/patient/dashboard" replace />} />
         <Route path="dashboard" element={<PatientDashboard />} />
