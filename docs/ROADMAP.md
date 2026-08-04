@@ -3,6 +3,8 @@
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
 > **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 47 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 9 LOW). 1 CRITICAL backend-dependent deferred (C4). 2 LOW remaining (L1 any types, L6 `||` misuse).**
+>
+> **Round 42 (2026-08-04): Integration tests decoupled from MySQL — run on isolated in-memory H2. `mvn clean install`: 135 tests, 0 failures (previously required a running MySQL and accumulated 8 broken tests as endpoints evolved).**
 
 ---
 
