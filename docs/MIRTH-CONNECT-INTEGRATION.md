@@ -8,21 +8,25 @@ This system receives medical data forwarded by Mirth Connect via REST JSON APIs.
 
 | Endpoint | Method | Content-Type | Auth |
 |----------|--------|-------------|------|
-| `/api/v1/integration/adt` | POST | `application/json` | Bearer token (ADMIN/DOCTOR) |
-| `/api/v1/integration/lab-results` | POST | `application/json` | Bearer token (ADMIN/DOCTOR) |
+| `/api/v1/integration/adt` | POST | `application/json` | Bearer token (ADMIN/DOCTOR) + `X-Integration-Key` |
+| `/api/v1/integration/lab-results` | POST | `application/json` | Bearer token (ADMIN/DOCTOR) + `X-Integration-Key` |
 
 ---
 
 ## Authentication
 
-Add a header in the Mirth Connect Destination HTTP Sender settings:
+Add **two** headers in the Mirth Connect Destination HTTP Sender settings:
 
 ```
 Name:  Authorization
 Value: Bearer <jwt-token>
+Name:  X-Integration-Key
+Value: <integration-api-key>
 ```
 
-The token must belong to an account with `ADMIN` or `DOCTOR` role. In development, use the default `doctor1` account to obtain a token (`POST /api/v1/auth/login`).
+- The JWT must belong to an account with `ADMIN` or `DOCTOR` role (class-level `@PreAuthorize` on `IntegrationController`).
+- The API key is validated against `app.integration.api-key` (dev default: `dev-integration-key`, from `application-h2.yml`). Requests without a matching key are rejected with 403.
+- In development, obtain a token via `POST /api/v1/auth/login` using the default `doctor1` account, then send it alongside the key.
 
 ---
 
