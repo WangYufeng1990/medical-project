@@ -5,6 +5,8 @@
 > **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 47 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 9 LOW). 1 CRITICAL backend-dependent deferred (C4). 2 LOW remaining (L1 any types, L6 `||` misuse).**
 >
 > **Round 42 (2026-08-04): Integration tests decoupled from MySQL — run on isolated in-memory H2. `mvn clean install`: 135 tests, 0 failures (previously required a running MySQL and accumulated 8 broken tests as endpoints evolved).**
+>
+> **Full-system review (2026-08-04): Ready to merge — 0 CRITICAL, 0 HIGH. 2 MEDIUM (raw-entity responses in 6 endpoints; missing @Valid in 5 controllers), 2 LOW (silent catch in LoincCatalog + RxNorm lookup). See Post-Round 42 section.**
 
 ---
 
@@ -1976,3 +1978,39 @@ Added patient 101 lab dataset (4 dates × 7 tests = 28 results, HbA1c 7.8→7.5�
 | Patient portal `me/observations` + `me/observations/trend` | pagination + trend work (patient2/p101) ✅ |
 
 Note: integration endpoints (`/integration/*`) require **both** `Authorization: Bearer` (ADMIN/DOCTOR) and `X-Integration-Key` — the class-level `@PreAuthorize` on `IntegrationController` predates the API-key check; not part of this round.
+
+---
+
+# Post-Round 42: Full-System Review (2026-08-04)
+
+> **Status: Audit complete — VERDICT: Ready to merge. 0 CRITICAL, 0 HIGH, 2 MEDIUM, 2 LOW.**
+> **Method: checklist review of all 29 controllers + key services/entities + frontend falsy safety + cross-cutting**
+
+## Findings
+
+### 🟠 MEDIUM
+
+| # | Issue | Location | Note |
+|---|-------|----------|------|
+| R-1 | Raw entity responses (violates "never raw entities" + no @PhiField masking) | `ReferralController`, `RefillController`, `ProblemController`, `ImmunizationController`, `CarePlanController`, `PriorAuthController` — create/update/approve/deny return `Result<Entity>` | Low real risk (authenticated users only; storage-layer encryption intact) but inconsistent with the VO pattern used everywhere else |
+| R-2 | Missing `@Valid` on create/update request bodies | Referral / Immunization / Problem / CarePlan / PriorAuth controllers | No impact today — the inline Form DTOs carry no validation constraints — but constraints added later would silently not apply |
+
+### ⚪ LOW
+
+| # | Issue | Location |
+|---|-------|----------|
+| R-3 | Silent catch on catalog load failure — blank page with no error | `views/lab/LoincCatalog.tsx` |
+| R-4 | Silent catch on RxNorm auto-lookup failure (manual entry fallback exists) | `views/prescriptions/index.tsx` |
+
+### ✅ Verified Clean
+
+- `@PreAuthorize` on every endpoint except auth endpoints (login/refresh/logout — by design)
+- `@Valid` on core-module request bodies; all Round 38-41 endpoints validated
+- `@Transactional`/`@Auditable` coverage on mutations
+- Frontend falsy safety: zero `|| null` / `|| 0` patterns
+- No hardcoded credentials, no new dependencies, no cyclic references
+- Raw axios only in the emergency-access (break-glass) flow — intentional, uses the short-lived `emToken`
+
+## Resolution Status
+
+R-1/R-2: pending — user chose to record rather than fix. R-3/R-4: accepted (functional fallbacks exist).
