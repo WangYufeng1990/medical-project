@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { getMenuTree } from '../../../api/menu'
+import { MenuVO } from '../../../types/entities'
 import styles from '../../shared.module.css'
+
+type FlatMenu = MenuVO & { _indent: number }
 
 export default function Menus() {
   const { data: tree } = useQuery({
@@ -10,8 +13,8 @@ export default function Menus() {
   })
   const nodes = tree ?? []
 
-  const flatten = (nodes: any[], level: number = 0): any[] => {
-    const result: any[] = []
+  const flatten = (nodes: MenuVO[], level: number = 0): FlatMenu[] => {
+    const result: FlatMenu[] = []
     nodes.forEach(n => {
       result.push({ ...n, _indent: level })
       if (n.children && n.children.length > 0) {

@@ -1,4 +1,5 @@
-import request from './request'
+import { http } from './request'
+import { FormularyEntry } from '../types/entities'
 
 export const checkFormulary = (rxnormCode: string, insurancePayer: string) =>
-  request.get('/formulary/check', { params: { rxnormCode, insurancePayer } })
+  http.get<FormularyEntry>('/formulary/check', { params: { rxnormCode, insurancePayer } })

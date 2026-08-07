@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { ObservationVO, LoincEntry } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
 const FLAG_COLOR: Record<string, string> = {
@@ -10,31 +12,31 @@ const FLAG_COLOR: Record<string, string> = {
 const LAB_PAGE_SIZE = 20
 
 export default function PatientLab() {
-  const info = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const info = JSON.parse(localStorage.getItem('patientInfo') || '{}') as { name?: string }
   const [loincFilter, setLoincFilter] = useState('')
   const [page, setPage] = useState(1)
 
   const { data: catalog } = useQuery({
     queryKey: ['loinc', 'catalog'],
-    queryFn: () => patientRequest.get('/loinc/catalog'),
+    queryFn: () => http.get<LoincEntry[]>('/loinc/catalog'),
   })
 
   // Table mode: server-side pagination. Trend mode: full history of one test.
   const { data: pageData, isLoading: pageLoading } = useQuery({
     queryKey: ['me', 'lab', 'list', { page }],
-    queryFn: () => patientRequest.get('/patient/me/observations', { params: { page, size: LAB_PAGE_SIZE } }),
+    queryFn: () => http.get<PageResult<ObservationVO>>('/patient/me/observations', { params: { page, size: LAB_PAGE_SIZE } }),
     enabled: !loincFilter,
   })
   const { data: trendData, isLoading: trendLoading } = useQuery({
     queryKey: ['me', 'lab', 'trend', { loinc: loincFilter }],
-    queryFn: () => patientRequest.get('/patient/me/observations/trend', { params: { loinc: loincFilter } }),
+    queryFn: () => http.get<ObservationVO[]>('/patient/me/observations/trend', { params: { loinc: loincFilter } }),
     enabled: !!loincFilter,
   })
   const isLoading = loincFilter ? trendLoading : pageLoading
   const allObservations = (loincFilter ? trendData : pageData?.records) ?? []
   const total = pageData?.total ?? 0
 
-  const grouped: Record<string, any[]> = {}
+  const grouped: Record<string, ObservationVO[]> = {}
   allObservations.forEach(o => {
     const date = o.effectiveDate ? o.effectiveDate.substring(0, 16) : 'Unknown'
     if (!grouped[date]) grouped[date] = []
@@ -45,8 +47,8 @@ export default function PatientLab() {
   const trendDirection = loincFilter && dateEntries.length >= 2
     ? (() => {
         const dates = Object.keys(grouped).sort()
-        const first = parseFloat(grouped[dates[0]][0]?.obsValue)
-        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue)
+        const first = parseFloat(grouped[dates[0]][0]?.obsValue ?? '')
+        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue ?? '')
         if (isNaN(first) || isNaN(last)) return null
         return last > first ? '↑' : last < first ? '↓' : '→'
       })()
@@ -66,7 +68,7 @@ export default function PatientLab() {
         <select value={loincFilter} onChange={e => handleLoincChange(e.target.value)}
           style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
           <option value="">All tests</option>
-          {(catalog ?? []).map((c: any) => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
+          {(catalog ?? []).map(c => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
         </select>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: '#909399', alignItems: 'center' }}>
           Flag: <span style={{ color: '#F56C6C' }}>HH/LL Critical</span> <span style={{ color: '#E6A23C' }}>H/L Abnormal</span> <span style={{ color: '#909399' }}>N Normal</span> <span style={{ color: '#409EFF' }}>A</span>
@@ -87,11 +89,11 @@ export default function PatientLab() {
                 Trend for <strong>{allObservations[0]?.loincDisplay ?? loincFilter}</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]: [string, any[]]) => {
-                  const val = parseFloat(obs[0]?.obsValue)
+                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]) => {
+                  const val = parseFloat(obs[0]?.obsValue ?? '')
                   return (
                     <div key={date} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag] || '#409EFF' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag || ''] || '#409EFF' }}>
                         {obs[0]?.obsValue}
                       </div>
                       <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
@@ -116,7 +118,7 @@ export default function PatientLab() {
               </tr>
             </thead>
             <tbody>
-              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]: [string, any[]]) =>
+              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]) =>
                 obs.map((o, i) => (
                   <tr key={o.id}>
                     {i === 0 && <td rowSpan={obs.length} style={{ verticalAlign: 'top', fontWeight: 600 }}>{date}</td>}

@@ -7,7 +7,10 @@ import SessionWarningModal from './SessionWarningModal'
 import { useState, useEffect } from 'react'
 import styles from './StaffLayout.module.css'
 
-const menuItems = [
+interface NavItem { type?: 'nav'; path: string; label: string; icon: string; roles: string[] }
+type MenuItem = NavItem | { type: 'divider' }
+
+const menuItems: MenuItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['ADMIN','DOCTOR'] },
   { path: '/patients', label: 'Patients', icon: '👤', roles: ['ADMIN','DOCTOR'] },
   { path: '/appointments', label: 'Appointments', icon: '📅', roles: ['ADMIN','DOCTOR'] },
@@ -16,7 +19,7 @@ const menuItems = [
   { path: '/charges', label: 'Charges', icon: '🧾', roles: ['ADMIN','DOCTOR'] },
   { path: '/lab', label: 'Lab Results', icon: '🧪', roles: ['ADMIN','DOCTOR'] },
   { path: '/chat', label: 'Messages', icon: '💬', roles: ['ADMIN','DOCTOR'] },
-  { type: 'divider' } as any,
+  { type: 'divider' },
   { path: '/system/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { path: '/system/roles', label: 'Roles', icon: '🔑', roles: ['ADMIN'] },
   { path: '/audit-logs', label: 'Audit Logs', icon: '🛡', roles: ['ADMIN'] },

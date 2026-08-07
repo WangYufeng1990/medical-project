@@ -1,11 +1,13 @@
-import request from './request'
+import { http } from './request'
+import { PageResult } from '../types/common'
+import { ObservationVO, ObservationQuery, LoincEntry } from '../types/entities'
 
-export const getObservations = (patientId: number, params?: any) =>
-  request.get(`/patients/${patientId}/observations`, { params })
+export const getObservations = (patientId: number, params?: ObservationQuery) =>
+  http.get<PageResult<ObservationVO>>(`/patients/${patientId}/observations`, { params })
 
 export const getObservationTrend = (patientId: number, loinc: string) =>
-  request.get(`/patients/${patientId}/observations/trend`, { params: { loinc } })
+  http.get<ObservationVO[]>(`/patients/${patientId}/observations/trend`, { params: { loinc } })
 
-export const getLoincCatalog = () => request.get('/loinc/catalog')
+export const getLoincCatalog = () => http.get<LoincEntry[]>('/loinc/catalog')
 
-export const getLoincPanel = (parentCode: string) => request.get(`/loinc/panel/${parentCode}`)
+export const getLoincPanel = (parentCode: string) => http.get<LoincEntry[]>(`/loinc/panel/${parentCode}`)

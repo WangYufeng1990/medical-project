@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { BillVO, PayForm } from '../../../types/entities'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
@@ -12,23 +14,23 @@ export default function PatientBills() {
 
   const { data: pageData } = useQuery({
     queryKey: ['me', 'bills', 'list', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`).then(r => r),
+    queryFn: () => http.get<PageResult<BillVO>>(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
   const payMutation = useMutation({
-    mutationFn: (params: { id: number; data: any }) => patientRequest.put(`/patient/me/bills/${params.id}/pay`, params.data),
+    mutationFn: (params: { id: number; data: { paymentAmount: number; paymentMethod: string } }) => http.put(`/patient/me/bills/${params.id}/pay`, params.data),
     onSuccess: () => {
       setPayId(null)
       queryClient.invalidateQueries({ queryKey: ['me', 'bills'] })
     },
   })
 
-  const openPay = (bill: any) => {
+  const openPay = (bill: BillVO) => {
     setPayId(bill.id)
     const amount = bill.patientResponsibility != null ? bill.patientResponsibility : (bill.totalCharge != null ? bill.totalCharge : '')
-    setPayForm({ paymentAmount: amount, paymentMethod: 'CREDIT_CARD' })
+    setPayForm({ paymentAmount: String(amount), paymentMethod: 'CREDIT_CARD' })
   }
 
   const [payError, setPayError] = useState('')
@@ -38,7 +40,7 @@ export default function PatientBills() {
     if (!payId) return
     const amount = Number(payForm.paymentAmount)
     if (isNaN(amount) || amount <= 0) { setPayError('Amount must be a positive number'); return }
-    const bill = data.find((b: any) => b.id === payId)
+    const bill = data.find(b => b.id === payId)
     const max = bill?.patientResponsibility ?? bill?.totalCharge ?? Infinity
     if (amount > max) { setPayError(`Amount cannot exceed $${max}`); return }
     setPayError('')
@@ -52,7 +54,7 @@ export default function PatientBills() {
       <tbody>{data.map(r => (
         <tr key={r.id}>
           <td>{r.id}</td><td>{r.billType}</td>
-          <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
+          <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus || ''] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
           <td>${r.totalCharge}</td><td>${r.insurancePayment}</td><td>${r.patientResponsibility}</td>
           <td>
             {(r.claimStatus === 'PENDING' || r.claimStatus === 'DRAFT') && <button className={styles.btnPrimary} onClick={() => openPay(r)}>Pay Now</button>}

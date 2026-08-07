@@ -5,22 +5,24 @@ import { getBillPage, createBill, submitBill, adjudicateBill, payBill, denyBill,
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
 import { getChargePage, convertCharge } from '../../api/charge'
+import { PageResult } from '../../types/common'
+import { BillForm, BillCreatePayload, AppointmentVO, AdjudicateForm, PayForm } from '../../types/entities'
 import { PAGE_SIZE, BILL_STATUS_COLOR, FEE_SCHEDULE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
+const emptyForm: BillForm = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
 
 export default function Billing() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [filterPatientId, setFilterPatientId] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<BillForm>({ ...emptyForm })
   const [linkedApptId, setLinkedApptId] = useState('')
   const [adjudicateId, setAdjudicateId] = useState<number | null>(null)
-  const [adjForm, setAdjForm] = useState({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
+  const [adjForm, setAdjForm] = useState<AdjudicateForm>({ insurancePayment: '', adjustment: '0', claimNumber: '', adjudicationDate: '' })
   const [payBillId, setPayBillId] = useState<number | null>(null)
-  const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CASH' })
+  const [payForm, setPayForm] = useState<PayForm>({ paymentAmount: '', paymentMethod: 'CASH' })
   const [denyBillId, setDenyBillId] = useState<number | null>(null)
   const [denyReason, setDenyReason] = useState('')
   const [formError, setFormError] = useState('')
@@ -40,26 +42,28 @@ export default function Billing() {
 
   const { data: appointments } = useQuery({
     queryKey: ['appointments', 'forBill', form.patientId],
-    queryFn: () => form.patientId ? getAppointmentPage({ patientId: Number(form.patientId), size: 100 }) : Promise.resolve({ records: [] }),
+    queryFn: () => form.patientId
+      ? getAppointmentPage({ patientId: Number(form.patientId), size: 100 })
+      : Promise.resolve<PageResult<AppointmentVO>>({ total: 0, size: 0, current: 0, records: [] }),
     enabled: !!form.patientId && showForm,
   })
-  const apptList = (appointments as any)?.records ?? []
+  const apptList = appointments?.records ?? []
 
   const { data: charges } = useQuery({
     queryKey: ['charges', 'list', { size: 50 }],
     queryFn: () => getChargePage({ size: 50 }).then(r => r.records ?? []),
   })
-  const draftCharges = (charges ?? []).filter((c: any) => c.status === 'DRAFT')
+  const draftCharges = (charges ?? []).filter(c => c.status === 'DRAFT')
 
   const selectAppointment = (apptId: string) => {
     setLinkedApptId(apptId)
-    const appt = apptList.find((a: any) => String(a.id) === apptId)
+    const appt = apptList.find(a => String(a.id) === apptId)
     if (!appt) return
     const cpt = appt.cptCode || ''
     const icd = appt.icd10Codes || appt.chiefComplaint || ''
     const visit = appt.visitType || 'FOLLOW_UP'
     const suggestedFee = FEE_SCHEDULE[cpt] || FEE_SCHEDULE[visit] || 90
-    setForm(prev => ({ ...prev, cptCodes: cpt, icd10Codes: icd, billType: visit === 'ANNUAL_PHYSICAL' ? 'PROFESSIONAL' : 'PROFESSIONAL', totalCharge: String(suggestedFee) }))
+    setForm(prev => ({ ...prev, cptCodes: cpt, icd10Codes: icd, billType: 'PROFESSIONAL', totalCharge: String(suggestedFee) }))
   }
 
   const openCreateForm = () => {
@@ -69,7 +73,7 @@ export default function Billing() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (d: any) => createBill(d),
+    mutationFn: (d: BillCreatePayload) => createBill(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
@@ -84,12 +88,12 @@ export default function Billing() {
   })
 
   const adjudicateMutation = useMutation({
-    mutationFn: (params: { id: number; data: any }) => adjudicateBill(params.id, params.data),
+    mutationFn: (params: { id: number; data: { insurancePayment: number; adjustment: number; claimNumber?: string; adjudicationDate?: string } }) => adjudicateBill(params.id, params.data),
     onSuccess: () => { setAdjudicateId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
   const payMutation = useMutation({
-    mutationFn: (params: { id: number; data: any }) => payBill(params.id, params.data),
+    mutationFn: (params: { id: number; data: { paymentAmount: number; paymentMethod: string } }) => payBill(params.id, params.data),
     onSuccess: () => { setPayBillId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
   })
 
@@ -131,9 +135,9 @@ export default function Billing() {
           <h3 style={{ margin: '0 0 8px 0', color: '#67C23A' }}>Draft Charges — Ready to Convert ({draftCharges.length})</h3>
           <table className={styles.table} style={{ background: '#fff' }}>
             <thead><tr><th>ID</th><th>Patient</th><th>Appt</th><th>CPT</th><th>Amount</th><th></th></tr></thead>
-            <tbody>{draftCharges.map((c: any) => (
+            <tbody>{draftCharges.map(c => (
               <tr key={c.id}>
-                <td>{c.id}</td><td>{(patients ?? []).find((p: any) => p.id === c.patientId)?.name ?? `#${c.patientId}`}</td><td>{c.appointmentId ?? '-'}</td><td>{c.cptCodes || '-'}</td><td>${c.chargeAmount}</td>
+                <td>{c.id}</td><td>{(patients ?? []).find(p => p.id === c.patientId)?.name ?? `#${c.patientId}`}</td><td>{c.appointmentId ?? '-'}</td><td>{c.cptCodes || '-'}</td><td>${c.chargeAmount}</td>
                 <td><button className={styles.btnSm} disabled={convertMutation.isPending} onClick={async () => { if (await confirm('Convert this charge to a bill?')) convertMutation.mutate(c.id) }}>Convert to Bill</button></td>
               </tr>
             ))}</tbody>
@@ -145,7 +149,7 @@ export default function Billing() {
         <button className={styles.btnPrimary} onClick={openCreateForm}>+ Create Bill</button>
         <select value={filterPatientId} onChange={e => { setFilterPatientId(e.target.value); setPage(1) }} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d9d9d9' }}>
           <option value="">All Patients</option>
-          {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
@@ -154,7 +158,7 @@ export default function Billing() {
         <tbody>{data.map(r => (
           <tr key={r.id} className={styles.clickableRow}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.billType}</td>
-            <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
+            <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus || ''] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
             <td>{r.totalCharge}</td><td>{r.insurancePayment}</td><td>{r.patientResponsibility}</td>
             <td style={{ fontSize: 11 }}>{r.insuranceClaimNumber || '-'}</td>
             <td onClick={e => e.stopPropagation()}>
@@ -174,14 +178,14 @@ export default function Billing() {
             <label>Patient</label>
             <select value={form.patientId} onChange={e => { setLinkedApptId(''); setForm({ ...emptyForm, patientId: e.target.value }) }}>
               <option value="">-- Select --</option>
-              {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div className={styles.formGroup}>
             <label>Link to Appointment</label>
             <select value={linkedApptId} onChange={e => selectAppointment(e.target.value)} style={{ width: '100%' }}>
               <option value="">-- Optional auto-fill --</option>
-              {apptList.filter((a: any) => a.status !== 2 && a.status !== 4).map((a: any) => <option key={a.id} value={a.id}>#{a.id} — {a.appointmentTime?.substring(0, 16)} {a.visitType}</option>)}
+              {apptList.filter(a => a.status !== 2 && a.status !== 4).map(a => <option key={a.id} value={a.id}>#{a.id} — {a.appointmentTime?.substring(0, 16)} {a.visitType}</option>)}
             </select>
           </div>
           <div className={styles.formGroup}><label>Total Charge</label><input type="number" step="0.01" value={form.totalCharge} onChange={e => setForm({ ...form, totalCharge: e.target.value })} /></div>

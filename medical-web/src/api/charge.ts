@@ -1,5 +1,7 @@
-import request from './request'
+import { http } from './request'
+import { PageQuery, PageResult } from '../types/common'
+import { ChargeVO, ChargeCreatePayload } from '../types/entities'
 
-export const getChargePage = (params?: any) => request.get('/charges', { params })
-export const createCharge = (data: any) => request.post('/charges', data)
-export const convertCharge = (id: number) => request.put(`/charges/${id}/convert`)
+export const getChargePage = (params?: PageQuery) => http.get<PageResult<ChargeVO>>('/charges', { params })
+export const createCharge = (data: ChargeCreatePayload) => http.post<ChargeVO>('/charges', data)
+export const convertCharge = (id: number) => http.put<void>(`/charges/${id}/convert`)

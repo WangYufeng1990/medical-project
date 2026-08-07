@@ -3,18 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getChargePage, createCharge, convertCharge } from '../../api/charge'
 import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
+import { PageResult } from '../../types/common'
+import { ChargeForm, AppointmentVO, ChargeCreatePayload } from '../../types/entities'
 import { PAGE_SIZE, FEE_SCHEDULE } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { patientId: '', appointmentId: '', cptCodes: '', icd10Codes: '', chargeAmount: '', visitType: '', notes: '' }
+const emptyForm: ChargeForm = { patientId: '', appointmentId: '', cptCodes: '', icd10Codes: '', chargeAmount: '', visitType: '', notes: '' }
 
 export default function Charges() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<ChargeForm>({ ...emptyForm })
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['charges', 'list', { page, size: PAGE_SIZE }],
@@ -30,13 +32,15 @@ export default function Charges() {
 
   const { data: appointments } = useQuery({
     queryKey: ['appointments', 'forCharge', form.patientId],
-    queryFn: () => form.patientId ? getAppointmentPage({ patientId: form.patientId, size: 100 }) : Promise.resolve({ records: [] }),
+    queryFn: () => form.patientId
+      ? getAppointmentPage({ patientId: Number(form.patientId), size: 100 })
+      : Promise.resolve<PageResult<AppointmentVO>>({ total: 0, size: 0, current: 0, records: [] }),
     enabled: !!form.patientId,
   })
-  const apptList = (appointments as any)?.records ?? []
+  const apptList = appointments?.records ?? []
 
   const selectAppointment = (apptId: string) => {
-    const appt = apptList.find((a: any) => String(a.id) === apptId)
+    const appt = apptList.find(a => String(a.id) === apptId)
     if (!appt) return
     const cpt = appt.cptCode || ''
     const icd = appt.chiefComplaint || ''
@@ -46,15 +50,15 @@ export default function Charges() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (d: any) => createCharge(d),
+    mutationFn: (d: ChargeCreatePayload) => createCharge(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['charges'] }) },
-    onError: (err: any) => alert(err?.message || 'Operation failed'),
+    onError: (err: Error) => alert(err?.message || 'Operation failed'),
   })
 
   const convertMutation = useMutation({
     mutationFn: (id: number) => convertCharge(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['charges', 'billing'] }) },
-    onError: (err: any) => alert(err?.message || 'Conversion failed'),
+    onError: (err: Error) => alert(err?.message || 'Conversion failed'),
   })
 
   const handleCreate = (e: FormEvent) => {
@@ -96,11 +100,11 @@ export default function Charges() {
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>New Charge (Superbill)</h3>
       <form onSubmit={handleCreate} className={styles.formGrid}>
-        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => { const pid = e.target.value; setForm({ ...emptyForm, patientId: pid }) }}><option value="">-- Select --</option>{(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => { const pid = e.target.value; setForm({ ...emptyForm, patientId: pid }) }}><option value="">-- Select --</option>{(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         <div className={styles.formGroup}><label>Appointment</label>
           <select value={form.appointmentId} onChange={e => selectAppointment(e.target.value)} style={{ width: '100%' }}>
             <option value="">-- Select to auto-fill --</option>
-            {apptList.map((a: any) => <option key={a.id} value={a.id}>#{a.id} — {a.appointmentTime?.substring(0, 16)} {a.visitType}</option>)}
+            {apptList.map(a => <option key={a.id} value={a.id}>#{a.id} — {a.appointmentTime?.substring(0, 16)} {a.visitType}</option>)}
           </select>
         </div>
         <div className={styles.formGroup}><label>CPT Codes</label><input value={form.cptCodes} onChange={e => setForm({ ...form, cptCodes: e.target.value })} placeholder="Auto-filled from appt" /></div>

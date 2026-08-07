@@ -1,10 +1,9 @@
-import request from './request'
+import { http } from './request'
+import { ConsentVO } from '../types/entities'
 
-export const getConsents = (patientId: number) =>
-  request.get('/consent', { params: { patientId } })
+export const getConsents = (patientId: number) => http.get<ConsentVO[]>('/consent', { params: { patientId } })
 
 export const createConsent = (data: { patientId: number; consentType: string; scope: string }) =>
-  request.post('/consent', data)
+  http.post<ConsentVO>('/consent', data)
 
-export const revokeConsent = (id: number) =>
-  request.put(`/consent/${id}/revoke`)
+export const revokeConsent = (id: number) => http.put<void>(`/consent/${id}/revoke`)

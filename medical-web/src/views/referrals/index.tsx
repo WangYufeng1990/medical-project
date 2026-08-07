@@ -2,20 +2,21 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getReferralPage, getPatientReferrals, createReferral, updateReferral } from '../../api/referral'
 import { getPatientPage } from '../../api/patient'
+import { ReferralForm } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
-const URGENCY_COLOR: any = { ROUTINE: '#67C23A', URGENT: '#E6A23C', STAT: '#F56C6C' }
-const STATUS_COLOR: any = { PENDING: '#E6A23C', SCHEDULED: '#409EFF', COMPLETED: '#67C23A', CLOSED: '#909399' }
-const emptyForm: any = { patientId: '', specialistName: '', specialistNpi: '', specialty: '', diagnosis: '', reason: '', urgency: 'ROUTINE', notes: '' }
+const URGENCY_COLOR: Record<string, string> = { ROUTINE: '#67C23A', URGENT: '#E6A23C', STAT: '#F56C6C' }
+const STATUS_COLOR: Record<string, string> = { PENDING: '#E6A23C', SCHEDULED: '#409EFF', COMPLETED: '#67C23A', CLOSED: '#909399' }
+const emptyForm: ReferralForm = { patientId: '', specialistName: '', specialistNpi: '', specialty: '', diagnosis: '', reason: '', urgency: 'ROUTINE', notes: '' }
 
 export default function Referrals() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<ReferralForm>({ ...emptyForm })
 
-  const onError = (err: any) => alert(err?.message || 'Operation failed')
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['referrals', 'list', { page, size: PAGE_SIZE }],
@@ -30,13 +31,13 @@ export default function Referrals() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (d: any) => createReferral(d),
+    mutationFn: (d: Omit<ReferralForm, 'patientId'> & { patientId: number }) => createReferral(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['referrals'] }) },
     onError,
   })
 
   const updateMutation = useMutation({
-    mutationFn: (params: { id: number; data: any }) => updateReferral(params.id, params.data),
+    mutationFn: (params: { id: number; data: Partial<ReferralForm> & { status?: string } }) => updateReferral(params.id, params.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['referrals'] }),
     onError,
   })
@@ -52,8 +53,8 @@ export default function Referrals() {
       <tbody>{data.map(r => (
         <tr key={r.id}>
           <td>{r.id}</td><td>{r.patientId}</td><td>{r.specialistName}</td><td>{r.specialty || '-'}</td>
-          <td><span style={{ color: URGENCY_COLOR[r.urgency] || '#909399', fontWeight: 600 }}>{r.urgency}</span></td>
-          <td><span style={{ color: STATUS_COLOR[r.status] || '#909399', fontWeight: 600 }}>{r.status}</span></td>
+          <td><span style={{ color: URGENCY_COLOR[r.urgency || ''] || '#909399', fontWeight: 600 }}>{r.urgency}</span></td>
+          <td><span style={{ color: STATUS_COLOR[r.status || ''] || '#909399', fontWeight: 600 }}>{r.status}</span></td>
           <td>{r.referralDate}</td>
           <td>
             {r.status === 'PENDING' && <button className={styles.btnSm} onClick={() => updateMutation.mutate({ id: r.id, data: { status: 'SCHEDULED' } })}>Schedule</button>}
@@ -69,7 +70,7 @@ export default function Referrals() {
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>New Referral</h3>
       <form onSubmit={handleCreate} className={styles.formGrid}>
-        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}><option value="">-- Select --</option>{(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}><option value="">-- Select --</option>{(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         <div className={styles.formGroup}><label>Specialist Name</label><input value={form.specialistName} onChange={e => setForm({ ...form, specialistName: e.target.value })} /></div>
         <div className={styles.formGroup}><label>NPI</label><input value={form.specialistNpi} onChange={e => setForm({ ...form, specialistNpi: e.target.value })} /></div>
         <div className={styles.formGroup}><label>Specialty</label><input value={form.specialty} onChange={e => setForm({ ...form, specialty: e.target.value })} /></div>

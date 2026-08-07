@@ -1,10 +1,12 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getUserPage, getUserById, createUser, updateUser, deleteUser, unlockUser } from '../../../api/user'
+import { SysUserForm, SysUserVO } from '../../../types/entities'
 import { PAGE_SIZE } from '../../../utils/labels'
 import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
-const emptyForm: any = { username: '', password: '', realName: '', phone: '', email: '', gender: 1, status: 1, npi: '', stateLicenseNumber: '', licenseState: '', deaNumber: '', taxonomyCode: '', credentials: '', specialty: '' }
+const emptyForm: SysUserForm = { username: '', password: '', realName: '', phone: '', email: '', gender: 1, status: 1, npi: '', stateLicenseNumber: '', licenseState: '', deaNumber: '', taxonomyCode: '', credentials: '', specialty: '' }
+const USER_FIELDS = ['username','password','realName','phone','email','npi','stateLicenseNumber','licenseState','deaNumber','taxonomyCode','credentials','specialty'] as const
 
 export default function Users() {
   const queryClient = useQueryClient()
@@ -13,7 +15,7 @@ export default function Users() {
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<SysUserForm>({ ...emptyForm })
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['users', 'list', { page, size: PAGE_SIZE }],
@@ -22,10 +24,10 @@ export default function Users() {
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
-  const onError = (err: any) => alert(err?.message || 'Operation failed')
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
 
   const saveMutation = useMutation({
-    mutationFn: (params: { id?: number; data: any }) =>
+    mutationFn: (params: { id?: number; data: SysUserForm }) =>
       params.id != null ? updateUser(params.id, params.data) : createUser(params.data),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['users'] }) },
     onError,
@@ -43,8 +45,8 @@ export default function Users() {
     onError,
   })
 
-  const openForm = async (row?: any) => {
-    if (row) { setEditId(row.id); const d = await getUserById(row.id); setForm({ ...form, ...d, password: '' }) }
+  const openForm = async (row?: SysUserVO) => {
+    if (row) { setEditId(row.id); const d = await getUserById(row.id); setForm({ ...form, ...d, password: '' } as SysUserForm) }
     else { setEditId(null); setForm({ ...emptyForm }) }
     setShowForm(true)
   }
@@ -77,8 +79,8 @@ export default function Users() {
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>{editId ? 'Edit' : 'Add'} User</h3>
       <form onSubmit={handleSubmit} className={styles.formGrid}>
-        {['username','password','realName','phone','email','npi','stateLicenseNumber','licenseState','deaNumber','taxonomyCode','credentials','specialty'].map(f => (
-          <div key={f} className={styles.formGroup}><label>{f}</label><input type={f==='password'?'password':'text'} value={form[f] ?? ''} onChange={e => setForm({...form,[f]:e.target.value})} /></div>))}
+        {USER_FIELDS.map(f => (
+          <div key={f} className={styles.formGroup}><label>{f}</label><input type={f==='password'?'password':'text'} value={form[f] ?? ''} onChange={e => setForm(prev => ({...prev,[f]:e.target.value}) as SysUserForm)} /></div>))}
         <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button></div></form></div></div>}
   </div>)
 }

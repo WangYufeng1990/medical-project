@@ -3,11 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAppointmentPage, getAppointmentById, createAppointment, updateAppointment, deleteAppointment, getAppointmentConflicts } from '../../api/appointment'
 import { getPatientPage } from '../../api/patient'
 import { getDoctors } from '../../api/user'
+import { AppointmentForm, AppointmentVO } from '../../types/entities'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR, TERMINAL_APPOINTMENT_STATUSES } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', status: 0 }
+const emptyForm: AppointmentForm = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', status: 0 }
 
 export default function Appointments() {
   const queryClient = useQueryClient()
@@ -16,7 +17,7 @@ export default function Appointments() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<AppointmentForm>({ ...emptyForm })
   const [formError, setFormError] = useState('')
 
   const { data: pageData } = useQuery({
@@ -43,13 +44,13 @@ export default function Appointments() {
   const total = pageData?.total ?? 0
 
   const saveMutation = useMutation({
-    mutationFn: (params: { id?: number; data: any }) =>
+    mutationFn: (params: { id?: number; data: AppointmentForm }) =>
       params.id != null ? updateAppointment(params.id, params.data) : createAppointment(params.data),
     onSuccess: () => {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
     },
-    onError: (err: any) => setFormError(err?.message || 'Save failed'),
+    onError: (err: Error) => setFormError(err?.message || 'Save failed'),
   })
 
   const deleteMutation = useMutation({
@@ -57,9 +58,24 @@ export default function Appointments() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
   })
 
-  const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
+  const openForm = async (row?: AppointmentVO, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)
-    if (row) { setEditId(row.id); setForm({ ...emptyForm, ...(await getAppointmentById(row.id)) }) }
+    if (row) {
+      setEditId(row.id)
+      const d = await getAppointmentById(row.id)
+      setForm({
+        patientId: String(d.patientId ?? ''),
+        doctorId: String(d.doctorId ?? ''),
+        appointmentTime: d.appointmentTime ?? '',
+        visitType: d.visitType ?? '',
+        chiefComplaint: d.chiefComplaint ?? '',
+        department: d.department ?? '',
+        duration: d.duration ?? 30,
+        cptCode: d.cptCode ?? '',
+        description: d.description ?? '',
+        status: d.status,
+      })
+    }
     else { setEditId(null); setForm({ ...emptyForm }) }
     setShowForm(true)
   }
@@ -93,12 +109,12 @@ export default function Appointments() {
           <div className={styles.formGroup}><label>Patient</label>
             <select disabled={viewOnly} value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
               <option value="">-- Select --</option>
-              {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} (MRN: {p.mrn})</option>)}
+              {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name} (MRN: {p.mrn})</option>)}
             </select></div>
           <div className={styles.formGroup}><label>Doctor</label>
             <select disabled={viewOnly} value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
               <option value="">-- Select --</option>
-              {(doctors ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
+              {(doctors ?? []).map(d => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
             </select></div>
           <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} min={new Date().toISOString().slice(0, 16)} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Visit Type</label>
@@ -115,7 +131,7 @@ export default function Appointments() {
           {!viewOnly && conflicts && conflicts.length > 0 && (
             <div style={{ gridColumn: 'span 2', background: '#fef0f0', border: '1px solid #fbc4c4', color: '#F56C6C', fontSize: 12, padding: '8px 10px', borderRadius: 4 }}>
               ⚠️ Doctor already has {conflicts.length} appointment(s) within 30 minutes:{' '}
-              {conflicts.map((c: any) => `${c.appointmentTime} (${c.patientName})`).join('; ')}
+              {conflicts.map(c => `${c.appointmentTime} (${c.patientName})`).join('; ')}
             </div>
           )}
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}

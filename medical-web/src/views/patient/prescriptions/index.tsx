@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { PrescriptionVO, RefillRequestVO } from '../../../types/entities'
 import { PAGE_SIZE } from '../../../utils/labels'
 import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
@@ -12,25 +14,25 @@ export default function PatientPrescriptions() {
 
   const { data: pageData } = useQuery({
     queryKey: ['me', 'prescriptions', 'list', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/prescriptions?page=${page}&size=${PAGE_SIZE}`).then(r => r),
+    queryFn: () => http.get<PageResult<PrescriptionVO>>(`/patient/me/prescriptions?page=${page}&size=${PAGE_SIZE}`),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
   const { data: refillRequests } = useQuery({
     queryKey: ['me', 'refill-requests'],
-    queryFn: () => patientRequest.get('/patient/me/refill-requests').then(r => r ?? []),
+    queryFn: () => http.get<RefillRequestVO[]>('/patient/me/refill-requests'),
   })
 
   const refillMutation = useMutation({
     mutationFn: (data: { prescriptionId: number; reason?: string }) =>
-      patientRequest.post('/patient/me/refill-requests', data),
+      http.post('/patient/me/refill-requests', data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'refill-requests'] }),
   })
 
-  const requestedIds = new Set((refillRequests ?? []).map((r: any) => r.prescriptionId))
+  const requestedIds = new Set((refillRequests ?? []).map(r => r.prescriptionId))
   const getRequestStatus = (prescriptionId: number) =>
-    (refillRequests ?? []).find((r: any) => r.prescriptionId === prescriptionId)?.status
+    (refillRequests ?? []).find(r => r.prescriptionId === prescriptionId)?.status
 
   return (<div>
     <h2 style={{ marginBottom: 20 }}>My Prescriptions</h2>

@@ -9,11 +9,18 @@ import { getVitalSigns, createVitalSign } from '../../api/vitalSign'
 import { getProblems, createProblem, updateProblem } from '../../api/problem'
 import { getImmunizations, createImmunization } from '../../api/immunization'
 import { getCarePlans, createCarePlan, updateCarePlan } from '../../api/carePlan'
+import { PatientForm, PatientVO, ConsentVO, PrescriptionVO, MedicalHistoryEntry, AllergyEntry, VitalSignVO, ProblemVO, ImmunizationVO, CarePlanVO, PrescriptionItem } from '../../types/entities'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: any = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active' }
+const emptyForm: PatientForm = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active' }
+
+const READONLY_FIELDS = ['name','mrn','ssn','dateOfBirth','sexAtBirth'] as const
+const EDITABLE_FIELDS = ['genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
+  'phoneMobile','phoneHome','phoneWork','email','addressLine1','addressLine2','city','state','zipCode',
+  'emergencyContactName','emergencyContactPhone','emergencyContactRelation',
+  'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider'] as const
 
 export default function Patients() {
   const navigate = useNavigate()
@@ -24,27 +31,27 @@ export default function Patients() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<PatientForm>({ ...emptyForm })
   const [consentPatient, setConsentPatient] = useState<{ id: number; name: string } | null>(null)
-  const [consents, setConsents] = useState<any[]>([])
+  const [consents, setConsents] = useState<ConsentVO[]>([])
   const [newConsentType, setNewConsentType] = useState('TREATMENT')
   const [newConsentScope, setNewConsentScope] = useState('')
   const [creating, setCreating] = useState(false)
   const [emergencyPatientId, setEmergencyPatientId] = useState<number | null>(null)
   const [emergencyReason, setEmergencyReason] = useState('')
   const [emergencySubmitting, setEmergencySubmitting] = useState(false)
-  const [emergencyPrescriptions, setEmergencyPrescriptions] = useState<any[] | null>(null)
-  const [historyEntries, setHistoryEntries] = useState<any[]>([])
-  const [allergyEntries, setAllergyEntries] = useState<any[]>([])
+  const [emergencyPrescriptions, setEmergencyPrescriptions] = useState<PrescriptionVO[] | null>(null)
+  const [historyEntries, setHistoryEntries] = useState<MedicalHistoryEntry[]>([])
+  const [allergyEntries, setAllergyEntries] = useState<AllergyEntry[]>([])
   const [newHistoryDesc, setNewHistoryDesc] = useState('')
   const [newAllergy, setNewAllergy] = useState({ allergen: '', reaction: '', severity: 'MODERATE' })
-  const [vitalSigns, setVitalSigns] = useState<any[]>([])
-  const [problems, setProblems] = useState<any[]>([])
+  const [vitalSigns, setVitalSigns] = useState<VitalSignVO[]>([])
+  const [problems, setProblems] = useState<ProblemVO[]>([])
   const [newVital, setNewVital] = useState({ systolicBp: '', diastolicBp: '', heartRate: '', temperature: '', respiratoryRate: '', oxygenSaturation: '', heightCm: '', weightKg: '', bmi: '', notes: '' })
   const [newProblem, setNewProblem] = useState({ snomedCode: '', snomedDisplay: '', icd10Code: '', onsetDate: '', severity: 'MODERATE', notes: '' })
-  const [immunizations, setImmunizations] = useState<any[]>([])
+  const [immunizations, setImmunizations] = useState<ImmunizationVO[]>([])
   const [newImmunization, setNewImmunization] = useState({ vaccineName: '', cvxCode: '', administrationDate: '', doseNumber: '', lotNumber: '', manufacturer: '', site: '', route: '', notes: '' })
-  const [carePlans, setCarePlans] = useState<any[]>([])
+  const [carePlans, setCarePlans] = useState<CarePlanVO[]>([])
   const [newCarePlan, setNewCarePlan] = useState({ title: '', goal: '', interventions: '', targetDate: '', notes: '' })
 
   useEffect(() => {
@@ -63,10 +70,10 @@ export default function Patients() {
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
-  const onError = (err: any) => alert(err?.message || 'Operation failed')
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
 
   const saveMutation = useMutation({
-    mutationFn: (params: { id?: number; data: any }) =>
+    mutationFn: (params: { id?: number; data: PatientForm }) =>
       params.id != null ? updatePatient(params.id, params.data) : createPatient(params.data),
     onSuccess: () => {
       setShowForm(false)
@@ -81,7 +88,7 @@ export default function Patients() {
     onError,
   })
 
-  const openForm = async (row?: any, viewOnlyParam: boolean = false) => {
+  const openForm = async (row?: PatientVO, viewOnlyParam: boolean = false) => {
     setViewOnly(viewOnlyParam)
     setEmergencyPrescriptions(null)
     setHistoryEntries([])
@@ -127,10 +134,10 @@ export default function Patients() {
     deleteMutation.mutate(id)
   }
 
-  const maskPhone = (p: string) => p ? '****' + p.slice(-4) : ''
-  const maskEmail = (e: string) => { const at = e?.indexOf('@'); return at > 0 ? e[0] + '***' + e.slice(at) : '' }
+  const maskPhone = (p?: string) => p ? '****' + p.slice(-4) : ''
+  const maskEmail = (e?: string) => { const at = e ? e.indexOf('@') : -1; return e && at > 0 ? e[0] + '***' + e.slice(at) : '' }
 
-  const openConsent = async (row: any) => {
+  const openConsent = async (row: PatientVO) => {
     setConsentPatient({ id: row.id, name: row.name })
     setNewConsentType('TREATMENT')
     setNewConsentScope('')
@@ -151,8 +158,8 @@ export default function Patients() {
       setConsents(r)
       setNewConsentType('TREATMENT')
       setNewConsentScope('')
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to create consent')
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to create consent')
     } finally {
       setCreating(false)
     }
@@ -175,8 +182,8 @@ export default function Patients() {
       setEmergencyReason('')
       setEmergencySubmitting(false)
       if (row) openForm(row)
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to initiate emergency access')
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to initiate emergency access')
       setEmergencySubmitting(false)
     }
   }
@@ -189,8 +196,8 @@ export default function Patients() {
         const r = await getConsents(consentPatient.id)
         setConsents(r)
       }
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to revoke consent')
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to revoke consent')
     }
   }
 
@@ -237,7 +244,7 @@ export default function Patients() {
               {consents.map(c => (
                 <tr key={c.id}>
                   <td>{c.id}</td><td>{c.consentType}</td><td>{c.scope}</td>
-                  <td><span style={{ color: CONSENT_STATUS_COLOR[c.status] ?? '#909399', fontWeight: 600 }}>{c.status}</span></td>
+                  <td><span style={{ color: CONSENT_STATUS_COLOR[c.status ?? ''] ?? '#909399', fontWeight: 600 }}>{c.status}</span></td>
                   <td>{c.consentDate ?? c.createTime}</td>
                   <td>
                     <button className={styles.btnSmDanger} disabled={c.status !== 'active'}
@@ -296,19 +303,16 @@ export default function Patients() {
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{editId ? (viewOnly ? 'View Patient' : 'Edit Patient') : 'Add Patient'}</h3>
             <form onSubmit={handleSubmit} className={styles.formGrid}>
-              {['name','mrn','ssn','dateOfBirth','sexAtBirth'].map(f => (
+              {READONLY_FIELDS.map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] ?? ''} disabled={!!editId || viewOnly} style={{ background: (editId || viewOnly) ? '#f5f7fa' : undefined }} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                  <input value={form[f] ?? ''} disabled={!!editId || viewOnly} style={{ background: (editId || viewOnly) ? '#f5f7fa' : undefined }} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as PatientForm)} />
                 </div>
               ))}
-              {['genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
-                'phoneMobile','phoneHome','phoneWork','email','addressLine1','addressLine2','city','state','zipCode',
-                'emergencyContactName','emergencyContactPhone','emergencyContactRelation',
-                'insurancePayer','insuranceMemberId','insuranceGroupNumber','primaryCareProvider'].map(f => (
+              {EDITABLE_FIELDS.map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] ?? ''} disabled={viewOnly} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+                  <input value={form[f] ?? ''} disabled={viewOnly} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as PatientForm)} />
                 </div>
               ))}
               {emergencyPrescriptions != null && (
@@ -317,7 +321,7 @@ export default function Patients() {
                   {emergencyPrescriptions.length === 0 ? (
                     <p style={{ fontSize: 13, color: '#909399' }}>No active prescriptions found.</p>
                   ) : (
-                    emergencyPrescriptions.map((rx: any) => (
+                    emergencyPrescriptions.map(rx => (
                       <div key={rx.id} style={{ marginBottom: 12, padding: '10px 14px', border: '1px solid #ebeef5', borderRadius: 6, background: '#fafafa' }}>
                         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
                           {rx.diagnosis} <span style={{ color: '#909399', fontWeight: 400 }}>({rx.icd10Codes || 'N/A'})</span>
@@ -338,7 +342,7 @@ export default function Patients() {
                               </tr>
                             </thead>
                             <tbody>
-                              {rx.items.map((item: any) => (
+                              {rx.items.map((item: PrescriptionItem) => (
                                 <tr key={item.id}>
                                   <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.drugName}</td>
                                   <td style={{ padding: '4px 8px', borderBottom: '1px solid #ebeef5' }}>{item.dosage}</td>
@@ -360,7 +364,7 @@ export default function Patients() {
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                     <h4 style={{ marginBottom: 8 }}>Medical History</h4>
                     {historyEntries.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No history entries.</p>}
-                    {historyEntries.map((e: any) => (
+                    {historyEntries.map(e => (
                       <div key={e.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
                         {e.description}
                         <span style={{ color: '#909399', marginLeft: 8 }}>— {e.createTime ? e.createTime.substring(0, 10) : ''}</span>
@@ -380,7 +384,7 @@ export default function Patients() {
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                     <h4 style={{ marginBottom: 8 }}>Allergies</h4>
                     {allergyEntries.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No known allergies.</p>}
-                    {allergyEntries.map((e: any) => {
+                    {allergyEntries.map(e => {
                       const resolved = e.status === 'resolved'
                       return (
                         <div key={e.id} style={{ fontSize: 12, color: resolved ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: resolved ? '#f5f5f5' : '#fafafa', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -421,7 +425,7 @@ export default function Patients() {
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                     <h4 id="section-vitals" style={{ marginBottom: 8 }}>Vital Signs</h4>
                     {vitalSigns.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No vital signs recorded.</p>}
-                    {vitalSigns.map((v: any) => (
+                    {vitalSigns.map(v => (
                       <div key={v.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
                         <span style={{ fontWeight: 600 }}>{v.recordedAt?.substring(0, 10)}</span>
                         {v.systolicBp != null && <span style={{ marginLeft: 12 }}>BP: <strong>{v.systolicBp}/{v.diastolicBp}</strong></span>}
@@ -458,7 +462,7 @@ export default function Patients() {
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                     <h4 id="section-problems" style={{ marginBottom: 8 }}>Problem List</h4>
                     {problems.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No active problems.</p>}
-                    {problems.map((p: any) => (
+                    {problems.map(p => (
                       <div key={p.id} style={{ fontSize: 12, color: p.status === 'RESOLVED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: p.status === 'RESOLVED' ? '#f5f5f5' : '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>
                           <strong style={{ textDecoration: p.status === 'RESOLVED' ? 'line-through' : 'none' }}>{p.snomedDisplay || 'Unspecified'}</strong>
@@ -507,7 +511,7 @@ export default function Patients() {
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                   <h4 id="section-immunizations" style={{ marginBottom: 8 }}>Immunizations</h4>
                   {immunizations.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No immunizations recorded.</p>}
-                  {immunizations.map((r: any) => (
+                  {immunizations.map(r => (
                     <div key={r.id} style={{ fontSize: 12, color: '#606266', marginBottom: 4, padding: '4px 8px', background: '#fafafa', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>
                         <strong>{r.vaccineName}</strong>
@@ -551,7 +555,7 @@ export default function Patients() {
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid #ebeef5', paddingTop: 16, marginTop: 8 }}>
                   <h4 id="section-care-plans" style={{ marginBottom: 8 }}>Care Plans</h4>
                   {carePlans.length === 0 && <p style={{ fontSize: 12, color: '#909399', marginBottom: 8 }}>No care plans.</p>}
-                  {carePlans.map((cp: any) => (
+                  {carePlans.map(cp => (
                     <div key={cp.id} style={{ fontSize: 12, color: cp.status === 'COMPLETED' ? '#909399' : '#606266', marginBottom: 4, padding: '4px 8px', background: cp.status === 'COMPLETED' ? '#f5f5f5' : '#fafafa', borderRadius: 4 }}>
                       <strong style={{ textDecoration: cp.status === 'COMPLETED' ? 'line-through' : 'none' }}>{cp.title}</strong>
                       <span style={{ marginLeft: 8, color: cp.status === 'ACTIVE' ? '#67C23A' : '#909399', fontSize: 10, fontWeight: 600 }}>[{cp.status}]</span>

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { CarePlanVO } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
 export default function PatientCarePlans() {
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'care-plans'],
-    queryFn: () => patientRequest.get('/patient/me/care-plans').then(r => r ?? []),
+    queryFn: () => http.get<CarePlanVO[]>('/patient/me/care-plans'),
   })
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
   return (<div>
@@ -13,7 +14,7 @@ export default function PatientCarePlans() {
     {(!data || data.length === 0) && <p style={{ color: '#909399' }}>No care plans.</p>}
     <table className={styles.table}>
       <thead><tr><th>Plan</th><th>Goal</th><th>Interventions</th><th>Period</th><th>Status</th></tr></thead>
-      <tbody>{(data ?? []).map((cp: any) => (
+      <tbody>{(data ?? []).map(cp => (
         <tr key={cp.id} style={{ opacity: cp.status === 'COMPLETED' ? 0.5 : 1 }}>
           <td style={{ textDecoration: cp.status === 'COMPLETED' ? 'line-through' : 'none' }}>{cp.title}</td>
           <td>{cp.goal || '-'}</td>

@@ -1,14 +1,7 @@
-import request from './request'
+import { http } from './request'
+import { PageResult } from '../types/common'
+import { AuditLogVO, AuditDistinctValues, AuditQuery } from '../types/entities'
 
-export const getAuditLogs = (params?: {
-  page?: number
-  size?: number
-  module?: string
-  action?: string
-  userId?: number
-  patientId?: number
-  fromDate?: string
-  toDate?: string
-}) => request.get('/audit-logs', { params })
+export const getAuditLogs = (params?: AuditQuery) => http.get<PageResult<AuditLogVO>>('/audit-logs', { params })
 
-export const getDistinctValues = () => request.get('/audit-logs/distinct-values')
+export const getDistinctValues = () => http.get<AuditDistinctValues>('/audit-logs/distinct-values')

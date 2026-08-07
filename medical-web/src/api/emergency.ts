@@ -1,10 +1,10 @@
-import request from './request'
+import { http } from './request'
+import { EmergencyAccessVO, EmergencyAccessResultVO } from '../types/entities'
 
 export const initiateEmergencyAccess = (patientId: number, reason: string) =>
-  request.post(`/emergency/access/${patientId}`, { reason })
+  http.post<EmergencyAccessResultVO>(`/emergency/access/${patientId}`, { reason })
 
 export const getEmergencyHistory = (params?: { patientId?: number; audited?: number }) =>
-  request.get('/emergency/history', { params })
+  http.get<EmergencyAccessVO[]>('/emergency/history', { params })
 
-export const reviewEmergencyAccess = (id: number) =>
-  request.put(`/emergency/${id}/review`)
+export const reviewEmergencyAccess = (id: number) => http.put<void>(`/emergency/${id}/review`)

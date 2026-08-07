@@ -7,12 +7,13 @@ import { getPharmacies } from '../../api/pharmacy'
 import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
 import { getPendingRefillRequests, approveRefillRequest, denyRefillRequest } from '../../api/refill'
+import { PrescriptionForm, PrescriptionItemForm, PrescriptionVO, PrescriptionCreatePayload, PharmacyVO, RefillRequestVO, CdsWarning } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyItem = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
-const emptyForm: any = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: new Date().toISOString().slice(0, 10), prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
+const emptyItem: PrescriptionItemForm = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
+const emptyForm: PrescriptionForm = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: new Date().toISOString().slice(0, 10), prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
   const queryClient = useQueryClient()
@@ -20,13 +21,13 @@ export default function Prescriptions() {
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<PrescriptionForm>({ ...emptyForm })
   const [transmitId, setTransmitId] = useState<number | null>(null)
-  const [pharmacies, setPharmacies] = useState<any[]>([])
+  const [pharmacies, setPharmacies] = useState<PharmacyVO[]>([])
   const [selectedPharmacy, setSelectedPharmacy] = useState('')
-  const [cdsWarnings, setCdsWarnings] = useState<any[]>([])
+  const [cdsWarnings, setCdsWarnings] = useState<CdsWarning[]>([])
   const [showCdsModal, setShowCdsModal] = useState(false)
-  const [pendingCdsPayload, setPendingCdsPayload] = useState<any>(null)
+  const [pendingCdsPayload, setPendingCdsPayload] = useState<PrescriptionCreatePayload | null>(null)
   const [formError, setFormError] = useState('')
   const [cdsChecking, setCdsChecking] = useState(false)
 
@@ -63,7 +64,7 @@ export default function Prescriptions() {
   })
 
   const saveMutation = useMutation({
-    mutationFn: (payload: any) => createPrescription(payload),
+    mutationFn: (payload: PrescriptionCreatePayload) => createPrescription(payload),
     onSuccess: () => {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
@@ -100,19 +101,19 @@ export default function Prescriptions() {
     transmitMutation.mutate({ id: transmitId, pharmacyId: Number(selectedPharmacy) })
   }
 
-  const openForm = async (row?: any) => {
+  const openForm = async (row?: PrescriptionVO) => {
     if (row) {
       setEditId(row.id)
       const detail = await getPrescriptionById(row.id)
       setForm({
-        patientId: detail.patientId ?? '',
-        doctorId: detail.doctorId ?? '',
+        patientId: String(detail.patientId ?? ''),
+        doctorId: String(detail.doctorId ?? ''),
         diagnosis: detail.diagnosis ?? '',
         icd10Codes: detail.icd10Codes ?? '',
         prescriptionDate: detail.prescriptionDate ?? '',
         prescriptionType: detail.prescriptionType ?? 'MEDICATION',
         rxStatus: detail.rxStatus ?? 'active',
-        items: detail.items?.length ? detail.items.map((i: any) => ({
+        items: detail.items?.length ? detail.items.map(i => ({
           drugName: i.drugName ?? '', rxnormCode: i.rxnormCode ?? '', dosage: i.dosage ?? '',
           frequency: i.frequency ?? '', duration: i.duration ?? '', quantity: i.quantity ?? '',
           refills: i.refills ?? '', notes: i.notes ?? ''
@@ -125,7 +126,7 @@ export default function Prescriptions() {
     setShowForm(true)
   }
 
-  const doSave = (payload: any) => {
+  const doSave = (payload: PrescriptionCreatePayload) => {
     saveMutation.mutate(payload)
   }
 
@@ -134,20 +135,20 @@ export default function Prescriptions() {
     if (!form.patientId) { setFormError('Patient is required'); return }
     if (!form.doctorId) { setFormError('Doctor is required'); return }
     if (!form.diagnosis) { setFormError('Diagnosis is required'); return }
-    if (!form.items?.some((it: any) => it.drugName)) { setFormError('At least one drug item is required'); return }
+    if (!form.items?.some(it => it.drugName)) { setFormError('At least one drug item is required'); return }
     setFormError('')
-    const payload = {
+    const payload: PrescriptionCreatePayload = {
       ...form,
       patientId: Number(form.patientId),
       doctorId: Number(form.doctorId),
       prescriptionDate: form.prescriptionDate || undefined,
-      items: form.items.filter((it: any) => it.drugName).map((it: any) => ({
+      items: form.items.filter(it => it.drugName).map(it => ({
         ...it, duration: it.duration !== '' ? Number(it.duration) : null, quantity: it.quantity !== '' ? Number(it.quantity) : null, refills: it.refills !== '' ? Number(it.refills) : null
       }))
     }
     try {
       setCdsChecking(true)
-      const cdsItems = form.items.filter((it: any) => it.drugName).map((it: any) => ({
+      const cdsItems = form.items.filter(it => it.drugName).map(it => ({
         rxnormCode: it.rxnormCode || '', drugName: it.drugName
       }))
       const cdsResult = await checkCds({ patientId: payload.patientId, items: cdsItems })
@@ -173,11 +174,11 @@ export default function Prescriptions() {
   }
 
   const addItem = () => setForm({ ...form, items: [...form.items, { ...emptyItem }] })
-  const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_: any, i: number) => i !== idx) })
+  const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_, i: number) => i !== idx) })
   const updateItem = (idx: number, field: string, value: string) => {
     setForm(prev => {
       const items = [...prev.items]
-      items[idx] = { ...items[idx], [field]: value }
+      items[idx] = { ...items[idx], [field]: value } as PrescriptionItemForm
       return { ...prev, items }
     })
   }
@@ -185,7 +186,7 @@ export default function Prescriptions() {
   const handleRxnormChange = (idx: number, code: string) => {
     setForm(prev => {
       const items = [...prev.items]
-      items[idx] = { ...items[idx], rxnormCode: code }
+      items[idx] = { ...items[idx], rxnormCode: code } as PrescriptionItemForm
       return { ...prev, items }
     })
     if (!code || !code.trim()) return
@@ -194,7 +195,7 @@ export default function Prescriptions() {
         setForm(prev => {
           if (prev.items[idx]?.rxnormCode !== code.trim()) return prev
           const items = [...prev.items]
-          items[idx] = { ...items[idx], drugName: result.drugName }
+          items[idx] = { ...items[idx], drugName: result.drugName } as PrescriptionItemForm
           return { ...prev, items }
         })
       }
@@ -208,10 +209,10 @@ export default function Prescriptions() {
           <h3 style={{ margin: '0 0 12px 0', color: '#E6A23C' }}>Pending Refill Requests ({refillRequests.length})</h3>
           <table className={styles.table} style={{ background: '#fff' }}>
             <thead><tr><th>ID</th><th>Patient</th><th>Prescription</th><th>Reason</th><th>Requested</th><th></th></tr></thead>
-            <tbody>{refillRequests.map((r: any) => (
+            <tbody>{refillRequests.map(r => (
               <tr key={r.id}>
                 <td>{r.id}</td>
-                <td>{((patients ?? []) as any[]).find((p: any) => p.id === r.patientId)?.name ?? `#${r.patientId}`}</td>
+                <td>{(patients ?? []).find(p => p.id === r.patientId)?.name ?? `#${r.patientId}`}</td>
                 <td>{r.prescriptionId}</td>
                 <td>{r.reason || '-'}</td>
                 <td>{r.requestedAt?.substring(0, 16)}</td>
@@ -237,7 +238,7 @@ export default function Prescriptions() {
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
               {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
-              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus) && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
+              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus || '') && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
             </td></tr>
         ))}</tbody>
       </table>
@@ -251,13 +252,13 @@ export default function Prescriptions() {
               <label>Patient</label>
               <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
                 <option value="">-- Select Patient --</option>
-                {(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
+                {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
               </select>
             </div>
             <div className={styles.formGroup}><label>Doctor</label>
               <select value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
                 <option value="">-- Select --</option>
-                {(doctors ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
+                {(doctors ?? []).map(d => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
               </select></div>
             <div className={styles.formGroup}><label>Diagnosis</label><input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} /></div>
             <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
@@ -277,7 +278,7 @@ export default function Prescriptions() {
           </div>
 
           <h4 style={{ marginTop: 20, marginBottom: 8 }}>Items</h4>
-          {form.items.map((it: any, idx: number) => (
+          {form.items.map((it, idx: number) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 80px 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
               <div className={styles.formGroup}><label>Drug</label><input value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
               <div className={styles.formGroup}><label>RxNorm</label><input value={it.rxnormCode} onChange={e => handleRxnormChange(idx, e.target.value)} placeholder="e.g. 6809" /></div>
@@ -303,7 +304,7 @@ export default function Prescriptions() {
           <label>Pharmacy</label>
           <select value={selectedPharmacy} onChange={e => setSelectedPharmacy(e.target.value)}>
             <option value="">-- Select Pharmacy --</option>
-            {pharmacies.map((p: any) => <option key={p.id} value={p.id}>{p.name} — {p.city}, {p.state} {p.zip}</option>)}
+            {pharmacies.map(p => <option key={p.id} value={p.id}>{p.name} — {p.city}, {p.state} {p.zip}</option>)}
           </select>
         </div>
         <div className={styles.formActions}><button className={styles.btnSm} onClick={() => setTransmitId(null)}>Cancel</button><button className={styles.btnPrimary} onClick={handleTransmit} disabled={!selectedPharmacy}>Transmit (NCPDP SCRIPT)</button></div>

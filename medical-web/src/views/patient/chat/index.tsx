@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
 import { useChatSse } from '../../../hooks/useChatSse'
+import { parseJwt } from '../../../utils/auth'
+import { PageResult } from '../../../types/common'
+import { MessageVO, ConversationVO, SseTicketVO } from '../../../types/entities'
 import chatStyles from '../../chat/style.module.css'
-
-interface MessageVO { id: number; senderId: number; receiverId: number; content: string; isRead: boolean; createTime: string }
-interface ConversationVO { partnerId: number; partnerName: string; lastMessage: string; lastMessageTime: string; unreadCount: number }
 
 export default function PatientChat() {
   const [conversations, setConversations] = useState<ConversationVO[]>([])
@@ -16,19 +16,18 @@ export default function PatientChat() {
   const messageListRef = useRef<HTMLDivElement>(null)
 
   const token = localStorage.getItem('patientToken')
-
-  const raw = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])) } catch { return {} } })() : {}
-  const currentUserId = Number((raw as any).uid ?? (raw as any).jti ?? 0)
+  const raw = token ? parseJwt(token) : {}
+  const currentUserId = Number(raw.uid ?? raw.jti ?? 0)
 
   const loadConversations = useCallback(() => {
-    patientRequest.get('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
+    http.get<PageResult<ConversationVO>>('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
       .then(r => setConversations(r.records ?? []))
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
-    return patientRequest.get(`/patient/me/messages/${partnerId}`, { params: { page, size: 50 } })
+    return http.get<PageResult<MessageVO>>(`/patient/me/messages/${partnerId}`, { params: { page, size: 50 } })
       .then(r => {
         const batch = (r.records ?? []).reverse()
         setMessages(prev => page === 1 ? batch : [...batch, ...prev])
@@ -47,9 +46,9 @@ export default function PatientChat() {
     if (!input.trim() || !selectedPartner) return
     const content = input.trim()
     setInput('')
-    const msg = { id: Date.now(), senderId: currentUserId, receiverId: selectedPartner.id, content, isRead: false, createTime: new Date().toISOString() }
+    const msg: MessageVO = { id: Date.now(), senderId: currentUserId, receiverId: selectedPartner.id, content, isRead: false, createTime: new Date().toISOString() }
     setMessages(prev => [...prev, msg])
-    await patientRequest.post('/patient/me/messages', { receiverId: selectedPartner.id, content })
+    await http.post<MessageVO>('/patient/me/messages', { receiverId: selectedPartner.id, content })
       .catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
     setTimeout(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
@@ -66,7 +65,7 @@ export default function PatientChat() {
     loadConversations()
   }, [selectedPartner, loadConversations])
 
-  useChatSse(() => patientRequest.post('/chat/sse-ticket', null, { silent: true } as any).then(r => (r as any).ticket), currentUserId, handleSseMessage)
+  useChatSse(() => http.post<SseTicketVO>('/chat/sse-ticket', null, { silent: true }).then(r => r.ticket), currentUserId, handleSseMessage)
 
   useEffect(() => {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight
@@ -94,8 +93,8 @@ export default function PatientChat() {
               <div className={chatStyles.partnerName}>{c.partnerName}</div>
               <div className={chatStyles.lastMsg}>{c.lastMessage}</div>
               <div className={chatStyles.conversationMeta}>
-                <span className={chatStyles.conversationTime}>{formatTime(c.lastMessageTime)}</span>
-                {c.unreadCount > 0 && <span className={chatStyles.unreadBadge}>{c.unreadCount}</span>}
+                <span className={chatStyles.conversationTime}>{formatTime(c.lastMessageTime || '')}</span>
+                {(c.unreadCount ?? 0) > 0 && <span className={chatStyles.unreadBadge}>{c.unreadCount}</span>}
               </div>
             </div>
           ))}

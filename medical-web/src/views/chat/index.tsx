@@ -3,10 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { getConversations, getMessages, sendMessage, getSseTicket } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
+import { MessageVO, ConversationVO } from '../../types/entities'
 import styles from './style.module.css'
-
-interface MessageVO { id: number; senderId: number; receiverId: number; content: string; isRead: boolean; createTime: string }
-interface ConversationVO { partnerId: number; partnerName: string; lastMessage: string; lastMessageTime: string; unreadCount: number }
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
@@ -19,11 +17,11 @@ export default function Chat() {
   const messageListRef = useRef<HTMLDivElement>(null)
 
   const token = localStorage.getItem('token')
-  const raw = token ? parseJwt(token) ?? {} : {}
-  const currentUserId = Number((raw as any).uid ?? (raw as any).jti ?? 0)
+  const raw = token ? parseJwt(token) : {}
+  const currentUserId = Number(raw.uid ?? raw.jti ?? 0)
 
   const loadConversations = useCallback(() => {
-    getConversations(1, 20).then((r: any) => setConversations(r.records ?? []))
+    getConversations(1, 20).then(r => setConversations(r.records ?? []))
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
@@ -39,7 +37,7 @@ export default function Chat() {
   }, [searchParams])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
-    return getMessages(partnerId, page, 50).then((r: any) => {
+    return getMessages(partnerId, page, 50).then(r => {
       const batch = (r.records ?? []).reverse() // API returns DESC, reverse to ASC for display
       setMessages(prev => page === 1 ? batch : [...batch, ...prev])
       setMsgTotal(r.total ?? 0)
@@ -75,7 +73,7 @@ export default function Chat() {
     loadConversations()
   }, [selectedPartner, loadConversations])
 
-  useChatSse(() => getSseTicket().then(r => (r as any).ticket), currentUserId, handleSseMessage)
+  useChatSse(() => getSseTicket().then(r => r.ticket), currentUserId, handleSseMessage)
 
   useEffect(() => {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight
@@ -103,8 +101,8 @@ export default function Chat() {
               <div className={styles.partnerName}>{c.partnerName}</div>
               <div className={styles.lastMsg}>{c.lastMessage}</div>
               <div className={styles.conversationMeta}>
-                <span className={styles.conversationTime}>{formatTime(c.lastMessageTime)}</span>
-                {c.unreadCount > 0 && <span className={styles.unreadBadge}>{c.unreadCount}</span>}
+                <span className={styles.conversationTime}>{formatTime(c.lastMessageTime || '')}</span>
+                {(c.unreadCount ?? 0) > 0 && <span className={styles.unreadBadge}>{c.unreadCount}</span>}
               </div>
             </div>
           ))}

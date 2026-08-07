@@ -1,6 +1,8 @@
-import request from './request'
+import { http } from './request'
+import { PageResult } from '../types/common'
+import { PatientVO, BillVO } from '../types/entities'
 
-function csv(v: any) {
+function csv(v: unknown) {
   if (v == null) return ''
   const s = String(v)
   if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`
@@ -16,10 +18,10 @@ function download(filename: string, header: string, rows: string[]) {
 }
 
 export const downloadPatientsCsv = async () => {
-  const res = await request.get('/patients', { params: { page: 1, size: 9999 } })
+  const res = await http.get<PageResult<PatientVO>>('/patients', { params: { page: 1, size: 9999 } })
   const patients = res.records ?? []
   const header = 'MRN,Name,DOB,Sex,Gender,Race,Ethnicity,Language,Phone,Email,Address,City,State,ZIP,Insurance,MedicalHistory,Allergies,Created'
-  const rows = patients.map((p: any) =>
+  const rows = patients.map(p =>
     [p.mrn, p.name, p.dateOfBirth ?? '', p.sexAtBirth, p.genderIdentity,
       p.race, p.ethnicity, p.preferredLanguage,
       p.phoneMobile, p.email,
@@ -30,10 +32,10 @@ export const downloadPatientsCsv = async () => {
 }
 
 export const downloadBillsCsv = async () => {
-  const res = await request.get('/bills', { params: { page: 1, size: 9999 } })
+  const res = await http.get<PageResult<BillVO>>('/bills', { params: { page: 1, size: 9999 } })
   const bills = res.records ?? []
   const header = 'ID,PatientID,Type,Status,TotalCharge,InsAdj,InsPay,PatientResp,PatientPaid,Copay,CPT,ICD10,POS,Payer,Claim#,FilingDate,PayTime,Method,Created'
-  const rows = bills.map((b: any) =>
+  const rows = bills.map(b =>
     [b.id, b.patientId, b.billType, b.claimStatus,
       b.totalCharge, b.insuranceAdjustment, b.insurancePayment, b.patientResponsibility,
       b.patientPaidAmount, b.copayAmount,

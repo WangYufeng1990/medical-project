@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { ConsentVO } from '../../../types/entities'
 import { useConfirm } from '../../../utils/ConfirmDialog'
 import { CONSENT_STATUS_COLOR, CONSENT_TYPE_LABELS } from '../../../utils/labels'
 import styles from '../../shared.module.css'
@@ -10,14 +11,14 @@ export default function PatientConsent() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'consent'],
-    queryFn: () => patientRequest.get('/patient/me/consent').then(r => r ?? []),
+    queryFn: () => http.get<ConsentVO[]>('/patient/me/consent'),
   })
   const list = data ?? []
 
   const revokeMutation = useMutation({
-    mutationFn: (id: number) => patientRequest.put(`/patient/me/consent/${id}/revoke`),
+    mutationFn: (id: number) => http.put(`/patient/me/consent/${id}/revoke`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'consent'] }),
-    onError: (err: any) => alert(err?.message || 'Revoke failed'),
+    onError: (err: Error) => alert(err?.message || 'Revoke failed'),
   })
 
   return (
@@ -34,7 +35,7 @@ export default function PatientConsent() {
                 <td>{c.id}</td>
                 <td>{CONSENT_TYPE_LABELS[c.consentType] || c.consentType}</td>
                 <td>{c.scope}</td>
-                <td><span style={{ color: CONSENT_STATUS_COLOR[c.status] ?? '#909399', fontWeight: 600 }}>{c.status}</span></td>
+                <td><span style={{ color: CONSENT_STATUS_COLOR[c.status ?? ''] ?? '#909399', fontWeight: 600 }}>{c.status}</span></td>
                 <td>{c.consentDate ?? c.createTime}</td>
                 <td>
                   {c.status === 'active' && (

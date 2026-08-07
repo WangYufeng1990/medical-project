@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getKeyHistory, getRotationStatus, rotateKey } from '../../api/key'
+import { KeyHistoryEntry } from '../../types/entities'
 import styles from '../shared.module.css'
 
 export default function AdminKeys() {
@@ -62,7 +63,7 @@ export default function AdminKeys() {
       <h3 style={{ marginBottom: 12 }}>Key Lifecycle History</h3>
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Event</th><th>Version</th><th>Detail</th><th>Time</th></tr></thead>
-        <tbody>{(history ?? []).map((r: any) => (
+        <tbody>{(history ?? []).map((r: KeyHistoryEntry) => (
           <tr key={r.id}>
             <td>{r.id}</td>
             <td><span style={{ color: r.eventType === 'KEY_ROTATION' ? '#e6a23c' : '#67c23a', fontWeight: 600 }}>{r.eventType}</span></td>

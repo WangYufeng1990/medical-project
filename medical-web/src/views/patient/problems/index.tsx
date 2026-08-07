@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { ProblemVO } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
 export default function PatientProblems() {
   const { data: problems, isLoading } = useQuery({
     queryKey: ['me', 'problems'],
-    queryFn: () => patientRequest.get('/patient/me/problems').then(r => r ?? []),
+    queryFn: () => http.get<ProblemVO[]>('/patient/me/problems'),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
@@ -17,7 +18,7 @@ export default function PatientProblems() {
       <table className={styles.table}>
         <thead><tr><th>Diagnosis</th><th>SNOMED</th><th>ICD-10</th><th>Severity</th><th>Status</th><th>Onset</th><th>Resolved</th></tr></thead>
         <tbody>
-          {(problems ?? []).map((p: any) => (
+          {(problems ?? []).map(p => (
             <tr key={p.id} style={{ opacity: p.status === 'RESOLVED' ? 0.5 : 1 }}>
               <td style={{ textDecoration: p.status === 'RESOLVED' ? 'line-through' : 'none' }}>{p.snomedDisplay || 'Unspecified'}</td>
               <td style={{ fontSize: 11, color: '#909399' }}>{p.snomedCode || '-'}</td>

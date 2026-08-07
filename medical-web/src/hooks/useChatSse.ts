@@ -1,13 +1,5 @@
 import { useEffect, useRef } from 'react'
-
-interface MessageVO {
-  id: number
-  senderId: number
-  receiverId: number
-  content: string
-  isRead: boolean
-  createTime: string
-}
+import { MessageVO } from '../types/entities'
 
 export function useChatSse(
   getTicket: () => Promise<string>,

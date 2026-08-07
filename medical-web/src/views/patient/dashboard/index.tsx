@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { PatientProfileVO } from '../../../types/entities'
 import styles from '../../dashboard/style.module.css'
 
-const overviewCards = [
+const overviewCards: { label: string; key: 'apt' | 'rx' | 'bill'; path: string; color: string }[] = [
   { label: 'Appointments', key: 'apt', path: '/patient/appointments', color: '#10b981' },
   { label: 'Prescriptions', key: 'rx', path: '/patient/prescriptions', color: '#ef4444' },
   { label: 'Bills', key: 'bill', path: '/patient/bills', color: '#f59e0b' },
@@ -26,19 +28,19 @@ const accountCards = [
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
-  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}') as { name?: string }
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: () => patientRequest.get('/patient/me').then(r => r),
+    queryFn: () => http.get<PatientProfileVO>('/patient/me'),
     staleTime: 60_000,
   })
   const info = profile || cachedInfo
 
-  const fetchCount = (url: string) => patientRequest.get(url).then(r => r)
+  const fetchCount = (url: string) => http.get<PageResult<unknown>>(url)
   const { data: aptData } = useQuery({ queryKey: ['me', 'apt-count'], queryFn: () => fetchCount('/patient/me/appointments?page=1&size=1') })
   const { data: rxData } = useQuery({ queryKey: ['me', 'rx-count'], queryFn: () => fetchCount('/patient/me/prescriptions?page=1&size=1') })
   const { data: billData } = useQuery({ queryKey: ['me', 'bill-count'], queryFn: () => fetchCount('/patient/me/bills?page=1&size=1') })
-  const counts: any = { apt: aptData?.total ?? 0, rx: rxData?.total ?? 0, bill: billData?.total ?? 0 }
+  const counts: Record<'apt' | 'rx' | 'bill', number> = { apt: aptData?.total ?? 0, rx: rxData?.total ?? 0, bill: billData?.total ?? 0 }
 
   return (<div>
     <h2 className={styles.welcome}>Welcome, {info.name || 'Patient'}</h2>

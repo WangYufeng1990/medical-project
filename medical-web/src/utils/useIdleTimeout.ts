@@ -5,8 +5,8 @@ import { SESSION_WARNING_MINUTES, SESSION_TIMEOUT_MINUTES } from './labels'
 // session (sliding), so users are never silently kicked after a break.
 export function useIdleTimeout(onTimeout: () => void) {
   const [warningVisible, setWarningVisible] = useState(false)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
-  const warnRef = useRef<ReturnType<typeof setTimeout>>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const warnRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const reset = useCallback(() => {
     setWarningVisible(false)

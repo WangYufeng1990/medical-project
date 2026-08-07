@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProfile, updateProfile, changePassword } from '../../api/user'
+import { StaffProfileVO, StaffProfileForm, ChangePasswordForm } from '../../types/entities'
 import styles from '../shared.module.css'
+
+const PROFILE_FIELDS = ['realName','phone','email','gender','npi','licenseState','taxonomyCode','credentials','specialty'] as const
 
 export default function Profile() {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<any>({})
+  const [form, setForm] = useState<StaffProfileForm>({
+    realName: '', phone: '', email: '', gender: '', npi: '', licenseState: '', taxonomyCode: '', credentials: '', specialty: '',
+  })
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [showPwd, setShowPwd] = useState(false)
   const [pwdError, setPwdError] = useState('')
@@ -16,11 +21,15 @@ export default function Profile() {
   })
 
   useEffect(() => {
-    if (profile) setForm(profile)
+    if (profile) setForm({
+      realName: profile.realName ?? '', phone: profile.phone ?? '', email: profile.email ?? '', gender: profile.gender ?? '',
+      npi: profile.npi ?? '', licenseState: profile.licenseState ?? '', taxonomyCode: profile.taxonomyCode ?? '',
+      credentials: profile.credentials ?? '', specialty: profile.specialty ?? '',
+    })
   }, [profile])
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => updateProfile(data),
+    mutationFn: (data: StaffProfileForm) => updateProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       alert('Updated')
@@ -28,14 +37,14 @@ export default function Profile() {
   })
 
   const pwdMutation = useMutation({
-    mutationFn: (data: any) => changePassword(data),
+    mutationFn: (data: ChangePasswordForm) => changePassword(data),
     onSuccess: () => {
       setShowPwd(false)
       setPwdForm({ oldPassword: '', newPassword: '', confirmPassword: '' })
       setPwdError('')
       alert('Password changed')
     },
-    onError: (err: any) => alert(err?.message || 'Password change failed'),
+    onError: (err: Error) => alert(err?.message || 'Password change failed'),
   })
 
   const handlePwdSubmit = (e: React.FormEvent) => {
@@ -51,10 +60,10 @@ export default function Profile() {
       <h2 style={{ marginBottom: 20 }}>Profile</h2>
       <div style={{ maxWidth: 500, background: '#fff', padding: 24, borderRadius: 8 }}>
         <div className={styles.formGrid}>
-          {['realName','phone','email','gender','npi','licenseState','taxonomyCode','credentials','specialty'].map(f => (
+          {PROFILE_FIELDS.map(f => (
             <div key={f} className={styles.formGroup}>
               <label>{f}</label>
-              <input value={form[f] ?? ''} onChange={e => setForm({ ...form, [f]: e.target.value })} />
+              <input value={form[f] ?? ''} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as StaffProfileForm)} />
             </div>
           ))}
         </div>

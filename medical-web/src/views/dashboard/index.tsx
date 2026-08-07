@@ -1,17 +1,20 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getDashboardStats } from '../../api/dashboard'
+import { DashboardStats } from '../../types/entities'
 import { hasAnyRole } from '../../utils/auth'
 import styles from './style.module.css'
 
-const statCards = [
+interface FeatureCardData { label: string; path: string; icon: string; color: string; roles?: string[] }
+
+const statCards: { label: string; key: keyof DashboardStats; path: string; color: string }[] = [
   { label: 'Total Patients', key: 'totalPatients', path: '/patients', color: '#6366f1' },
   { label: 'Appointments Today', key: 'todayAppointments', path: '/appointments', color: '#10b981' },
   { label: 'Pending Bills', key: 'pendingBills', path: '/billing', color: '#f59e0b' },
   { label: 'Monthly Rx', key: 'monthlyPrescriptions', path: '/prescriptions', color: '#ef4444' },
 ]
 
-const clinicalCards = [
+const clinicalCards: FeatureCardData[] = [
   { label: 'Vital Signs', path: '/lab', icon: '🫀', color: '#10b981' },
   { label: 'Problem List', path: '/patients?tab=problems', icon: '📋', color: '#6366f1' },
   { label: 'Immunizations', path: '/patients?tab=immunizations', icon: '💉', color: '#8b5cf6' },
@@ -19,21 +22,21 @@ const clinicalCards = [
   { label: 'LOINC Catalog', path: '/loinc', icon: '🔬', color: '#64748b' },
 ]
 
-const workflowCards = [
+const workflowCards: FeatureCardData[] = [
   { label: 'Referrals', path: '/referrals', icon: '🏥', color: '#3b82f6' },
   { label: 'Prior Auths', path: '/prior-auths', icon: '📄', color: '#f59e0b' },
   { label: 'Superbill', path: '/billing', icon: '🧾', color: '#10b981' },
   { label: 'Refill Requests', path: '/prescriptions', icon: '💊', color: '#ef4444' },
 ]
 
-const adminCards = [
+const adminCards: FeatureCardData[] = [
   { label: 'Emergency Access', path: '/emergency', icon: '🚨', color: '#ef4444', roles: ['ADMIN'] },
   { label: 'eCQM Quality', path: '/system/quality', icon: '📈', color: '#8b5cf6', roles: ['ADMIN'] },
   { label: 'Key Management', path: '/system/keys', icon: '🔐', color: '#f59e0b', roles: ['ADMIN'] },
   { label: 'Audit Logs', path: '/audit-logs', icon: '🛡', color: '#64748b', roles: ['ADMIN'] },
 ]
 
-function FeatureCard({ c }: { c: any }) {
+function FeatureCard({ c }: { c: FeatureCardData }) {
   const navigate = useNavigate()
   return (
     <div className={`${styles.card} ${styles.featureCard}`} onClick={() => navigate(c.path)} style={{ borderLeftColor: c.color }}>
@@ -43,7 +46,7 @@ function FeatureCard({ c }: { c: any }) {
   )
 }
 
-function FeatureSection({ title, cards }: { title: string; cards: any[] }) {
+function FeatureSection({ title, cards }: { title: string; cards: FeatureCardData[] }) {
   return (
     <>
       <div className={styles.sectionTitle}>{title}</div>
@@ -72,7 +75,7 @@ export default function Dashboard() {
         {statCards.map((c, i) => (
           <div key={c.label} className={`${styles.card} ${styles.statCard}`} onClick={() => navigate(c.path)} style={{ borderLeftColor: c.color }}>
             <div className={styles.label}>{c.label}</div>
-            <div className={styles.value}>{stats ? (stats as any)[c.key] ?? 0 : 0}</div>
+            <div className={styles.value}>{stats ? stats[c.key] ?? 0 : 0}</div>
           </div>
         ))}
       </div>

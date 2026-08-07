@@ -1,3 +1,5 @@
-import request from './request'
-export const checkCds = (data: any) => request.post('/cds/check', data)
-export const lookupDrug = (rxnorm: string) => request.get('/cds/drugs', { params: { rxnorm } })
+import { http } from './request'
+import { CdsCheckRequest, CdsCheckResult, DrugLookupResult } from '../types/entities'
+
+export const checkCds = (data: CdsCheckRequest) => http.post<CdsCheckResult>('/cds/check', data)
+export const lookupDrug = (rxnorm: string) => http.get<DrugLookupResult>('/cds/drugs', { params: { rxnorm } })

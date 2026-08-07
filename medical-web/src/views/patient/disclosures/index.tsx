@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { DisclosureVO } from '../../../types/entities'
 import { PAGE_SIZE } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 
@@ -9,7 +11,7 @@ export default function PatientDisclosures() {
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['me', 'disclosures', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/disclosures?page=${page}&size=${PAGE_SIZE}`).then(r => r),
+    queryFn: () => http.get<PageResult<DisclosureVO>>(`/patient/me/disclosures?page=${page}&size=${PAGE_SIZE}`),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
@@ -25,7 +27,7 @@ export default function PatientDisclosures() {
       {data.length === 0 && <p style={{ color: '#909399' }}>No disclosures recorded.</p>}
       <table className={styles.table}>
         <thead><tr><th>Date</th><th>Module</th><th>Action</th><th>Detail</th></tr></thead>
-        <tbody>{data.map((r: any) => (
+        <tbody>{data.map(r => (
           <tr key={r.id}>
             <td>{r.createTime?.substring(0, 16)}</td>
             <td style={{ fontWeight: 600 }}>{r.module}</td>

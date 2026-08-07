@@ -14,15 +14,15 @@ export default function Login() {
     e.preventDefault(); setError('')
     try {
       const data = await login({ username, password })
-      localStorage.setItem('token', data.token)
+      localStorage.setItem('token', data.token || '')
       localStorage.setItem('refreshToken', data.refreshToken || '')
-      localStorage.setItem('username', data.username)
-      localStorage.setItem('realName', data.realName || data.username)
-      localStorage.setItem('userId', String(data.userId))
+      localStorage.setItem('username', data.username || '')
+      localStorage.setItem('realName', data.realName || data.username || '')
+      localStorage.setItem('userId', String(data.userId ?? ''))
       scheduleProactiveRefresh()
       navigate('/dashboard')
-    } catch (err: any) {
-      setError(err?.message || 'Login failed')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed')
     }
   }
 

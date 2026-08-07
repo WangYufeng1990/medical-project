@@ -1,9 +1,10 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PatientProfileVO, ChangePasswordForm } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
-const FIELDS = [
+const FIELDS: { key: keyof PatientProfileVO; label: string; readonly?: boolean; note?: string }[] = [
   { key: 'name', label: 'Name', readonly: true, note: 'Contact staff to update legal name' },
   { key: 'mrn', label: 'MRN', readonly: true },
   { key: 'dateOfBirth', label: 'Date of Birth', readonly: true },
@@ -27,14 +28,14 @@ const FIELDS = [
 export default function PatientProfile() {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState<any>({})
+  const [form, setForm] = useState<Partial<PatientProfileVO>>({})
   const [showPwd, setShowPwd] = useState(false)
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [pwdError, setPwdError] = useState('')
 
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: () => patientRequest.get('/patient/me').then(r => r),
+    queryFn: () => http.get<PatientProfileVO>('/patient/me'),
   })
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function PatientProfile() {
   }, [profile])
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => patientRequest.put('/patient/me', data),
+    mutationFn: (data: PatientProfileVO) => http.put('/patient/me', data),
     onSuccess: () => {
       setEditing(false)
       queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
@@ -51,7 +52,7 @@ export default function PatientProfile() {
   })
 
   const pwdMutation = useMutation({
-    mutationFn: (data: any) => patientRequest.put('/patient/me/password', data),
+    mutationFn: (data: ChangePasswordForm) => http.put('/patient/me/password', data),
     onSuccess: () => {
       setShowPwd(false)
       setPwdForm({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -59,7 +60,7 @@ export default function PatientProfile() {
       queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
       alert('Password changed')
     },
-    onError: (err: any) => alert(err?.message || 'Password change failed'),
+    onError: (err: Error) => alert(err?.message || 'Password change failed'),
   })
 
   return (<div>
@@ -69,12 +70,12 @@ export default function PatientProfile() {
     </h2>
     <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 700, marginTop: 16 }}>
       {editing ? (
-        <form onSubmit={e => { e.preventDefault(); updateMutation.mutate(form) }} className={styles.formGrid}>
+        <form onSubmit={e => { e.preventDefault(); updateMutation.mutate(form as PatientProfileVO) }} className={styles.formGrid}>
           {FIELDS.map(f => (
             <div key={f.key} className={styles.formGroup}>
               <label>{f.label}</label>
               <input value={form[f.key] ?? ''} disabled={f.readonly}
-                onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+                onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }) as Partial<PatientProfileVO>)} />
               {f.note && <span style={{ fontSize: 11, color: '#e6a23c' }}>{f.note}</span>}
             </div>
           ))}
@@ -94,7 +95,7 @@ export default function PatientProfile() {
     </div>
 
     {showPwd && <div className={styles.modalOverlay} onClick={() => { setShowPwd(false); setPwdError('') }}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>Change Password</h3>
-      <form onSubmit={e => {
+      <form onSubmit={(e: FormEvent) => {
         e.preventDefault()
         if (pwdForm.newPassword !== pwdForm.confirmPassword) { setPwdError('Passwords do not match'); return }
         if (pwdForm.newPassword.length < 8) { setPwdError('Password must be at least 8 characters'); return }

@@ -1,7 +1,9 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import { scheduleProactiveRefresh } from '../../../api/patientRequest'
+import { Result } from '../../../types/common'
+import { PatientLoginResponse } from '../../../types/entities'
 import styles from '../../login/style.module.css'
 
 export default function PatientLogin() {
@@ -13,15 +15,16 @@ export default function PatientLogin() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError('')
     try {
-      const res = await axios.post('/api/v1/patient/login', { username, password })
-      const data = res.data.data
+      const res = await axios.post<Result<PatientLoginResponse>>('/api/v1/patient/login', { username, password })
+      const data = res.data.data!
       localStorage.setItem('patientToken', data.token)
       if (data.refreshToken) localStorage.setItem('patientRefreshToken', data.refreshToken)
       localStorage.setItem('patientInfo', JSON.stringify({ patientId: data.patientId, name: data.name, username: data.username }))
       scheduleProactiveRefresh()
       navigate('/patient/dashboard')
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Login failed')
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      setError(axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '') || 'Login failed')
     }
   }
 

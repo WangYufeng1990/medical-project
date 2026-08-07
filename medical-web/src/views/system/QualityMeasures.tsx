@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getMeasures, getMeasureReport, calculateMeasureReport, getMeasureHistory } from '../../api/quality'
+import { QualityMeasureVO, QualityResultVO } from '../../types/entities'
 import styles from '../shared.module.css'
 
 export default function QualityMeasures() {
@@ -44,7 +45,7 @@ export default function QualityMeasures() {
               {isLoading ? (
                 <tr><td colSpan={3} style={{ textAlign: 'center', color: '#909399', padding: 20 }}>Loading...</td></tr>
               ) : (
-                (measures ?? []).map((m: any) => (
+                (measures ?? []).map((m: QualityMeasureVO) => (
                   <tr key={m.cmsId}
                     className={styles.clickableRow}
                     onClick={() => setSelectedCmsId(selectedCmsId === m.cmsId ? null : m.cmsId)}
@@ -129,7 +130,7 @@ export default function QualityMeasures() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(history ?? []).map((h: any) => (
+                        {(history ?? []).map((h: QualityResultVO) => (
                           <tr key={h.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                             <td style={{ padding: '4px 8px', color: '#606266' }}>{h.calculatedAt?.replace('T', ' ').substring(0, 19)}</td>
                             <td style={{ padding: '4px 8px', textAlign: 'right' }}>{h.denominator}</td>

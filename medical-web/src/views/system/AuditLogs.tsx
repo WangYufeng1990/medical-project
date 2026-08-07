@@ -1,6 +1,7 @@
 import { useState, Fragment } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getAuditLogs, getDistinctValues } from '../../api/audit'
+import { AuditLogVO } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'
 import styles from '../shared.module.css'
 
@@ -97,7 +98,7 @@ export default function AuditLogs() {
           <th>ID</th><th>User</th><th>Username</th><th>Patient</th><th>Module</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th><th>Timestamp</th>
         </tr></thead>
         <tbody>
-          {data.map((row: any) => (<Fragment key={row.id}>
+          {data.map((row: AuditLogVO) => (<Fragment key={row.id}>
             <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId ?? '-'}</td>

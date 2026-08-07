@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { PageResult } from '../../../types/common'
+import { AppointmentVO } from '../../../types/entities'
 import { useConfirm } from '../../../utils/ConfirmDialog'
 import { APPOINTMENT_STATUS, PAGE_SIZE, APPOINTMENT_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
@@ -12,13 +14,13 @@ export default function PatientAppointments() {
 
   const { data: pageData } = useQuery({
     queryKey: ['me', 'appointments', 'list', { page, size: PAGE_SIZE }],
-    queryFn: () => patientRequest.get(`/patient/me/appointments?page=${page}&size=${PAGE_SIZE}`).then(r => r),
+    queryFn: () => http.get<PageResult<AppointmentVO>>(`/patient/me/appointments?page=${page}&size=${PAGE_SIZE}`),
   })
   const data = pageData?.records ?? []
   const total = pageData?.total ?? 0
 
   const cancelMutation = useMutation({
-    mutationFn: (id: number) => patientRequest.put(`/patient/me/appointments/${id}/cancel`),
+    mutationFn: (id: number) => http.put(`/patient/me/appointments/${id}/cancel`),
     onSuccess: () => {
       setPage(1)
       queryClient.invalidateQueries({ queryKey: ['me', 'appointments'] })

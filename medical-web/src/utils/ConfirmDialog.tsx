@@ -10,7 +10,7 @@ interface DialogOptions {
 
 interface DialogState extends DialogOptions {
   id: number
-  resolve: (value: string | boolean) => void
+  resolve: (value: string | boolean | null) => void
 }
 
 const ConfirmContext = createContext<{
@@ -28,7 +28,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   let idCounter = 0
 
   const open = useCallback((opts: DialogOptions) => {
-    return new Promise<string | boolean>((resolve) => {
+    return new Promise<string | boolean | null>((resolve) => {
       setDialogs(prev => [...prev, { ...opts, id: ++idCounter, resolve }])
     })
   }, [])
@@ -37,7 +37,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const prompt = useCallback((message: string, defaultValue?: string) => open({ message, type: 'prompt', defaultValue }) as Promise<string | null>, [open])
   const alert = useCallback((message: string) => open({ message, type: 'alert' }).then(() => {}), [open])
 
-  const close = (id: number, result: string | boolean) => {
+  const close = (id: number, result: string | boolean | null) => {
     setDialogs(prev => prev.filter(d => d.id !== id))
     const dialog = dialogs.find(d => d.id === id)
     dialog?.resolve(result)
@@ -50,12 +50,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         if (d.type === 'prompt') {
           let value = d.defaultValue || ''
           return (
-            <div key={d.id} className={styles.modalOverlay} onClick={() => close(d.id, null as any)}>
+            <div key={d.id} className={styles.modalOverlay} onClick={() => close(d.id, null)}>
               <div className={styles.modal} onClick={e => e.stopPropagation()}>
                 <h3>{d.message}</h3>
                 <input autoFocus style={{ width: '100%', margin: '12px 0', padding: '8px', border: '1px solid #dcdfe6', borderRadius: 4 }} defaultValue={d.defaultValue} onChange={e => value = e.target.value} onKeyDown={e => { if (e.key === 'Enter') close(d.id, value) }} />
                 <div className={styles.formActions} style={{ marginTop: 12 }}>
-                  <button className={styles.btnSm} onClick={() => close(d.id, null as any)}>Cancel</button>
+                  <button className={styles.btnSm} onClick={() => close(d.id, null)}>Cancel</button>
                   <button className={styles.btnPrimary} onClick={() => close(d.id, value)}>OK</button>
                 </div>
               </div>

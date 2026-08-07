@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLoincCatalog } from '../../api/observation'
+import { LoincEntry } from '../../types/entities'
 import styles from '../shared.module.css'
 
 export default function LoincCatalog() {
   const navigate = useNavigate()
-  const [catalog, setCatalog] = useState<any[]>([])
+  const [catalog, setCatalog] = useState<LoincEntry[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -13,7 +14,7 @@ export default function LoincCatalog() {
       .then(list => {
         setCatalog(list)
         const init: Record<string, boolean> = {}
-        list.forEach((c: any) => {
+        list.forEach(c => {
           if (c.panelParentCode) init[c.panelParentCode] = true
         })
         setExpanded(init)
@@ -21,12 +22,12 @@ export default function LoincCatalog() {
       .catch(() => {})
   }, [])
 
-  const panels = catalog.reduce((acc: Record<string, any[]>, c: any) => {
+  const panels = catalog.reduce((acc: Record<string, LoincEntry[]>, c) => {
     const parent = c.panelParentCode || 'UNGROUPED'
     if (!acc[parent]) acc[parent] = []
     acc[parent].push(c)
     return acc
-  }, {} as Record<string, any[]>)
+  }, {} as Record<string, LoincEntry[]>)
 
   const panelLabels: Record<string, string> = {
     'LP14639-3': 'Basic Metabolic Panel',
@@ -71,7 +72,7 @@ export default function LoincCatalog() {
                 </tr>
               </thead>
               <tbody>
-                {tests.map((t: any) => (
+                {tests.map(t => (
                   <tr key={t.id}>
                     <td style={{ fontFamily: 'monospace' }}>{t.loincCode}</td>
                     <td>{t.display}</td>

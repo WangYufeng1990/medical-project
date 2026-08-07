@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import styles from '../../login/style.module.css'
 
 export default function PatientForgotPassword() {
@@ -20,8 +20,9 @@ export default function PatientForgotPassword() {
       // Same response whether or not the account exists (no enumeration).
       setInfo('If that username exists, a reset token has been generated. Dev mode: check the server console.')
       setStep(2)
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Request failed')
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      setError(axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '') || 'Request failed')
     }
   }
 
@@ -31,8 +32,9 @@ export default function PatientForgotPassword() {
     try {
       await axios.post('/api/v1/patient/reset-password', { token, newPassword })
       navigate('/patient/login')
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Reset failed')
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      setError(axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '') || 'Reset failed')
     }
   }
 

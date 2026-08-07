@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CdsWarning } from '../../types/entities'
 import styles from '../shared.module.css'
 
 const severityColors: Record<string, string> = {
@@ -13,16 +14,8 @@ const typeLabels: Record<string, string> = {
   DRUG_ALLERGY: 'Allergy Warning'
 }
 
-interface Warning {
-  type: string
-  severity: string
-  drugsInvolved: string
-  description: string
-  recommendation: string
-}
-
 interface Props {
-  warnings: Warning[]
+  warnings: CdsWarning[]
   onOverride: () => void
   onCancel: () => void
 }

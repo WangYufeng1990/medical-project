@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getPatientPage } from '../../api/patient'
 import { getObservations, getObservationTrend, getLoincCatalog } from '../../api/observation'
+import { ObservationVO, LoincEntry } from '../../types/entities'
 import styles from '../shared.module.css'
 
 const FLAG_COLOR: Record<string, string> = {
@@ -42,7 +43,7 @@ export default function LabResults() {
   const allList = loincParam ? (trendData ?? []) : (pageData?.records ?? [])
   const total = pageData?.total ?? 0
 
-  const grouped: Record<string, any[]> = {}
+  const grouped: Record<string, ObservationVO[]> = {}
   allList.forEach(o => {
     const date = o.effectiveDate ? o.effectiveDate.substring(0, 16) : 'Unknown'
     if (!grouped[date]) grouped[date] = []
@@ -53,8 +54,8 @@ export default function LabResults() {
   const trendDirection = loincParam && dateEntries.length >= 2
     ? (() => {
         const dates = Object.keys(grouped).sort()
-        const first = parseFloat(grouped[dates[0]][0]?.obsValue)
-        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue)
+        const first = parseFloat(grouped[dates[0]][0]?.obsValue ?? '')
+        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue ?? '')
         if (isNaN(first) || isNaN(last)) return null
         return last > first ? '↑' : last < first ? '↓' : '→'
       })()
@@ -91,7 +92,7 @@ export default function LabResults() {
             <select value={loincParam} onChange={e => handleLoincChange(e.target.value)}
               style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13 }}>
               <option value="">All tests</option>
-              {(catalog ?? []).map((c: any) => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
+              {(catalog ?? []).map((c: LoincEntry) => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
             </select>
           </>
         )}
@@ -114,11 +115,11 @@ export default function LabResults() {
                 Trend for <strong>{allList[0]?.loincDisplay ?? loincParam}</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]: [string, any[]]) => {
-                  const val = parseFloat(obs[0]?.obsValue)
+                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]) => {
+                  const val = parseFloat(obs[0]?.obsValue ?? '')
                   return (
                     <div key={date} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag] || '#409EFF' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag || ''] || '#409EFF' }}>
                         {obs[0]?.obsValue}
                       </div>
                       <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
@@ -143,7 +144,7 @@ export default function LabResults() {
               </tr>
             </thead>
             <tbody>
-              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]: [string, any[]]) =>
+              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]) =>
                 obs.map((o, i) => (
                   <tr key={o.id}>
                     {i === 0 && <td rowSpan={obs.length} style={{ verticalAlign: 'top', fontWeight: 600 }}>{date}</td>}

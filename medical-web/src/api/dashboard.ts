@@ -1,2 +1,4 @@
-import request from './request'
-export const getDashboardStats = () => request.get('/dashboard/stats')
+import { http } from './request'
+import { DashboardStats } from '../types/entities'
+
+export const getDashboardStats = () => http.get<DashboardStats>('/dashboard/stats')

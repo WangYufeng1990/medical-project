@@ -1,4 +1,6 @@
-export function parseJwt(token: string): any {
+import { JwtPayload } from '../types/common'
+
+export function parseJwt(token: string): JwtPayload {
   try {
     const base64Url = token.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')

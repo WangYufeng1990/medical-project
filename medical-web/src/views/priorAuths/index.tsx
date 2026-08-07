@@ -2,20 +2,21 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPriorAuths, createPriorAuth, updatePriorAuth } from '../../api/priorAuth'
 import { getPatientPage } from '../../api/patient'
+import { PriorAuthForm } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const STATUS_COLOR: any = { PENDING: '#E6A23C', APPROVED: '#67C23A', DENIED: '#F56C6C' }
-const emptyForm: any = { patientId: '', authType: 'MEDICATION', itemName: '', itemCode: '', insurancePayer: '', notes: '' }
+const STATUS_COLOR: Record<string, string> = { PENDING: '#E6A23C', APPROVED: '#67C23A', DENIED: '#F56C6C' }
+const emptyForm: PriorAuthForm = { patientId: '', authType: 'MEDICATION', itemName: '', itemCode: '', insurancePayer: '', notes: '' }
 
 export default function PriorAuths() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ...emptyForm })
+  const [form, setForm] = useState<PriorAuthForm>({ ...emptyForm })
 
-  const onError = (err: any) => alert(err?.message || 'Operation failed')
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
   const { prompt: promptDialog } = useConfirm()
 
   const { data: pageData, isLoading } = useQuery({
@@ -31,13 +32,13 @@ export default function PriorAuths() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (d: any) => createPriorAuth(d),
+    mutationFn: (d: Omit<PriorAuthForm, 'patientId'> & { patientId: number }) => createPriorAuth(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['priorAuths'] }) },
     onError,
   })
 
   const updateMutation = useMutation({
-    mutationFn: (params: { id: number; data: any }) => updatePriorAuth(params.id, params.data),
+    mutationFn: (params: { id: number; data: { status?: string; authNumber?: string; resolvedAt?: string } }) => updatePriorAuth(params.id, params.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['priorAuths'] }),
     onError,
   })
@@ -54,7 +55,7 @@ export default function PriorAuths() {
         <tr key={r.id}>
           <td>{r.id}</td><td>{r.patientId}</td><td>{r.authType}</td><td>{r.itemName}{r.itemCode ? ` (${r.itemCode})` : ''}</td>
           <td>{r.insurancePayer || '-'}</td>
-          <td><span style={{ color: STATUS_COLOR[r.status] || '#909399', fontWeight: 600 }}>{r.status}</span></td>
+          <td><span style={{ color: STATUS_COLOR[r.status || ''] || '#909399', fontWeight: 600 }}>{r.status}</span></td>
           <td>{r.requestedAt}</td>
           <td>
             {r.status === 'PENDING' && (
@@ -74,7 +75,7 @@ export default function PriorAuths() {
 
     {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()}><h3>New Prior Authorization</h3>
       <form onSubmit={handleCreate} className={styles.formGrid}>
-        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}><option value="">-- Select --</option>{(patients ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        <div className={styles.formGroup}><label>Patient</label><select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}><option value="">-- Select --</option>{(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         <div className={styles.formGroup}><label>Type</label><select value={form.authType} onChange={e => setForm({ ...form, authType: e.target.value })}><option value="MEDICATION">Medication</option><option value="PROCEDURE">Procedure</option><option value="IMAGING">Imaging</option></select></div>
         <div className={styles.formGroup}><label>Item Name</label><input value={form.itemName} onChange={e => setForm({ ...form, itemName: e.target.value })} placeholder="e.g. Lisinopril 20mg" /></div>
         <div className={styles.formGroup}><label>Item Code</label><input value={form.itemCode} onChange={e => setForm({ ...form, itemCode: e.target.value })} placeholder="e.g. 314076" /></div>

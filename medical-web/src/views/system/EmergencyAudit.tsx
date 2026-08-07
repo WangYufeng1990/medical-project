@@ -1,20 +1,21 @@
 import { useState, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getEmergencyHistory, reviewEmergencyAccess } from '../../api/emergency'
+import { EmergencyAccessVO } from '../../types/entities'
 import styles from '../shared.module.css'
 
 export default function EmergencyAudit() {
   const queryClient = useQueryClient()
   const [audited, setAudited] = useState('')
   const [patientIdFilter, setPatientIdFilter] = useState('')
-  const [searchFilters, setSearchFilters] = useState<Record<string, any>>({})
+  const [searchFilters, setSearchFilters] = useState<{ audited?: number; patientId?: number }>({})
   const [expandedRow, setExpandedRow] = useState<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['emergency', 'list', searchFilters],
     queryFn: () => {
-      const params: any = {}
-      if (searchFilters.audited !== undefined && searchFilters.audited !== '') params.audited = searchFilters.audited
+      const params: { audited?: number; patientId?: number } = {}
+      if (searchFilters.audited !== undefined) params.audited = searchFilters.audited
       if (searchFilters.patientId) params.patientId = searchFilters.patientId
       return getEmergencyHistory(params)
     },
@@ -24,13 +25,13 @@ export default function EmergencyAudit() {
   const reviewMutation = useMutation({
     mutationFn: (id: number) => reviewEmergencyAccess(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['emergency'] }),
-    onError: (err: any) => alert(err?.message || 'Review failed'),
+    onError: (err: Error) => alert(err?.message || 'Review failed'),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
 
   const handleSearch = () => {
-    const filters: any = {}
+    const filters: { audited?: number; patientId?: number } = {}
     if (audited !== '') filters.audited = Number(audited)
     if (patientIdFilter !== '') filters.patientId = Number(patientIdFilter)
     setSearchFilters(filters)
@@ -70,7 +71,7 @@ export default function EmergencyAudit() {
           <th>ID</th><th>User ID</th><th>Patient ID</th><th>Reason</th><th>Accessed At</th><th>Expires At</th><th>Audited</th><th>Reviewed By</th><th>Reviewed At</th><th></th>
         </tr></thead>
         <tbody>
-          {list.map((row: any) => (<Fragment key={row.id}>
+          {list.map((row: EmergencyAccessVO) => (<Fragment key={row.id}>
             <tr className={styles.clickableRow} onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}>
               <td>{row.id}</td>
               <td>{row.userId}</td>
@@ -82,7 +83,7 @@ export default function EmergencyAudit() {
               <td>{row.reviewedBy ?? '-'}</td>
               <td>{row.reviewedAt ?? '-'}</td>
               <td onClick={e => e.stopPropagation()}>
-                <button className={styles.btnSm} disabled={row.audited} onClick={() => handleReview(row.id)}>Review</button>
+                <button className={styles.btnSm} disabled={!!row.audited} onClick={() => handleReview(row.id)}>Review</button>
               </td>
             </tr>
             {expandedRow === row.id && (

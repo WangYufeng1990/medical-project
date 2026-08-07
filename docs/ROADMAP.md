@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 47 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 9 LOW). 1 CRITICAL backend-dependent deferred (C4). 2 LOW remaining (L1 any types, L6 `||` misuse).**
+> **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 49 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 11 LOW). 1 CRITICAL backend-dependent deferred (C4). L1 (any types) resolved in Round 43 — all Round 37 findings closed.**
 >
 > **Round 42 (2026-08-04): Integration tests decoupled from MySQL — run on isolated in-memory H2. `mvn clean install`: 135 tests, 0 failures (previously required a running MySQL and accumulated 8 broken tests as endpoints evolved).**
 >
@@ -1515,11 +1515,12 @@ staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: true, retry: 2
 **Fix**: Created `api/quality.ts`, `views/system/QualityMeasures.tsx` with measure list + report panel. Route `/system/quality` under AdminGuard. Sidebar link under admin section.
 **Commit**: `5bec26d`
 
-## Gap 4 ⚪ `QualityResult` Entity Missing
+## Gap 4 ⚪ `QualityResult` Entity Missing ✅ Fixed
 
 **Severity**: LOW — data model inconsistency
 **Problem**: ROADMAP Round 9 mentions `quality_result` table and `QualityResult` entity. Neither exists in `schema.sql` or codebase. `QualityMeasureService.calculateReport()` returns `HashMap` instead of a persisted entity.
-**Fix**: Create `quality_result` table + `QualityResult` entity, persist calculation results for audit trail.
+**Fix**: Created `quality_result` table + `QualityResult` entity, `persistResult()` saves calculation results, `getHistory()` reads persisted history (QualityController history endpoint). Report endpoint returns persisted entity.
+**Commit**: `d65130b`
 
 ## Gap 5 ⚪ Round 17-10 Permission Change Not Landed ✅ Resolved (by design)
 
@@ -1740,7 +1741,7 @@ Deferred — B10 (self-registration), B12 (advance directives),
 
 | # | Issue | Location |
 |---|-------|----------|
-| L1 | Widespread `any` types — no TypeScript safety | global |
+| L1 | ✅ Widespread `any` types — no TypeScript safety | global — resolved in Round 43: zero `any` remain; `noImplicitAny: true` now enforced |
 | L2 | ✅ `patientInfo` cleared on patient logout | `PatientLayout.tsx` |
 | L3 | ✅ Patient tokens cleared on staff logout | `StaffLayout.tsx` |
 | L4 | ✅ CarePlan `targetDate` input field added | patients detail |
@@ -1804,7 +1805,7 @@ Patients can self-service reset a forgotten password. No email infrastructure in
 
 | # | Issue | Plan | Status |
 |---|-------|------|--------|
-| L6 | Dashboard clinical cards (Vital Signs, Problem List, Immunizations, Care Plans) all route to `/patients` list — misleading UX. | Add `?tab=xxx` query param support to patients page. Clicking "Problem List" on dashboard → `/patients?tab=problems`. When clicking a patient row, auto-focus the corresponding tab (problems/vitals/immunizations/care-plans). Requires: update dashboard card paths + patients page URL param handling. | Pending |
+| L6 | Dashboard clinical cards (Vital Signs, Problem List, Immunizations, Care Plans) all route to `/patients` list — misleading UX. | Add `?tab=xxx` query param support to patients page. Clicking "Problem List" on dashboard → `/patients?tab=problems`. When clicking a patient row, auto-focus the corresponding tab (problems/vitals/immunizations/care-plans). Requires: update dashboard card paths + patients page URL param handling. | ✅ Complete — dashboard cards use `/patients?tab=problems|immunizations|care-plans`; patients page `useSearchParams` + `scrollIntoView` on `section-${tab}` anchors (vitals/problems/immunizations/care-plans). Landed with Round 37 M11 (`4c9e557`) |
 
 ## Stats
 
@@ -2014,3 +2015,53 @@ Note: integration endpoints (`/integration/*`) require **both** `Authorization: 
 ## Resolution Status
 
 R-1/R-2: pending — user chose to record rather than fix. R-3/R-4: accepted (functional fallbacks exist).
+
+---
+
+# Round 43: Eliminate All TypeScript `any` Types (Round 37 L1) ✅ Complete
+
+> **Status: Complete (2026-08-07) — 193 explicit `any` sites eliminated, zero remain. `npx tsc --noEmit` passes with `noImplicitAny: true` (previously the build never ran tsc).**
+> **Method: Plan → Implement done directly. ~57 files changed.**
+
+## Problem
+
+193 explicit `any` types across the frontend (56 in `api/` + `utils/` + `layout/`, ~123 in `views/`, plus 8 `as any` casts, 3 `<any>`, 1 `as any[]`). The axios interceptors unwrap `Result<T>` at runtime but statically `request.get()` returned `Promise<AxiosResponse<any>>` — `.records`/`.total` accesses compiled only by accident. `npm run build` never ran `tsc` (`"build": "vite build"`), and `tsconfig.json` had `noImplicitAny: false` — the `any` forest never surfaced.
+
+## Changes
+
+### New: Typing infrastructure
+| File | Description |
+|------|-------------|
+| `src/types/common.ts` | `Result<T>` / `PageResult<T>` (`total, size, current, records`) / `PageQuery` / `JwtPayload` / `IdName` |
+| `src/types/entities.ts` | ~50 interfaces — one per backend VO (numeric ids) + per-module form types (string inputs, sent directly as create/update payloads) + create payload types (converted numbers) + `LoginResponse` / `PatientLoginResponse` |
+| `src/vite-env.d.ts` | **New (was missing)** — Vite CSS-module declarations; pre-existing tsc failures surfaced by the new type gate |
+
+### API layer (`api/*.ts`, 27 files + `utils/auth.ts`)
+- **Typed `http` facade** in `request.ts` / `patientRequest.ts`: `http.get<T>()` etc. resolve to the unwrapped payload type (matching the interceptor's runtime unwrap) instead of `AxiosResponse<T>`.
+- **Axios module augmentation**: `_retry?: boolean; silent?: boolean` on `AxiosRequestConfig` — removes the `{ silent: true } as any` casts.
+- Typed interceptors (`InternalAxiosRequestConfig`, `AxiosResponse<Result<unknown> | Blob>`, `AxiosError<{ message?: string }>`); early-return guard when `err.config` is undefined; refresh calls typed via `axios.post<Result<LoginResponse>>`.
+- `params: any` → per-module query interfaces; `data: any` → form/create-payload interfaces; every function returns a typed `Promise<T>`.
+- `parseJwt()` returns `JwtPayload`; `csv(v: unknown)`; refill/charge/bill/priorAuth/referral update signatures accept partial/status payloads.
+
+### Views (~35 files)
+- `emptyForm: any` → typed form interfaces; `useState<any[]>` → typed entity arrays; mutationFn/`onError`/map callbacks lose `any` annotations (inferred from the typed API layer); `catch (err: any)` → `catch (err: unknown)` + `instanceof` narrowing; `openForm(row?: any)` → `row?: <Entity>VO`.
+- Dynamic-key `setForm({ ...form, [f]: value })` sites → `as const` field arrays + cast at the setForm boundary.
+- `as any` sites fixed individually: chat JWT payloads via `parseJwt`, SSE ticket via typed `SseTicketVO`, billing/charges union fallback via `Promise.resolve<PageResult<AppointmentVO>>`, dashboard `keyof DashboardStats`, ConfirmDialog `null`, StaffLayout divider union type, prescriptions patient lookup.
+- Chat views + `useChatSse` share `MessageVO`/`ConversationVO` from `types/entities` (were duplicated per file).
+- Patient portal views migrate from raw `patientRequest.get(...)` to the typed `http` facade.
+
+### Config
+- `tsconfig.json`: `noImplicitAny: false` → `true`.
+
+## Verified
+
+- `npx tsc --noEmit` — **zero errors** (first real type gate; previously never ran)
+- `grep -rnE '\bany\b|<any>' src` — zero hits
+- `npm run build` — passes (213 modules, 430KB JS)
+- Runtime smoke (H2 backend + API): staff login → patients/appointments/bills/prescriptions/charges/referrals lists 200; patient login → all 13 portal endpoints 200; create appointment + bill 200; CDS check `passed=true`; `npx vite build` of dev proxy OK
+- Two latent type-level bugs surfaced and fixed by the gate: missing `vite-env.d.ts` CSS declarations, and `useRef<ReturnType<typeof setTimeout>>()` missing initial argument
+
+## Notes
+
+- Zero runtime behavior changes by design (typing only). Two benign hardening touches: interceptor early-return on `err.config === undefined`, and login token persistence falls back to `''` instead of stringifying `undefined`.
+- `mvn` backend was started for the smoke test and left running (H2 profile) — stop with `lsof -ti:8080 | xargs kill` if not needed.

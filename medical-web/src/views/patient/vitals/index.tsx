@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { http } from '../../../api/patientRequest'
+import { VitalSignVO } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
 export default function PatientVitals() {
   const { data: vitals, isLoading } = useQuery({
     queryKey: ['me', 'vitals'],
-    queryFn: () => patientRequest.get('/patient/me/vitals').then(r => r ?? []),
+    queryFn: () => http.get<VitalSignVO[]>('/patient/me/vitals'),
   })
 
   if (isLoading) return <p style={{ color: '#909399' }}>Loading...</p>
@@ -17,7 +18,7 @@ export default function PatientVitals() {
       <table className={styles.table}>
         <thead><tr><th>Date</th><th>BP</th><th>HR</th><th>Temp</th><th>RR</th><th>O₂</th><th>BMI</th><th>Notes</th></tr></thead>
         <tbody>
-          {(vitals ?? []).map((v: any) => (
+          {(vitals ?? []).map(v => (
             <tr key={v.id}>
               <td>{v.recordedAt?.substring(0, 16)}</td>
               <td>{v.systolicBp != null ? `${v.systolicBp}/${v.diastolicBp}` : '-'}</td>
