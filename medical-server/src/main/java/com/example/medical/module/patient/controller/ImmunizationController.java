@@ -4,8 +4,10 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.module.patient.dto.ImmunizationVO;
 import com.example.medical.module.patient.entity.Immunization;
 import com.example.medical.module.patient.repository.ImmunizationRepository;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -25,20 +27,20 @@ public class ImmunizationController {
 
     @GetMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<Immunization>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ImmunizationVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "administrationDate"));
         var page = immunizationRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId), pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
-                page.getNumber() + 1, page.getContent()));
+                page.getNumber() + 1, page.getContent().stream().map(ImmunizationVO::fromEntity).toList()));
     }
 
     @PostMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "immunization", action = "CREATE")
-    public Result<Immunization> create(@PathVariable Long patientId, @RequestBody ImmunizationForm form) {
+    public Result<ImmunizationVO> create(@PathVariable Long patientId, @Valid @RequestBody ImmunizationForm form) {
         Immunization imm = new Immunization();
         imm.setPatientId(patientId);
         imm.setVaccineName(form.getVaccineName());
@@ -52,7 +54,7 @@ public class ImmunizationController {
         imm.setStatus(form.getStatus() != null ? form.getStatus() : "completed");
         imm.setAdministeredBy(form.getAdministeredBy());
         imm.setNotes(form.getNotes());
-        return Result.ok(immunizationRepository.save(imm));
+        return Result.ok(ImmunizationVO.fromEntity(immunizationRepository.save(imm)));
     }
 
     @Data

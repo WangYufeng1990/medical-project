@@ -4,9 +4,11 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.module.billing.dto.PriorAuthVO;
 import com.example.medical.module.billing.entity.PriorAuth;
 import com.example.medical.module.billing.repository.PriorAuthRepository;
 import com.example.medical.security.LoginUser;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -27,7 +29,7 @@ public class PriorAuthController {
 
     @GetMapping("/prior-auths")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<PriorAuth>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<PriorAuthVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
         var spec = patientId != null
@@ -35,14 +37,14 @@ public class PriorAuthController {
                 : null;
         var page = priorAuthRepository.findAll(spec, pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
-                page.getNumber() + 1, page.getContent()));
+                page.getNumber() + 1, page.getContent().stream().map(PriorAuthVO::fromEntity).toList()));
     }
 
     @PostMapping("/prior-auths")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "prior_auth", action = "CREATE")
-    public Result<PriorAuth> create(@RequestBody PriorAuthForm form, @AuthenticationPrincipal LoginUser loginUser) {
+    public Result<PriorAuthVO> create(@Valid @RequestBody PriorAuthForm form, @AuthenticationPrincipal LoginUser loginUser) {
         PriorAuth pa = new PriorAuth();
         pa.setPatientId(form.getPatientId());
         pa.setAuthType(form.getAuthType());
@@ -53,24 +55,25 @@ public class PriorAuthController {
         pa.setRequestedAt(LocalDate.now());
         pa.setRequestedBy(loginUser.getUserId());
         pa.setNotes(form.getNotes());
-        return Result.ok(priorAuthRepository.save(pa));
+        return Result.ok(PriorAuthVO.fromEntity(priorAuthRepository.save(pa)));
     }
 
     @PutMapping("/prior-auths/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "prior_auth", action = "UPDATE")
-    public Result<PriorAuth> update(@PathVariable Long id, @RequestBody PriorAuthForm form) {
+    public Result<PriorAuthVO> update(@PathVariable Long id, @Valid @RequestBody PriorAuthForm form) {
         PriorAuth pa = priorAuthRepository.findById(id).orElseThrow();
         if (form.getStatus() != null) pa.setStatus(form.getStatus());
         if (form.getAuthNumber() != null) pa.setAuthNumber(form.getAuthNumber());
         if (form.getResolvedAt() != null) pa.setResolvedAt(form.getResolvedAt());
         if (form.getNotes() != null) pa.setNotes(form.getNotes());
-        return Result.ok(priorAuthRepository.save(pa));
+        return Result.ok(PriorAuthVO.fromEntity(priorAuthRepository.save(pa)));
     }
 
     @Data
     static class PriorAuthForm {
+        @jakarta.validation.constraints.NotNull
         private Long patientId;
         private String authType;
         private String itemName;

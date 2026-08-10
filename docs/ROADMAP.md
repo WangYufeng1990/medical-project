@@ -2014,7 +2014,7 @@ Note: integration endpoints (`/integration/*`) require **both** `Authorization: 
 
 ## Resolution Status
 
-R-1/R-2: pending — user chose to record rather than fix. R-3/R-4: accepted (functional fallbacks exist).
+R-1/R-2: ✅ Fixed in Round 44 (2026-08-07). R-3/R-4: accepted (functional fallbacks exist).
 
 ---
 
@@ -2065,3 +2065,35 @@ R-1/R-2: pending — user chose to record rather than fix. R-3/R-4: accepted (fu
 
 - Zero runtime behavior changes by design (typing only). Two benign hardening touches: interceptor early-return on `err.config === undefined`, and login token persistence falls back to `''` instead of stringifying `undefined`.
 - `mvn` backend was started for the smoke test and left running (H2 profile) — stop with `lsof -ti:8080 | xargs kill` if not needed.
+
+---
+
+# Round 44: R-1/R-2 — VO Returns + @Valid on Remaining Controllers ✅ Complete
+
+> **Status: Complete (2026-08-07) — Post-Round 42 findings R-1 (raw entity responses) and R-2 (missing @Valid) resolved.**
+
+## Changes
+
+### New VOs (6) — `fromEntity()` in the DTO class per project convention
+| VO | Module |
+|----|--------|
+| `ReferralVO` | appointment/dto |
+| `RefillRequestVO` | prescription/dto |
+| `ProblemVO` / `ImmunizationVO` / `CarePlanVO` | patient/dto |
+| `PriorAuthVO` | billing/dto |
+
+Each VO mirrors the entity fields exactly — **field names verified identical to the frontend types via live API smoke** (JSON key sets compared on all 6 list endpoints + creates).
+
+### Controllers (6) — no raw entities returned anywhere
+- All `list` endpoints → `Result<PageResult<VO>>`; all create/update/approve/deny → `Result<VO>`; `ReferralController.listByPatient` and `RefillController.listMine/listPending` → `Result<List<VO>>`.
+- `@Valid` added to all create/update request bodies (9 sites across Referral/Problem/Immunization/CarePlan/PriorAuth; Refill already had it).
+- `@NotNull` on `patientId` in ReferralForm + PriorAuthForm — missing patientId now returns 400 with a clear message instead of 500 (DB constraint).
+
+### Bonus fix (discovered during verification)
+- **Referral create was broken**: `referring_doctor_id` is NOT NULL but the frontend form never sends `referringDoctorId` → every UI-created referral 500'd. Now defaults to the authenticated user (the doctor creating the referral).
+
+## Verified
+
+- `mvn test`: 135 tests, 0 failures (H2 in-memory)
+- Live API smoke (H2 backend): all 6 list endpoints return VO JSON with unchanged field names; create problem/immunization/care-plan/referral/prior-auth all 200; missing `patientId` → 400 `"patientId: must not be null"`; referral create now persists with `referringDoctorId` = login user
+- Frontend unaffected: response field names identical to before (verified against Round 43 `src/types/entities.ts`)

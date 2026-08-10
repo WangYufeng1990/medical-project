@@ -4,17 +4,22 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.module.appointment.dto.ReferralVO;
 import com.example.medical.module.appointment.entity.Referral;
 import com.example.medical.module.appointment.repository.ReferralRepository;
+import com.example.medical.security.LoginUser;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -25,7 +30,7 @@ public class ReferralController {
 
     @GetMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<Referral>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ReferralVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "referralDate"));
         org.springframework.data.jpa.domain.Specification<Referral> spec = patientId != null
@@ -33,23 +38,26 @@ public class ReferralController {
                 : null;
         var page = referralRepository.findAll(spec, pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
-                page.getNumber() + 1, page.getContent()));
+                page.getNumber() + 1, page.getContent().stream().map(ReferralVO::fromEntity).toList()));
     }
 
     @GetMapping("/patients/{patientId}/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<java.util.List<Referral>> listByPatient(@PathVariable Long patientId) {
-        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(patientId));
+    public Result<List<ReferralVO>> listByPatient(@PathVariable Long patientId) {
+        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(patientId)
+                .stream().map(ReferralVO::fromEntity).toList());
     }
 
     @PostMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "referral", action = "CREATE")
-    public Result<Referral> create(@RequestBody ReferralForm form) {
+    public Result<ReferralVO> create(@Valid @RequestBody ReferralForm form, @AuthenticationPrincipal LoginUser loginUser) {
         Referral r = new Referral();
         r.setPatientId(form.getPatientId());
-        r.setReferringDoctorId(form.getReferringDoctorId());
+        // referring_doctor_id is NOT NULL; the frontend form never sends it, so
+        // default to the authenticated doctor creating the referral.
+        r.setReferringDoctorId(form.getReferringDoctorId() != null ? form.getReferringDoctorId() : loginUser.getUserId());
         r.setSpecialistName(form.getSpecialistName());
         r.setSpecialistNpi(form.getSpecialistNpi());
         r.setSpecialty(form.getSpecialty());
@@ -60,24 +68,25 @@ public class ReferralController {
         r.setReferralDate(form.getReferralDate() != null ? form.getReferralDate() : LocalDate.now());
         r.setAppointmentDate(form.getAppointmentDate());
         r.setNotes(form.getNotes());
-        return Result.ok(referralRepository.save(r));
+        return Result.ok(ReferralVO.fromEntity(referralRepository.save(r)));
     }
 
     @PutMapping("/referrals/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "referral", action = "UPDATE")
-    public Result<Referral> update(@PathVariable Long id, @RequestBody ReferralForm form) {
+    public Result<ReferralVO> update(@PathVariable Long id, @Valid @RequestBody ReferralForm form) {
         Referral r = referralRepository.findById(id).orElseThrow();
         if (form.getStatus() != null) r.setStatus(form.getStatus());
         if (form.getAppointmentDate() != null) r.setAppointmentDate(form.getAppointmentDate());
         if (form.getCompletionDate() != null) r.setCompletionDate(form.getCompletionDate());
         if (form.getNotes() != null) r.setNotes(form.getNotes());
-        return Result.ok(referralRepository.save(r));
+        return Result.ok(ReferralVO.fromEntity(referralRepository.save(r)));
     }
 
     @Data
     static class ReferralForm {
+        @jakarta.validation.constraints.NotNull
         private Long patientId;
         private Long referringDoctorId;
         private String specialistName;

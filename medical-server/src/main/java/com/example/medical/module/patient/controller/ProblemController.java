@@ -4,8 +4,10 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.module.patient.dto.ProblemVO;
 import com.example.medical.module.patient.entity.Problem;
 import com.example.medical.module.patient.repository.ProblemRepository;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -25,20 +27,20 @@ public class ProblemController {
 
     @GetMapping("/patients/{patientId}/problems")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<Problem>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ProblemVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "onsetDate"));
         var page = problemRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId), pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
-                page.getNumber() + 1, page.getContent()));
+                page.getNumber() + 1, page.getContent().stream().map(ProblemVO::fromEntity).toList()));
     }
 
     @PostMapping("/patients/{patientId}/problems")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "problem", action = "CREATE")
-    public Result<Problem> create(@PathVariable Long patientId, @RequestBody ProblemForm form) {
+    public Result<ProblemVO> create(@PathVariable Long patientId, @Valid @RequestBody ProblemForm form) {
         Problem p = new Problem();
         p.setPatientId(patientId);
         p.setSnomedCode(form.getSnomedCode());
@@ -50,20 +52,20 @@ public class ProblemController {
         p.setSeverity(form.getSeverity());
         p.setRecordedBy(form.getRecordedBy());
         p.setNotes(form.getNotes());
-        return Result.ok(problemRepository.save(p));
+        return Result.ok(ProblemVO.fromEntity(problemRepository.save(p)));
     }
 
     @PutMapping("/patients/{patientId}/problems/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "problem", action = "UPDATE")
-    public Result<Problem> update(@PathVariable Long patientId, @PathVariable Long id, @RequestBody ProblemForm form) {
+    public Result<ProblemVO> update(@PathVariable Long patientId, @PathVariable Long id, @Valid @RequestBody ProblemForm form) {
         Problem p = problemRepository.findById(id).orElseThrow();
         if (form.getResolutionDate() != null) p.setResolutionDate(form.getResolutionDate());
         if (form.getStatus() != null) p.setStatus(form.getStatus());
         if (form.getSeverity() != null) p.setSeverity(form.getSeverity());
         if (form.getNotes() != null) p.setNotes(form.getNotes());
-        return Result.ok(problemRepository.save(p));
+        return Result.ok(ProblemVO.fromEntity(problemRepository.save(p)));
     }
 
     @Data
