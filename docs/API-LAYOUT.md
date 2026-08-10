@@ -56,6 +56,8 @@ Paginated endpoints return `Result<PageResult<T>>`:
 { "code": 200, "message": "ok", "data": { "total": 100, "size": 10, "current": 1, "records": [...] } }
 ```
 
+All responses are DTO/VO objects (never raw entities) — conversion lives in the DTO classes (`fromEntity()`).
+
 ---
 
 ## API Endpoints
@@ -89,7 +91,9 @@ All require `ADMIN` role.
 | GET | `/{id}` | path | User detail (cached) |
 | POST | `/` | body: SysUserFormDTO | Create user |
 | PUT | `/{id}` | path + body | Update user (evicts cache) |
+| PUT | `/{id}/unlock` | path | Unlock a locked account (clears failed attempts + lock expiry) |
 | DELETE | `/{id}` | path | Soft-delete user (evicts cache) |
+| GET | `/doctors` | — | Doctor list `[{id, username, realName}]` (ADMIN,DOCTOR — used by appointment/prescription forms) |
 
 ### User Profile — `/api/v1/users/me`
 
@@ -149,55 +153,154 @@ All require `PATIENT` role.
 | GET | `/` | — | Current patient profile |
 | PUT | `/` | body: {phoneMobile, email, addressLine1, city, state, zipCode, ...} | Self-service profile update (name/DOB/MRN blocked — requires staff verification) |
 | GET | `/appointments` | `?page=1&size=10` | My appointments |
+| PUT | `/appointments/{id}/cancel` | path | Cancel own appointment (status 0/1/5 → 2). Rejects cancelled/completed/no-show (409); past appointments rejected (400) |
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
 | GET | `/observations` | `?loinc=&page=1&size=20` | My lab results — `PageResult<Observation>`; `loinc` filters server-side |
-| POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
-| POST | `/patient/reset-password` | body: {token, newPassword} | Public. Resets password (policy-enforced), clears lockout; token single-use, 401 on invalid/expired/reused |
 | GET | `/observations/trend` | `?loinc=` (required) | Full history of one test (bounded single-test dataset) for trend rendering |
+| GET | `/vitals` | — | My vital signs |
+| GET | `/problems` | — | My problem list |
+| GET | `/immunizations` | — | My immunizations |
+| GET | `/care-plans` | — | My care plans |
+| GET | `/referrals` | — | My referrals |
+| GET | `/prior-auths` | — | My prior authorizations |
+| GET | `/disclosures` | `?page=1&size=20` | HIPAA §164.528 accounting of disclosures — audit_log rows for my patientId |
 | GET | `/consent` | — | My consent records |
+| GET | `/refill-requests` | — | My prescription refill requests |
+| POST | `/refill-requests` | body: {prescriptionId, reason?} | Request a refill for a prescription |
+| GET | `/messages/conversations` | `?page=1&size=20` | My chat conversations |
+| GET | `/messages/{partnerId}` | `?page=1&size=50` | Chat messages with a staff member |
+| POST | `/messages` | body: {receiverId, content} | Send a chat message |
 | PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified. DRAFT is not payable |
 | PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
+| POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
+| POST | `/patient/reset-password` | body: {token, newPassword} | Public. Resets password (policy-enforced), clears lockout; token single-use, 401 on invalid/expired/reused |
 
 ### Appointments — `/api/v1/appointments`
 
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
-| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&status=` | Paginated list |
+| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&status=&patientId=` | Paginated list (DOCTOR scoped to own patients) |
 | GET | `/conflicts` | ADMIN,DOCTOR | `?doctorId=&time=&excludeId=` | Appointments overlapping the doctor's 30-min window (excludes cancelled; excludeId = self when editing) |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Appointment detail |
 | POST | `/` | ADMIN,DOCTOR | body: AppointmentFormDTO | Create (30-min conflict check) |
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body | Update (30-min conflict check) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
-Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 4 = No-Show, 5 = Rescheduled, 6 = In Progress.
+Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 4 = No-Show, 5 = Rescheduled, 6 = In Progress. Statuses 2/3/4 are terminal — update rejected with 409.
 
 ### Prescriptions — `/api/v1/prescriptions`
 
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
-| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10` | Paginated list |
+| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&patientId=` | Paginated list (DOCTOR scoped to own patients) |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Prescription detail with items |
 | GET | `/by-patient/{patientId}` | ADMIN,DOCTOR | path | All prescriptions for a patient (used by emergency break-glass) |
-| POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO | Create + items |
-| PUT | `/{id}` | ADMIN,DOCTOR | path + body: PrescriptionUpdateFormDTO | Update header + replace items |
-| DELETE | `/{id}` | ADMIN | path | Soft-delete + items |
-| PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409) |
+| POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO | Create + items (CDS interaction/allergy check first) |
+| DELETE | `/{id}` | ADMIN | path | Soft-delete + items (hidden for transmitted/dispensed/cancelled) |
+| PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409). Prescriptions are cancel-reissue — no in-place edit endpoint (Round 28/34) |
+
+### Prescription Refill Requests — `/api/v1/prescriptions/refill-requests`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/` | ADMIN,DOCTOR | Pending refill requests (patient → doctor approval workflow) |
+| PUT | `/{id}/approve` | ADMIN,DOCTOR | Approve a refill request |
+| PUT | `/{id}/deny` | ADMIN,DOCTOR | body: {notes?} — deny a refill request |
 
 ### Billing — `/api/v1/bills`
 
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
-| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&claimStatus=` | Paginated list |
+| GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&patientId=` | Paginated list (DOCTOR scoped to own patients) |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Bill detail |
 | POST | `/` | ADMIN,DOCTOR | body: BillFormDTO | Create bill (DRAFT) |
 | PUT | `/{id}/submit` | ADMIN,DOCTOR | path | Submit claim (DRAFT → SUBMITTED) |
 | PUT | `/{id}/adjudicate` | ADMIN | body: {insurancePayment, adjustment, claimNumber, adjudicationDate} | Adjudicate (SUBMITTED/PENDING). Rejects PAID/DENIED (409) |
+| PUT | `/{id}/pay` | ADMIN,DOCTOR | body: {paymentAmount, paymentMethod} | Staff-side payment (PENDING → PAID). DRAFT not payable. Rejects PAID/DENIED (409) |
 | PUT | `/{id}/deny` | ADMIN | body: {reason} | Deny claim (PENDING → DENIED). Rejects PAID (409) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 
-Claim lifecycle: DRAFT → SUBMITTED → (adjudicate) → PENDING → (patient pays) PAID / (staff deny) DENIED.
+Claim lifecycle: DRAFT → SUBMITTED → (adjudicate) → PENDING → (pay) PAID / (deny) DENIED.
+
+### Charges (Superbill) — `/api/v1/charges`
+
+Requires `ADMIN` or `DOCTOR`. Charge capture linked to appointments, convertible to bills.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10` | Paginated charge list |
+| POST | `/` | body: {patientId, appointmentId?, cptCodes?, icd10Codes?, chargeAmount?, visitType?, notes?} | Create charge (DRAFT) |
+| PUT | `/{id}/convert` | path | Convert DRAFT charge → bill (status → BILLED, creates Bill) |
+
+### Referrals — `/api/v1/referrals`
+
+Requires `ADMIN` or `DOCTOR`. Referral lifecycle: PENDING → SCHEDULED → COMPLETED → CLOSED (status transitions via update).
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10&patientId=` | Paginated referral list |
+| GET | `/patients/{patientId}/referrals` | path | All referrals for a patient |
+| POST | `/` | body: ReferralForm | Create referral. `referringDoctorId` optional — defaults to the authenticated doctor |
+| PUT | `/{id}` | path + body | Update status/appointmentDate/completionDate/notes (Schedule/Complete/Close) |
+
+### Problems (Problem List) — `/api/v1/patients/{patientId}/problems`
+
+Requires `ADMIN` or `DOCTOR`. SNOMED CT + ICD-10 coded problem list. Status: ACTIVE / RESOLVED.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10` | Paginated problems for a patient |
+| POST | `/` | body: {snomedCode?, snomedDisplay, icd10Code?, onsetDate?, severity?, notes?} | Add problem (default status ACTIVE) |
+| PUT | `/{id}` | path + body | Resolve (`status=RESOLVED` + resolutionDate) or update severity/notes |
+
+### Vital Signs — `/api/v1/patients/{patientId}/vitals`
+
+Requires `ADMIN` or `DOCTOR`. BP/HR/temp/RR/O₂/BMI.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10` | Paginated vital signs for a patient |
+| POST | `/` | body: {systolicBp?, diastolicBp?, heartRate?, temperature?, respiratoryRate?, oxygenSaturation?, heightCm?, weightKg?, bmi?, notes?} | Record vital signs |
+
+### Immunizations — `/api/v1/patients/{patientId}/immunizations`
+
+Requires `ADMIN` or `DOCTOR`. CVX-coded immunizations.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10` | Paginated immunizations for a patient |
+| POST | `/` | body: {vaccineName, cvxCode?, administrationDate?, lotNumber?, manufacturer?, doseNumber?, site?, route?, notes?} | Record immunization (default status `completed`) |
+
+### Care Plans — `/api/v1/patients/{patientId}/care-plans`
+
+Requires `ADMIN` or `DOCTOR`. Status: ACTIVE / COMPLETED.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10` | Paginated care plans for a patient |
+| POST | `/` | body: {title, goal?, interventions?, startDate?, targetDate?, notes?} | Create care plan (default status ACTIVE) |
+| PUT | `/{id}` | path + body | Update status/completedDate/notes |
+
+### Prior Authorizations — `/api/v1/prior-auths`
+
+Requires `ADMIN` or `DOCTOR`. Status: PENDING → APPROVED / DENIED.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/` | `?page=1&size=10&patientId=` | Paginated prior auth list |
+| POST | `/` | body: {patientId, authType, itemName?, itemCode?, insurancePayer?, notes?} | Create prior auth (default status PENDING) |
+| PUT | `/{id}` | path + body | Approve (`status=APPROVED` + authNumber + resolvedAt) or deny (`status=DENIED` + resolvedAt) |
+
+### Formulary — `/api/v1/formulary`
+
+Requires `ADMIN` or `DOCTOR`. Drug formulary coverage lookup.
+
+| Method | Path | Params | Description |
+|--------|------|--------|-------------|
+| GET | `/check` | `?rxnormCode=&insurancePayer=` | Coverage check → `{found, drugName?, tier?, priorAuthRequired?, stepTherapyRequired?, alternatives?}` or `{found: false, message}` |
+| GET | `/{rxnormCode}` | path | All formulary entries for a drug across payers |
 
 ### Chat (Staff) — `/api/v1/messages`
 
@@ -245,6 +348,7 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=20&userId=&patientId=&module=&action=&fromDate=&toDate=` | Search/filter audit logs |
+| GET | `/distinct-values` | — | Distinct module/action values for filter dropdowns |
 
 ### FHIR — `/api/v1/fhir`
 
@@ -290,7 +394,8 @@ Requires `ADMIN` or `DOCTOR`. Clinical Decision Support — pre-prescription scr
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| POST | `/check` | body: {patientId, items[{rxnormCode, drugName}]} | Check drug-drug interactions + drug-allergy contraindications before prescribing |
+| POST | `/check` | body: {patientId, items[{rxnormCode, drugName}]} | Check drug-drug interactions + drug-allergy contraindications before prescribing. Returns `{passed, warnings[]}` |
+| GET | `/drugs` | `?rxnorm=` | Drug name lookup by RxNorm code (unknown code → empty drugName) |
 
 ### Integration — `/api/v1/integration`
 
@@ -342,7 +447,9 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/measures` | — | List all quality measure definitions |
-| GET | `/measures/{cmsId}/report` | path | Calculate performance report (CMS122/CMS125/CMS165) |
+| GET | `/measures/{cmsId}/report` | path | Latest persisted performance report (CMS122/CMS125/CMS165) |
+| POST | `/measures/{cmsId}/calculate` | path | Run the measure calculation now; result persisted to `quality_result` |
+| GET | `/measures/{cmsId}/history` | path | Persisted calculation history for a measure |
 
 ---
 

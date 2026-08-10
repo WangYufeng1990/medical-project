@@ -22,7 +22,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok, Hutool | latest |
-| Testing | JUnit 5 + Spring Boot Test | 121 tests (112 integration + 9 unit) |
+| Testing | JUnit 5 + Spring Boot Test | 135 tests (110 integration + 25 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**
