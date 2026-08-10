@@ -2014,7 +2014,7 @@ Note: integration endpoints (`/integration/*`) require **both** `Authorization: 
 
 ## Resolution Status
 
-R-1/R-2: ✅ Fixed in Round 44 (2026-08-07). R-3/R-4: accepted (functional fallbacks exist).
+R-1/R-2: ✅ Fixed in Round 44 (2026-08-07). R-3/R-4: ✅ Fixed in Round 44 follow-up (2026-08-10). All Post-Round 42 findings closed.
 
 ---
 
@@ -2097,3 +2097,12 @@ Each VO mirrors the entity fields exactly — **field names verified identical t
 - `mvn test`: 135 tests, 0 failures (H2 in-memory)
 - Live API smoke (H2 backend): all 6 list endpoints return VO JSON with unchanged field names; create problem/immunization/care-plan/referral/prior-auth all 200; missing `patientId` → 400 `"patientId: must not be null"`; referral create now persists with `referringDoctorId` = login user
 - Frontend unaffected: response field names identical to before (verified against Round 43 `src/types/entities.ts`)
+
+### Round 44 follow-up: R-3/R-4 — Silent Catches (2026-08-10) ✅
+
+| Finding | Fix |
+|---------|-----|
+| R-3: LoincCatalog load failure → blank page | `loadError` state + error banner with Retry button (re-runs the load) |
+| R-4: RxNorm auto-lookup silent failure | `rxLookupError` state, non-blocking inline hint in the items section. Covers both failure (network/5xx → "RxNorm lookup failed") and no-match (unknown code → "No drug found for RxNorm X — enter the drug name manually"); cleared on next input or success |
+
+Verified: `npx tsc --noEmit` clean (noImplicitAny: true), `npm run build` passes. Backend RxNorm lookup confirmed: valid code → drugName filled; unknown code → 200 + empty drugName (now surfaced as a hint instead of silence).

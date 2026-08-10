@@ -8,8 +8,10 @@ export default function LoincCatalog() {
   const navigate = useNavigate()
   const [catalog, setCatalog] = useState<LoincEntry[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [loadError, setLoadError] = useState('')
 
-  useEffect(() => {
+  const loadCatalog = () => {
+    setLoadError('')
     getLoincCatalog()
       .then(list => {
         setCatalog(list)
@@ -19,8 +21,10 @@ export default function LoincCatalog() {
         })
         setExpanded(init)
       })
-      .catch(() => {})
-  }, [])
+      .catch((err: Error) => setLoadError(err.message || 'Failed to load LOINC catalog'))
+  }
+
+  useEffect(() => { loadCatalog() }, [])
 
   const panels = catalog.reduce((acc: Record<string, LoincEntry[]>, c) => {
     const parent = c.panelParentCode || 'UNGROUPED'
@@ -41,6 +45,13 @@ export default function LoincCatalog() {
   return (
     <div>
       <h2 style={{ marginBottom: 20 }}>LOINC Catalog</h2>
+
+      {loadError && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fef0f0', border: '1px solid #fbc4c4', borderRadius: 6, color: '#F56C6C', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{loadError}</span>
+          <button className={styles.btnSm} onClick={loadCatalog}>Retry</button>
+        </div>
+      )}
 
       {Object.entries(panels).map(([parentCode, tests]) => (
         <div key={parentCode} style={{

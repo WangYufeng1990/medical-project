@@ -29,6 +29,7 @@ export default function Prescriptions() {
   const [showCdsModal, setShowCdsModal] = useState(false)
   const [pendingCdsPayload, setPendingCdsPayload] = useState<PrescriptionCreatePayload | null>(null)
   const [formError, setFormError] = useState('')
+  const [rxLookupError, setRxLookupError] = useState('')
   const [cdsChecking, setCdsChecking] = useState(false)
 
   const { data: refillRequests } = useQuery({
@@ -189,17 +190,21 @@ export default function Prescriptions() {
       items[idx] = { ...items[idx], rxnormCode: code } as PrescriptionItemForm
       return { ...prev, items }
     })
-    if (!code || !code.trim()) return
+    if (!code || !code.trim()) { setRxLookupError(''); return }
+    setRxLookupError('')
     lookupDrug(code.trim()).then(result => {
       if (result.drugName) {
+        setRxLookupError('')
         setForm(prev => {
           if (prev.items[idx]?.rxnormCode !== code.trim()) return prev
           const items = [...prev.items]
           items[idx] = { ...items[idx], drugName: result.drugName } as PrescriptionItemForm
           return { ...prev, items }
         })
+      } else {
+        setRxLookupError(`No drug found for RxNorm ${code.trim()} — enter the drug name manually.`)
       }
-    }).catch(() => {})
+    }).catch(() => setRxLookupError('RxNorm lookup failed — enter the drug name manually.'))
   }
 
   return (
@@ -292,6 +297,7 @@ export default function Prescriptions() {
               </div>
             </div>
           ))}
+          {rxLookupError && <div style={{ color: '#E6A23C', fontSize: 12, marginBottom: 8 }}>⚠️ {rxLookupError}</div>}
           <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>
 
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
