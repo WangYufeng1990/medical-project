@@ -197,6 +197,8 @@ Entity/DTO conversion logic is encapsulated in DTOs' internal `fromEntity()` / `
 
 ### 5.1 Authentication Architecture
 
+> **Operational status (as of 2026-08):** The Okta integration is implemented in code (password grant, refresh, userinfo) but **not actually deployed** — `okta.*` config holds placeholders in `application.yml` and is absent from `application-prod.yml`. Even the prod profile validates/issives locally-signed HS256 JWTs (`SecurityConfigProd` reads `AES_KEY`); Okta JWKS (RS256) is the target architecture for real production deployment, not the current state. The whole system currently runs in dev-mode with local BCrypt + local JWT.
+
 ```
 Production:                          Development (h2/dev profile):
 ┌─────────┐                          ┌──────────────────┐
@@ -250,13 +252,14 @@ Production:                          Development (h2/dev profile):
 Patient auth is **always local**, regardless of environment. Staff auth continues to use the external IdP
 (Okta / Auth0 / Cognito) for production, with the same `DevJwtEncoder` fallback in dev mode.
 
-Patient tokens have a longer default expiry (24 hours, configurable via `app.security.patient-token-expiry-seconds`)
-since there is no separate refresh token. When the token expires, the patient simply logs in again.
+Patient access tokens have a longer default expiry (24 hours, configurable via `app.security.patient-token-expiry-seconds`).
+Rotation is handled by the patient refresh token (30 days, see §5.3) instead of re-login.
 
 **Development:** When `app.security.dev-mode=true` is explicitly set, `SecurityConfigDev` issues a locally-signed HMAC-SHA256 JWT with `roles` + `uid` claims — scoped to dev and h2 profiles only. Patient auth uses local JWT in **all** environments, not just dev.
 
-### 5.3 Token Refresh (Staff Only)
+### 5.3 Token Refresh
 
+**Staff:**
 ```
 POST /api/v1/auth/refresh { refreshToken }
   → Okta /v1/token (grant_type=refresh_token)
@@ -265,8 +268,9 @@ POST /api/v1/auth/refresh { refreshToken }
   → Dev environment doesn't support refresh (re-login instead)
 ```
 
-Patient tokens are long-lived (default 24h) with no refresh mechanism. Expired tokens require re-login.
-This is appropriate for browser-SPA use where token revocation isn't needed.
+**Patient:** `POST /api/v1/patient/refresh` (permitAll) — local refresh JWT with `scp=["refresh"]` + `roles=[PATIENT]`,
+30-day expiry (`app.security.patient-refresh-token-expiry-seconds`), full rotation (each refresh invalidates the
+previous token), returns a new access + refresh pair. Patient login returns both tokens.
 
 ### 5.4 RBAC Access Control
 
@@ -291,8 +295,10 @@ RBAC model: User → Role → Menu/Permission → API access control. Five table
 .authorizeHttpRequests(auth -> auth
     .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
                      "/api/v1/patient/login", "/api/v1/patient/refresh",
-                     "/api/v1/fhir/metadata").permitAll()
-    .requestMatchers("/doc.html", "/webjars/**", "/v3/api-docs/**").permitAll()
+                     "/api/v1/patient/forgot-password", "/api/v1/patient/reset-password",
+                     "/api/v1/fhir/metadata",
+                     "/api/v1/chat/subscribe").permitAll()   // subscribe auth = single-use ticket
+    .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**", "/h2-console/**").permitAll()
     .anyRequest().authenticated())
 .oauth2ResourceServer(oauth2 -> oauth2
     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtClaimMapper)));
@@ -619,7 +625,7 @@ Trend query: `GET /api/v1/patients/{id}/observations?loinc=CODE`. Panel expansio
 
 ### 10.10 eCQM — Clinical Quality Measures
 
-`quality_measure` table stores CMS MIPS/MACRA measure definitions (title + SQL query). `QualityMeasureService.calculateReport()` executes denominator/numerator/exclusion SQL → performance rate → compare against CMS targets.
+`quality_measure` table stores CMS MIPS/MACRA measure definitions (title + SQL query). `QualityMeasureService.calculateReport()` executes denominator/numerator/exclusion SQL → performance rate → compare against CMS targets. Results are persisted to `quality_result` for auditability — `POST /measures/{cmsId}/calculate` runs on demand, `GET /measures/{cmsId}/report` returns the latest persisted result, `GET /measures/{cmsId}/history` lists past calculations (Round 34 Gap 4).
 
 Seed data includes 3 CMS measures: CMS122v11 (HbA1c control), CMS125v11 (breast cancer screening), CMS165v11 (hypertension control).
 
@@ -667,6 +673,7 @@ Result.fail(404, "Patient not found")
 |----------|-------|
 | `/api/v1/auth/login` | 10/min/IP |
 | `/api/v1/patient/login` | 10/min/IP |
+| `/api/v1/auth/refresh` + `/api/v1/patient/refresh` | 20/min/IP |
 | `/api/v1/export/*` | 5/hour/IP |
 
 Based on Redisson `RRateLimiter`, exceeded limits return HTTP 429.
@@ -687,11 +694,11 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.6 Consent Management
 
-`POST /api/v1/consent` (ADMIN) + `GET /api/v1/patient/me/consent` (PATIENT). Supports consent_type (OPT_IN/OPT_OUT/TREATMENT/RESEARCH) + scope + revoke. Supports HIPAA §164.508.
+`POST /api/v1/consent` (ADMIN,DOCTOR) + `GET /api/v1/patient/me/consent` (PATIENT). Supports consent_type (OPT_IN/OPT_OUT/TREATMENT/RESEARCH) + scope + revoke (`PUT /consent/{id}/revoke`). Supports HIPAA §164.508. Opened to DOCTOR for clinical consent management (Round 24).
 
 ### 11.7 Emergency Access (Break-Glass)
 
-`POST /api/v1/emergency/access/{patientId}?reason=...` — provider can break through normal access controls to view any patient data, 30-minute auto-expiry. Synchronously audited (`EmergencyAccess.audited=1`) + WARN-level logging. ADMIN can view history via `GET /api/v1/emergency/history`.
+`POST /api/v1/emergency/access/{patientId}` body `{reason}` (ADMIN,DOCTOR) — provider can break through normal access controls, returns a short-lived (30-min) JWT with `scope=EMERGENCY` + `patientId` claim used for follow-up data access. Every access is recorded (`audited=0` by default) + WARN-level logging. ADMIN reviews via `GET /api/v1/emergency/history?patientId=&audited=0` + `PUT /api/v1/emergency/{id}/review` (sets `audited=1`, `reviewedBy`, `reviewedAt`) — Round 17-2/17-5.
 
 ### 11.8 Structured Logging
 
@@ -702,8 +709,8 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-137 tests across 5 files:
-- `IntegrationTest` — 110 integration tests covering all 29 controller API endpoints (run on isolated in-memory H2, no MySQL required) + 25 unit tests
+135 tests across 5 files:
+- `IntegrationTest` — 110 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
 - `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
 - `AesAttributeConverterTest` — 8 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases)
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
@@ -732,8 +739,9 @@ Using `admin` accessing the patient list as an example:
 
 4. Service Layer
    - PatientService.page()
-   - Specification: mrn LIKE '%Anderson%' OR email LIKE '%Anderson%'
-   - Note: name and phone are encrypted, cannot be searched via LIKE
+   - Specification: mrn LIKE '%Anderson%'
+   - Note: name/phoneMobile/email are encrypted — LIKE on ciphertext is not
+     meaningful; MRN is the only database-level search key (Round 35)
    - patientRepository.findAll(spec, pageable)
 
 5. Repository Layer
