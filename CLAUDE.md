@@ -18,7 +18,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
 | Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
 | FHIR | HAPI FHIR R4 | 7.x (org.hl7.fhir.r4) |
-| API Doc | Springdoc OpenAPI | 2.7.0 (Swagger UI at /doc.html) |
+| API Doc | Springdoc OpenAPI | 2.6.0 (Swagger UI at /doc.html) |
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok, Hutool | latest |
@@ -43,14 +43,11 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 medical-project/
 ├── CLAUDE.md                           # this file
 ├── README.md                           # project overview + quick start
-├── docs/                               # design docs, interview prep, roadmap
+├── docs/                               # design docs, API reference, roadmap
 │   ├── API-LAYOUT.md
 │   ├── backend-architecture-explained.md
-│   ├── medical-learning-guide.md
-│   ├── LEARNING-ORDER.md
-│   ├── ROADMAP.md
-│   ├── INTERVIEW-BACKEND.md
-│   └── INTERVIEW-FRONTEND.md
+│   ├── MIRTH-CONNECT-INTEGRATION.md
+│   └── ROADMAP.md
 ├── medical-server/                     # Spring Boot backend
 │   └── src/main/java/com/example/medical/
 │       ├── MedicalApplication.java

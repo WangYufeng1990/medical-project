@@ -1,6 +1,6 @@
 # Medical Management System
 
-HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 + MySQL + Redis + Okta OAuth2.
+HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 + MySQL + Redis + Okta OAuth2 (implemented in code; currently runs on local dev JWT — see Architecture doc §5.1).
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ cd medical-web && npm run dev
 | Cache | Redis 7 (Redisson + Spring Cache) |
 | Auth | Spring Boot OAuth2 Resource Server (Okta / dev JWT) |
 | FHIR | HAPI FHIR R4 7.4 |
-| API Doc | Knife4j (Swagger) |
+| API Doc | Springdoc OpenAPI (Swagger UI at /doc.html) |
 
 ## HIPAA Compliance
 
@@ -52,7 +52,7 @@ cd medical-web && npm run dev
 | §164.508 Consent | `consent` table + CRUD API + patient self-service view |
 | §164.524 Right of Access | Patient self-service export (`GET /api/v1/patient/me/export`) |
 | Data-at-Rest Encryption | AES-256-GCM via JPA `@Convert` — transparent encrypt/decrypt with versioned key rotation |
-| Emergency Access | Break-glass endpoint (`/api/v1/emergency`) — 30min expiry + synchronous audit |
+| Emergency Access | Break-glass endpoint (`/api/v1/emergency`) — 30min JWT expiry + audit with ADMIN review flow |
 | Data Retention | Scheduled nightly purge — audit logs 6yr (2190 days) |
 | Clinical Decision Support | Drug-Drug Interaction + Drug-Allergy contraindication check (`/api/v1/cds/check`) |
 | Integration Engine | Mirth Connect JSON API — ADT events + lab results with dedup |
@@ -95,18 +95,28 @@ US Core compliant: OMB race/ethnicity Coding extensions. SMART on FHIR OAuth2 sc
 | Export | `/api/v1/export` | ADMIN,DOCTOR |
 | Audit Logs | `/api/v1/audit-logs` | ADMIN |
 | FHIR | `/api/v1/fhir` | mixed |
-| Consent | `/api/v1/consent` | ADMIN |
+| Consent | `/api/v1/consent` | ADMIN,DOCTOR |
 | Emergency | `/api/v1/emergency` | ADMIN,DOCTOR |
 | Key Audit | `/api/v1/admin/keys` | ADMIN |
 | CDS | `/api/v1/cds` | ADMIN,DOCTOR |
 | Integration | `/api/v1/integration` | ADMIN,DOCTOR |
 | Lab Results | `/api/v1/patients/{id}/observations` | ADMIN,DOCTOR |
-| LOINC | `/api/v1/loinc` | ADMIN,DOCTOR |
+| LOINC | `/api/v1/loinc` | ADMIN,DOCTOR,PATIENT |
 | Pharmacy | `/api/v1/pharmacies` | ADMIN,DOCTOR |
 | eCQM | `/api/v1/quality` | ADMIN,DOCTOR |
 | Patient Export | `/api/v1/patient/me/export` | PATIENT |
 | Account Unlock | `/api/v1/users/{id}/unlock` | ADMIN |
 | eCQM Calculate | `/api/v1/quality/measures/{cmsId}/calculate` | ADMIN |
+| Referrals | `/api/v1/referrals` | ADMIN,DOCTOR |
+| Refill Requests | `/api/v1/prescriptions/refill-requests` | ADMIN,DOCTOR |
+| Problems | `/api/v1/patients/{id}/problems` | ADMIN,DOCTOR |
+| Immunizations | `/api/v1/patients/{id}/immunizations` | ADMIN,DOCTOR |
+| Care Plans | `/api/v1/patients/{id}/care-plans` | ADMIN,DOCTOR |
+| Prior Auths | `/api/v1/prior-auths` | ADMIN,DOCTOR |
+| Charges (Superbill) | `/api/v1/charges` | ADMIN,DOCTOR |
+| Formulary | `/api/v1/formulary` | ADMIN,DOCTOR |
+| Chat SSE Ticket | `/api/v1/chat/sse-ticket` | ADMIN,DOCTOR,PATIENT |
+| Password Reset | `/api/v1/patient/forgot-password` | public |
 
 ## Project Structure
 
@@ -170,9 +180,5 @@ app:
 - [Mirth Connect Integration](docs/MIRTH-CONNECT-INTEGRATION.md)
 - [API Layout & Reference](docs/API-LAYOUT.md)
 - [Architecture Explained](docs/backend-architecture-explained.md)
-- [Medical Domain Learning Guide](docs/medical-learning-guide.md)
-- [Learning Order](docs/LEARNING-ORDER.md)
 - [Roadmap](docs/ROADMAP.md)
-- [Interview Prep - Backend](docs/INTERVIEW-BACKEND.md)
-- [Interview Prep - Frontend](docs/INTERVIEW-FRONTEND.md)
 - [Development Rules](CLAUDE.md)
