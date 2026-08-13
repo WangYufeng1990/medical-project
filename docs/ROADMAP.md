@@ -7,6 +7,8 @@
 > **Round 42 (2026-08-04): Integration tests decoupled from MySQL — run on isolated in-memory H2. `mvn clean install`: 135 tests, 0 failures (previously required a running MySQL and accumulated 8 broken tests as endpoints evolved).**
 >
 > **Full-system review (2026-08-04): Ready to merge — 0 CRITICAL, 0 HIGH. 2 MEDIUM (raw-entity responses in 6 endpoints; missing @Valid in 5 controllers), 2 LOW (silent catch in LoincCatalog + RxNorm lookup). See Post-Round 42 section.**
+>
+> **Full-system review II (2026-08-12): 1 CRITICAL (chat ID-space collision) fixed in Round 45; 2 HIGH, 3 MEDIUM, 3 LOW pending. See Post-Round 44 section.**
 
 ---
 
@@ -2106,3 +2108,146 @@ Each VO mirrors the entity fields exactly — **field names verified identical t
 | R-4: RxNorm auto-lookup silent failure | `rxLookupError` state, non-blocking inline hint in the items section. Covers both failure (network/5xx → "RxNorm lookup failed") and no-match (unknown code → "No drug found for RxNorm X — enter the drug name manually"); cleared on next input or success |
 
 Verified: `npx tsc --noEmit` clean (noImplicitAny: true), `npm run build` passes. Backend RxNorm lookup confirmed: valid code → drugName filled; unknown code → 200 + empty drugName (now surfaced as a hint instead of silence).
+
+---
+
+# Post-Round 44: Full-System Review II (2026-08-12)
+
+> **Status: Audit complete — VERDICT: Blocked. 1 CRITICAL, 2 HIGH, 3 MEDIUM, 3 LOW.**
+> **Method: checklist review of all 38 controllers + 32 entities + 19 services + full frontend views + config/deps. Follow-up to the Post-Round 42 review.**
+
+## Findings
+
+### 🔴 CRITICAL
+
+| # | Issue | Location | Note |
+|---|-------|----------|------|
+| R2-1 | Chat ID-space collision: `Message.sender_id/receiver_id` mix patient table IDs and sys_user IDs in one Long space (both start at 1 in seed data). Patient with id N reads staff user N's messages to **other** patients (`findRecentMessagesByUser`), SSE emitters keyed by bare userId overwrite each other (push misdelivery), `resolveName` checks patient table first (wrong names), `JwtClaimMapper` force-logout check hits sys_user for patient tokens | `chat/entity/Message`, `ChatService`, `ChatSseController`, `JwtClaimMapper`, `PatientChatController` | Fix direction: senderType/receiverType on Message (or `staff:`/`patient:` key prefixes in EMITTERS), `resolveName` by type, skip force-logout check for PATIENT-role tokens |
+
+### 🟡 HIGH
+
+| # | Issue | Location | Note |
+|---|-------|----------|------|
+| R2-2 | DOCTOR patient scoping claimed in API-LAYOUT for appointments/prescriptions/bills lists but only `BillService.resolveDoctorScope()` implements it — `AppointmentService.page` and `PrescriptionService.page` do bare `findAll`. Vitals/labs/charges unscoped (docs don't claim those). Decision needed: implement scoping everywhere or fix docs | `appointment/service/AppointmentService`, `prescription/service/PrescriptionService`, `docs/API-LAYOUT.md` | |
+| R2-3 | `ChargeController.create` accepts `@RequestBody ChargeForm` with no `@Valid` and zero constraints (null `patientId`, negative `chargeAmount` persist). Manual entity mapping + `@Transactional`/`@Auditable` live in the controller instead of a service; returns raw `Result<Charge>`/`Result<Bill>` | `billing/controller/ChargeController` | |
+
+### 🟠 MEDIUM
+
+| # | Issue | Location | Note |
+|---|-------|----------|------|
+| R2-4 | Integration writes lack `@Auditable`: `AdtService.processAdt` (Patient upsert) and `LabResultService.processLabResults` (Observation bulk insert) — Mirth-sourced PHI writes leave no audit trail (21 CFR Part 11) | `integration/service/AdtService`, `integration/service/LabResultService` | Both already `@Transactional` |
+| R2-5 | Raw entity responses remain after R-1: `VitalSignController` (list+create), Observation via `LabResultController`/`PatientPortalController`/`LabAnalysisService`, `ChargeController` (Charge/Bill). Bill carries an AES field decrypted on read; entity internals leak into API contract | 5 sites | R-1 fixed 6 controllers in Round 44; these were missed |
+| R2-6 | Free-text clinical fields plaintext while `Message.content` is encrypted: `Appointment.chief_complaint/description/notes`, `Charge.notes`, `Referral.notes`, `VitalSign` | 4 entities | PHI-at-rest scope inconsistent; free text can embed identifiers |
+
+### ⚪ LOW
+
+| # | Issue | Location | Note |
+|---|-------|----------|------|
+| R2-7 | `data/` (H2 file DB at repo root) not in .gitignore — untracked in git status | `.gitignore` | |
+| R2-8 | `/patient/forgot-password`, `/patient/reset-password` not rate-limited (only login/refresh/export have filters); reset token logged (documented dev-only) | `PatientAuthController`, `RateLimiterConfig` | |
+| R2-9 | `SecurityConfig` permits `/h2-console/**` unconditionally (console enabled only in h2 profile — the default active profile — empty password) | `common/config/SecurityConfig` | Dev-only exposure; gate the matcher on the profile |
+
+### ✅ Verified Clean
+
+- `@PreAuthorize` on every endpoint (class-level annotations cover apparently-missing ones); auth endpoints (login/refresh/forgot/reset) permitAll by design
+- `@Valid` on request bodies except the R2-3 site; Refill deny `@RequestBody(required=false)` null-guarded
+- Patient auth: BCrypt, failed-attempt lockout (15 min), password history (last 3), single-use 30-min reset tokens, refresh-token scope check
+- SSE ticket flow: single-use, 30s TTL, JWT never in subscribe URL
+- All user-facing CUD ops `@Transactional` + `@Auditable` (ChatService uses the fully-qualified annotation)
+- No raw SQL concatenation, no new dependencies (pom matches mandated stack), no hardcoded prod credentials (all `${ENV}`), `dev-mode` requires explicit `true`
+- Frontend: zero `|| null`/`|| 0` on numerics (`|| null` sites are string fields), zero `.catch(() => {})`, no `Number(x) ||` patterns; raw axios only in break-glass flow + pre-auth patient pages (acceptable)
+
+## Resolution Status
+
+- R2-1: ✅ Fixed in Round 45 (2026-08-12). R2-2..R2-9: pending — user to decide scope of fixes; R2-2 needs a docs-vs-code decision first.
+
+---
+
+# Round 45: R2-1 — Chat ID-Space Collision Fix ✅ Complete
+
+> **Status: Complete (2026-08-12) — Post-Round 44 finding R2-1 (CRITICAL chat ID-space collision) resolved.**
+
+## Problem
+
+`Message.sender_id`/`receiver_id` stored bare Longs mixing two independent ID spaces (sys_user and patient, both starting at 1). A patient whose id equals a staff user's id could read that staff member's messages to **other** patients via `findRecentMessagesByUser`; SSE emitters keyed by bare userId overwrote each other (push misdelivery); `resolveName` checked the patient table first (wrong names); `JwtClaimMapper` force-logout check hit sys_user for patient tokens (wrong token revocation).
+
+## Changes
+
+### Backend
+| File | Change |
+|------|--------|
+| `chat/entity/Message` | New `sender_type`/`receiver_type` VARCHAR(10) columns (`STAFF`/`PATIENT`) |
+| `chat/repository/MessageRepository` | All queries type-guarded: `findMessagesBetween`, `findRecentMessagesByUser` (now JPQL + Pageable), `countUnread`, `markAsRead`; removed unused `findAllMessagesByUser` |
+| `chat/service/ChatService` | Typed signatures (`senderType`/`receiverType`/`partnerType`); conversation grouping by `(type, id)` composite; `resolveName(type, id)`; `STAFF`/`PATIENT` constants |
+| `chat/dto/MessageVO` / `ConversationVO` | VO carries `senderType`/`receiverType` / `partnerType` |
+| `chat/dto/MessageFormDTO` | Optional `receiverType` (staff sends require it — controller validates; patient portal omits it, controller defaults `STAFF`) |
+| `chat/controller/ChatController` | `GET /messages/{partnerId}` requires `partnerType` param (invalid → 400); `POST /messages` requires `receiverType` (missing/invalid → 400) |
+| `chat/controller/PatientChatController` | Literal types: sender `PATIENT`, partner/receiver always `STAFF` — patient portal API unchanged |
+| `chat/event/NewMessageEvent` + `ChatEventListener` | Event carries both types; push routes by typed key |
+| `chat/controller/ChatSseController` | `EMITTERS` keyed `type:id`; `SseTicket` carries type from authorities (ROLE_PATIENT) |
+| `security/JwtClaimMapper` | Force-logout check skipped for PATIENT-role tokens (groups read before the check) |
+| `sql/schema.sql` | `message` table gains `sender_type`/`receiver_type` NOT NULL |
+| `common/config/DataInitializer` | `seedMessages` inserts typed rows (patients 100/101 ↔ staff 2) |
+
+### Frontend
+| File | Change |
+|------|--------|
+| `types/entities.ts` | `MessageVO` + `ConversationVO` gain `'STAFF' \| 'PATIENT'` type fields |
+| `api/chat.ts` | `getMessages(partnerId, partnerType, ...)`, `sendMessage(receiverId, receiverType, content)` |
+| `views/chat/index.tsx` | Partner carries type; conversation keys `type:id`; optimistic messages typed; `isMe` + SSE filter check both type and id; URL param `partnerType` |
+| `views/patient/chat/index.tsx` | Optimistic messages typed (`PATIENT`→`STAFF`); `isMe`/SSE filter type-aware; API calls unchanged |
+| `views/patients/index.tsx` | "Msg" button link adds `&partnerType=PATIENT` |
+
+### Tests
+- `IntegrationTest`: `getConversation` gains `partnerType=PATIENT`; `sendMessage` gains `receiverType`; new negative test `sendMessage_withoutReceiverType_shouldReject` (HTTP 400); new collision regression test `patientChat_idSpaceCollision_shouldNotLeakStaffMessages` — inserts a message "from staff 100 to patient 99" and asserts patient 100's conversation list shows only partner `STAFF:2`.
+
+## Verified
+
+- `mvn test`: **137 tests, 0 failures** (was 135 — 2 new tests)
+- `npx tsc --noEmit`: clean
+- Live smoke (H2 backend, fresh schema + seed):
+  - doctor send with `receiverType=PATIENT` → 200, message typed `STAFF→PATIENT`; without → 400 `"receiverType is required"`
+  - invalid `partnerType=DOCTOR` → 400 `"Invalid receiverType: DOCTOR"`
+  - doctor conversations → `PATIENT 100 James Anderson`, `PATIENT 101 Maria Garcia` (typed, correct names)
+  - patient conversations → single partner `STAFF 2 Dr. Sarah Mitchell` (was previously resolved patient-first — wrong name on collision)
+  - patient portal send → 200 typed `PATIENT→STAFF` (no body change)
+
+## Notes
+
+- Dev H2 file DB wiped and regenerated (schema change; seed-only data). Both `data/` copies still untracked — R2-7 (.gitignore) remains pending.
+
+---
+
+# Round 46: Chat Unread Badge in Sidebars ✅ Complete
+
+> **Status: Complete (2026-08-12) — sidebar "Messages" item now shows a live unread count badge (staff + patient portal).**
+
+## Problem
+
+New messages only became visible after opening the chat page — the sidebar gave no notification.
+
+## Changes
+
+### Backend
+| File | Change |
+|------|--------|
+| `chat/repository/MessageRepository` | New typed `countUnreadByUser(userId, type)` |
+| `chat/service/ChatService` | New `unreadCount(userId, userType)` |
+| `chat/controller/ChatController` | `GET /messages/unread-count` → `Result<Integer>` (ADMIN/DOCTOR) |
+| `chat/controller/PatientChatController` | `GET /patient/me/messages/unread-count` → `Result<Integer>` (PATIENT) |
+
+### Frontend
+| File | Change |
+|------|--------|
+| `api/chat.ts` | `getUnreadCount()` → `/messages/unread-count` |
+| `layout/StaffLayout.tsx` | Red badge on Messages item; fetch on route change + poll every 30s; 99+ cap |
+| `layout/StaffLayout.module.css` | `.unreadBadge` style |
+| `views/patient/layout/PatientLayout.tsx` | Same badge on portal Messages item via `http.get('/patient/me/messages/unread-count')` |
+
+SSE stays page-local (chat view owns the single emitter per user) — the sidebar deliberately polls instead of opening a second SSE connection that would evict the chat page's emitter.
+
+## Verified
+
+- `mvn test`: 137 tests, 0 failures
+- `npx tsc --noEmit`: clean
+- Live smoke: patient1 unread → 0 (conversation was auto-read by prior smoke), doctor unread → 0; patient sends message → doctor unread → 1 (badge data flows end to end)

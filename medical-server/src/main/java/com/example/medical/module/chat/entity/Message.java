@@ -19,8 +19,16 @@ public class Message extends BaseEntity {
     @Column(name = "sender_id")
     private Long senderId;
 
+    // STAFF (sys_user id) vs PATIENT (patient id) — the two ID spaces overlap,
+    // so a bare Long cannot identify a party (see Post-Round 44 review R2-1).
+    @Column(name = "sender_type", length = 10)
+    private String senderType;
+
     @Column(name = "receiver_id")
     private Long receiverId;
+
+    @Column(name = "receiver_type", length = 10)
+    private String receiverType;
 
     @Convert(converter = AesAttributeConverter.class)
     @Column(name = "content")

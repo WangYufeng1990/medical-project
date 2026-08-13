@@ -15,7 +15,8 @@ public class ChatEventListener {
     @Async("auditExecutor")
     @EventListener
     public void onNewMessage(NewMessageEvent event) {
-        ChatSseController.push(event.receiverId(), event);
-        log.debug("SSE push: sender={} receiver={}", event.senderId(), event.receiverId());
+        ChatSseController.push(event.receiverType(), event.receiverId(), event);
+        log.debug("SSE push: sender={}:{} receiver={}:{}", event.senderType(), event.senderId(),
+                event.receiverType(), event.receiverId());
     }
 }

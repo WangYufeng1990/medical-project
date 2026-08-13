@@ -13,13 +13,16 @@ public class MessageVO {
 
     private Long id;
     private Long senderId;
+    private String senderType;
     private Long receiverId;
+    private String receiverType;
     private String content;
     private boolean isRead;
     private LocalDateTime createTime;
 
     public static MessageVO fromEntity(Message m) {
-        return new MessageVO(m.getId(), m.getSenderId(), m.getReceiverId(),
+        return new MessageVO(m.getId(), m.getSenderId(), m.getSenderType(),
+                m.getReceiverId(), m.getReceiverType(),
                 m.getContent(), m.getIsRead() != null && m.getIsRead() == 1,
                 m.getCreateTime());
     }

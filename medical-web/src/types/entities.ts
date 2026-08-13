@@ -859,7 +859,9 @@ export interface SseTicketVO {
 export interface MessageVO {
   id: number
   senderId: number
+  senderType: 'STAFF' | 'PATIENT'
   receiverId: number
+  receiverType: 'STAFF' | 'PATIENT'
   content: string
   isRead?: boolean
   createTime: string
@@ -867,6 +869,7 @@ export interface MessageVO {
 
 export interface ConversationVO {
   partnerId: number
+  partnerType: 'STAFF' | 'PATIENT'
   partnerName: string
   lastMessage?: string
   lastMessageTime?: string

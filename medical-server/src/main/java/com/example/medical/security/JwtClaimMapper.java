@@ -24,8 +24,19 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
     @Override
     @SuppressWarnings("unchecked")
     public UsernamePasswordAuthenticationToken convert(Jwt jwt) {
+        String username = jwt.getClaimAsString("sub");
+
+        List<String> groups = jwt.getClaimAsStringList("groups");
+        if (groups == null) {
+            groups = jwt.getClaimAsStringList("roles");
+        }
+        if (groups == null) groups = List.of();
+
         Long userId = extractUserId(jwt);
-        if (userId != null && userId > 0) {
+        // Patient tokens carry a patient-table id in uid — never check it against
+        // sys_user force-logout, ids overlap between the two tables (R2-1).
+        boolean isPatient = groups.stream().anyMatch("PATIENT"::equalsIgnoreCase);
+        if (userId != null && userId > 0 && !isPatient) {
             LocalDateTime forceLogout = sysUserRepository.findForceLogoutAfterByUserId(userId);
             if (forceLogout != null && jwt.getIssuedAt() != null) {
                 LocalDateTime issuedAt = LocalDateTime.ofInstant(jwt.getIssuedAt(), ZoneId.systemDefault());
@@ -36,16 +47,8 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
                 }
             }
         }
-
-        String username = jwt.getClaimAsString("sub");
-
-        List<String> groups = jwt.getClaimAsStringList("groups");
-        if (groups == null) {
-            groups = jwt.getClaimAsStringList("roles");
-        }
         List<String> scopes = jwt.getClaimAsStringList("scp");
         List<String> perms = jwt.getClaimAsStringList("perm");
-        if (groups == null) groups = List.of();
         if (scopes == null) scopes = List.of();
         if (perms == null) perms = List.of();
 

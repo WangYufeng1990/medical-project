@@ -26,7 +26,12 @@ public class PatientChatController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long size) {
-        return Result.ok(chatService.getConversations(loginUser.getUserId(), page, size));
+        return Result.ok(chatService.getConversations(loginUser.getUserId(), ChatService.PATIENT, page, size));
+    }
+
+    @GetMapping("/unread-count")
+    public Result<Integer> unreadCount(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(chatService.unreadCount(loginUser.getUserId(), ChatService.PATIENT));
     }
 
     @GetMapping("/{partnerId}")
@@ -35,12 +40,15 @@ public class PatientChatController {
             @PathVariable Long partnerId,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "50") long size) {
-        return Result.ok(chatService.getConversation(loginUser.getUserId(), partnerId, page, size));
+        // Patients only chat with staff — the partner is always a staff member.
+        return Result.ok(chatService.getConversation(loginUser.getUserId(), ChatService.PATIENT,
+                partnerId, ChatService.STAFF, page, size));
     }
 
     @PostMapping
     public Result<MessageVO> send(@AuthenticationPrincipal LoginUser loginUser,
                                    @Valid @RequestBody MessageFormDTO dto) {
-        return Result.ok(chatService.sendMessage(loginUser.getUserId(), dto.getReceiverId(), dto.getContent()));
+        return Result.ok(chatService.sendMessage(loginUser.getUserId(), ChatService.PATIENT,
+                dto.getReceiverId(), ChatService.STAFF, dto.getContent()));
     }
 }

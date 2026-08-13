@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
 import { logout } from '../api/auth'
 import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
+import { getUnreadCount } from '../api/chat'
 import { useIdleTimeout } from '../utils/useIdleTimeout'
 import SessionWarningModal from './SessionWarningModal'
 import { useState, useEffect } from 'react'
@@ -29,8 +30,19 @@ export default function StaffLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [roles, setRoles] = useState<string[]>([])
+  const [unread, setUnread] = useState(0)
 
   useEffect(() => { setRoles(getUserRoles()) }, [])
+
+  // Unread badge: refresh on every route change + poll every 30s. SSE stays
+  // page-local (chat view), so the sidebar uses lightweight polling instead.
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => getUnreadCount().then(n => { if (!cancelled) setUnread(n) }).catch(() => {})
+    refresh()
+    const timer = setInterval(refresh, 30_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [location.pathname])
 
   const visibleItems = menuItems.filter(item =>
     item.type === 'divider' || hasAnyRole(item.roles))
@@ -64,6 +76,7 @@ export default function StaffLayout() {
               <Link key={item.path} to={item.path}
                 className={`${styles.menuItem} ${location.pathname.startsWith(item.path) ? styles.active : ''}`}>
                 <span>{item.icon}</span> {item.label}
+                {item.path === '/chat' && unread > 0 && <span className={styles.unreadBadge}>{unread > 99 ? '99+' : unread}</span>}
               </Link>
             )
           })}

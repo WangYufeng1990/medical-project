@@ -218,7 +218,7 @@ export default function Patients() {
               <td>{row.id}</td><td>{row.mrn}</td><td>{row.name}</td><td>{row.dateOfBirth}</td>
               <td>{maskPhone(row.phoneMobile)}</td><td>{maskEmail(row.email)}</td>
               <td onClick={e => e.stopPropagation()}>
-                <button className={styles.btnSm} onClick={() => navigate(`/chat?partnerId=${row.id}&partnerName=${encodeURIComponent(row.name)}`)}>Msg</button>
+                <button className={styles.btnSm} onClick={() => navigate(`/chat?partnerId=${row.id}&partnerName=${encodeURIComponent(row.name)}&partnerType=PATIENT`)}>Msg</button>
                 <button className={styles.btnSm} onClick={() => openForm(row)}>Edit</button>
                 <button className={styles.btnSm} onClick={() => openConsent(row)}>Consent</button>
                 <button className={styles.btnSm} onClick={() => openEmergencyPrompt(row.id)}>Break Glass</button>

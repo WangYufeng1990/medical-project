@@ -23,34 +23,48 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatService {
 
+    // Party types: patient.id and sys_user.id are independent sequences, so a
+    // bare Long cannot identify a message party (Post-Round 44 review R2-1).
+    public static final String STAFF = "STAFF";
+    public static final String PATIENT = "PATIENT";
+
     private final MessageRepository messageRepository;
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    public int unreadCount(Long userId, String userType) {
+        return messageRepository.countUnreadByUser(userId, userType);
+    }
+
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "chat", action = "SEND_MESSAGE")
-    public MessageVO sendMessage(Long senderId, Long receiverId, String content) {
+    public MessageVO sendMessage(Long senderId, String senderType,
+                                 Long receiverId, String receiverType, String content) {
         Message msg = new Message();
         msg.setSenderId(senderId);
+        msg.setSenderType(senderType);
         msg.setReceiverId(receiverId);
+        msg.setReceiverType(receiverType);
         msg.setContent(content);
         msg.setIsRead(0);
         messageRepository.save(msg);
         MessageVO vo = MessageVO.fromEntity(msg);
-        eventPublisher.publishEvent(new NewMessageEvent(senderId, receiverId, vo));
+        eventPublisher.publishEvent(new NewMessageEvent(senderId, senderType,
+                receiverId, receiverType, vo));
         return vo;
     }
 
     @Transactional
-    public PageResult<MessageVO> getConversation(Long currentUserId, Long partnerId,
-                                                  long page, long size) {
+    public PageResult<MessageVO> getConversation(Long currentUserId, String currentUserType,
+                                                 Long partnerId, String partnerType,
+                                                 long page, long size) {
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
         var result = messageRepository.findMessagesBetween(
-                currentUserId, partnerId, pageable);
+                currentUserId, currentUserType, partnerId, partnerType, pageable);
 
         // Use @Modifying UPDATE for reliable persistence
-        messageRepository.markAsRead(currentUserId, partnerId);
+        messageRepository.markAsRead(currentUserId, currentUserType, partnerId, partnerType);
 
         List<MessageVO> records = result.getContent().stream()
                 .map(MessageVO::fromEntity).toList();
@@ -58,29 +72,33 @@ public class ChatService {
                 result.getNumber() + 1, records);
     }
 
-    public PageResult<ConversationVO> getConversations(Long currentUserId,
+    public PageResult<ConversationVO> getConversations(Long currentUserId, String currentUserType,
                                                         long page, long size) {
-        List<Message> allMessages = messageRepository.findRecentMessagesByUser(currentUserId, 20);
+        List<Message> allMessages = messageRepository.findRecentMessagesByUser(
+                currentUserId, currentUserType, PageRequest.of(0, 20));
         if (allMessages.isEmpty()) {
             return PageResult.of(0, size, page, List.of());
         }
 
-        Map<Long, List<Message>> grouped = allMessages.stream()
+        Map<Party, List<Message>> grouped = allMessages.stream()
                 .collect(Collectors.groupingBy(m ->
-                        m.getSenderId().equals(currentUserId) ? m.getReceiverId() : m.getSenderId(),
+                        m.getSenderId().equals(currentUserId)
+                                ? new Party(m.getReceiverType(), m.getReceiverId())
+                                : new Party(m.getSenderType(), m.getSenderId()),
                         LinkedHashMap::new,
                         Collectors.toList()));
 
         List<ConversationVO> conversations = new ArrayList<>();
-        for (Map.Entry<Long, List<Message>> entry : grouped.entrySet()) {
-            Long partnerId = entry.getKey();
+        for (Map.Entry<Party, List<Message>> entry : grouped.entrySet()) {
+            Party partner = entry.getKey();
             List<Message> msgs = entry.getValue();
             Message lastMsg = msgs.get(0);
             // Use countUnread query for accurate count (not limited to 20 latest)
-            int unread = messageRepository.countUnread(currentUserId, partnerId);
+            int unread = messageRepository.countUnread(
+                    currentUserId, currentUserType, partner.id(), partner.type());
 
-            conversations.add(ConversationVO.of(partnerId,
-                    resolveName(partnerId), lastMsg.getContent(),
+            conversations.add(ConversationVO.of(partner.id(), partner.type(),
+                    resolveName(partner.type(), partner.id()), lastMsg.getContent(),
                     lastMsg.getCreateTime(), unread));
         }
 
@@ -91,11 +109,14 @@ public class ChatService {
         return PageResult.of(total, size, page, paged);
     }
 
-    private String resolveName(Long userId) {
-        Optional<Patient> patient = patientRepository.findById(userId);
-        if (patient.isPresent()) return patient.get().getName();
-        Optional<SysUser> sysUser = sysUserRepository.findById(userId);
-        if (sysUser.isPresent()) return sysUser.get().getRealName();
-        return "Unknown";
+    private String resolveName(String type, Long userId) {
+        if (STAFF.equals(type)) {
+            return sysUserRepository.findById(userId)
+                    .map(SysUser::getRealName).orElse("Unknown");
+        }
+        return patientRepository.findById(userId)
+                .map(Patient::getName).orElse("Unknown");
     }
+
+    private record Party(String type, Long id) {}
 }

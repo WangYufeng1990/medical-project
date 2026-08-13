@@ -331,25 +331,25 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void seedMessages() {
-        String sql = "INSERT INTO message (id, sender_id, receiver_id, content, is_read, create_time, update_time) " +
-                     "VALUES (?,?,?,?,?,?,?)";
+        String sql = "INSERT INTO message (id, sender_id, sender_type, receiver_id, receiver_type, content, is_read, create_time, update_time) " +
+                     "VALUES (?,?,?,?,?,?,?,?,?)";
         LocalDateTime now = LocalDateTime.now();
 
-        jdbcTemplate.update(sql, 600L, 100L, 2L,
+        jdbcTemplate.update(sql, 600L, 100L, "PATIENT", 2L, "STAFF",
                 AesCryptoUtil.encrypt("Hello Dr. Mitchell, my blood pressure has been a bit high the past few days. Should I be concerned?"), 1, now, now);
-        jdbcTemplate.update(sql, 601L, 2L, 100L,
+        jdbcTemplate.update(sql, 601L, 2L, "STAFF", 100L, "PATIENT",
                 AesCryptoUtil.encrypt("What are your readings? Have you been taking your medication regularly?"), 1, now, now);
-        jdbcTemplate.update(sql, 602L, 100L, 2L,
+        jdbcTemplate.update(sql, 602L, 100L, "PATIENT", 2L, "STAFF",
                 AesCryptoUtil.encrypt("Around 145/90 in the morning. Yes, I'm taking the medication on time."), 1, now, now);
-        jdbcTemplate.update(sql, 603L, 2L, 100L,
+        jdbcTemplate.update(sql, 603L, 2L, "STAFF", 100L, "PATIENT",
                 AesCryptoUtil.encrypt("That's mildly elevated. Let's keep monitoring. Cut down on salt and come in for a checkup if it stays above 140/90 for three more days."), 1, now, now);
-        jdbcTemplate.update(sql, 604L, 100L, 2L,
+        jdbcTemplate.update(sql, 604L, 100L, "PATIENT", 2L, "STAFF",
                 AesCryptoUtil.encrypt("OK, I'll watch my salt intake. Thank you, doctor."), 1, now, now);
-        jdbcTemplate.update(sql, 605L, 2L, 100L,
+        jdbcTemplate.update(sql, 605L, 2L, "STAFF", 100L, "PATIENT",
                 AesCryptoUtil.encrypt("You're welcome. Also, please fast for 8 hours before the June 15 blood sugar test."), 0, now, now);
-        jdbcTemplate.update(sql, 606L, 101L, 2L,
+        jdbcTemplate.update(sql, 606L, 101L, "PATIENT", 2L, "STAFF",
                 AesCryptoUtil.encrypt("Dr. Mitchell, my allergy symptoms have gotten much better after using the inhaler you prescribed."), 1, now, now);
-        jdbcTemplate.update(sql, 607L, 2L, 101L,
+        jdbcTemplate.update(sql, 607L, 2L, "STAFF", 101L, "PATIENT",
                 AesCryptoUtil.encrypt("That's good to hear, Maria. Keep using it as prescribed. Let me know if symptoms return."), 0, now, now);
     }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getConversations, getMessages, sendMessage, getSseTicket } from '../../api/chat'
+import { getConversations, getMessages, sendMessage, getSseTicket, PartyType } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
 import { MessageVO, ConversationVO } from '../../types/entities'
@@ -9,7 +9,7 @@ import styles from './style.module.css'
 export default function Chat() {
   const [searchParams] = useSearchParams()
   const [conversations, setConversations] = useState<ConversationVO[]>([])
-  const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string } | null>(null)
+  const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string; type: PartyType } | null>(null)
   const [messages, setMessages] = useState<MessageVO[]>([])
   const [msgPage, setMsgPage] = useState(1)
   const [msgTotal, setMsgTotal] = useState(0)
@@ -26,45 +26,48 @@ export default function Chat() {
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
-  // Auto-select partner from URL query params (e.g., /chat?partnerId=100&partnerName=James+Anderson)
+  // Auto-select partner from URL query params (e.g., /chat?partnerId=100&partnerName=James+Anderson&partnerType=PATIENT)
   useEffect(() => {
     const pid = searchParams.get('partnerId')
     const pname = searchParams.get('partnerName')
     if (pid && pname) {
-      setSelectedPartner({ id: Number(pid), name: pname })
-      loadMessages(Number(pid), 1)
+      const ptype = searchParams.get('partnerType') === 'STAFF' ? 'STAFF' : 'PATIENT'
+      setSelectedPartner({ id: Number(pid), name: pname, type: ptype })
+      loadMessages(Number(pid), ptype, 1)
     }
   }, [searchParams])
 
-  const loadMessages = useCallback((partnerId: number, page: number) => {
-    return getMessages(partnerId, page, 50).then(r => {
+  const loadMessages = useCallback((partnerId: number, partnerType: PartyType, page: number) => {
+    return getMessages(partnerId, partnerType, page, 50).then(r => {
       const batch = (r.records ?? []).reverse() // API returns DESC, reverse to ASC for display
       setMessages(prev => page === 1 ? batch : [...batch, ...prev])
       setMsgTotal(r.total ?? 0)
     })
   }, [])
 
-  const selectPartner = (p: { partnerId: number; partnerName: string }) => {
-    setSelectedPartner({ id: p.partnerId, name: p.partnerName })
+  const selectPartner = (p: ConversationVO) => {
+    setSelectedPartner({ id: p.partnerId, name: p.partnerName, type: p.partnerType })
     setMsgPage(1)
     setMessages([])
-    loadMessages(p.partnerId, 1).then(() => loadConversations())
+    loadMessages(p.partnerId, p.partnerType, 1).then(() => loadConversations())
   }
 
   const handleSend = async () => {
     if (!input.trim() || !selectedPartner) return
     const content = input.trim()
     setInput('')
-    const msg = { id: Date.now(), senderId: currentUserId, receiverId: selectedPartner.id, content, isRead: false, createTime: new Date().toISOString() }
+    const msg: MessageVO = { id: Date.now(), senderId: currentUserId, senderType: 'STAFF', receiverId: selectedPartner.id, receiverType: selectedPartner.type, content, isRead: false, createTime: new Date().toISOString() }
     setMessages(prev => [...prev, msg])
-    await sendMessage(selectedPartner.id, content).catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
+    await sendMessage(selectedPartner.id, selectedPartner.type, content).catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
     setTimeout(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
     }, 50)
   }
 
   const handleSseMessage = useCallback((msg: MessageVO) => {
-    if (selectedPartner && (msg.senderId === selectedPartner.id || msg.receiverId === selectedPartner.id)) {
+    if (selectedPartner && (
+      (msg.senderType === selectedPartner.type && msg.senderId === selectedPartner.id) ||
+      (msg.receiverType === selectedPartner.type && msg.receiverId === selectedPartner.id))) {
       setMessages(prev => { if (prev.find(m => m.id === msg.id)) return prev; return [...prev, msg] })
       setTimeout(() => {
         messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
@@ -95,8 +98,8 @@ export default function Chat() {
         <div className={styles.sidebarHeader}>Messages</div>
         <div className={styles.conversationList}>
           {conversations.map(c => (
-            <div key={c.partnerId}
-              className={`${styles.conversationItem} ${selectedPartner?.id === c.partnerId ? styles.conversationItemActive : ''}`}
+            <div key={`${c.partnerType}:${c.partnerId}`}
+              className={`${styles.conversationItem} ${selectedPartner?.id === c.partnerId && selectedPartner?.type === c.partnerType ? styles.conversationItemActive : ''}`}
               onClick={() => selectPartner(c)}>
               <div className={styles.partnerName}>{c.partnerName}</div>
               <div className={styles.lastMsg}>{c.lastMessage}</div>
@@ -118,11 +121,11 @@ export default function Chat() {
             <div className={styles.messageList} ref={messageListRef}>
               {hasMore && (
                 <div className={styles.loadMore}>
-                  <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, np) }}>Load earlier</button>
+                  <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, selectedPartner.type, np) }}>Load earlier</button>
                 </div>
               )}
               {messages.map(m => {
-                const isMe = m.senderId === currentUserId
+                const isMe = m.senderType === 'STAFF' && m.senderId === currentUserId
                 return (
                 <div key={m.id} className={`${styles.messageRow} ${isMe ? styles.messageRowMe : styles.messageRowOther}`}>
                   <div>

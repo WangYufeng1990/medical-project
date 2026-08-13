@@ -304,25 +304,28 @@ Requires `ADMIN` or `DOCTOR`. Drug formulary coverage lookup.
 
 ### Chat (Staff) — `/api/v1/messages`
 
-Requires `ADMIN` or `DOCTOR`.
+Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, `PATIENT` = patient id) because the two ID spaces overlap (Round 44 fix R2-1).
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/conversations` | `?page=1&size=20` | Paginated conversation list |
-| GET | `/{partnerId}` | `?page=1&size=50` | Paginated messages with partner (auto-read) |
-| POST | `/` | body: MessageFormDTO | Send a message |
+| GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`) |
+| GET | `/unread-count` | — | Total unread message count (sidebar badge) |
+| GET | `/{partnerId}` | `?partnerType=STAFF\|PATIENT&page=1&size=50` | Paginated messages with partner (auto-read). `partnerType` required, invalid value → 400 |
+| POST | `/` | body: {receiverId, receiverType, content} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400 |
+
+`MessageVO` carries `senderType`/`receiverType`; `ConversationVO` carries `partnerType`.
 
 ### Chat SSE Ticket — `POST /api/v1/chat/sse-ticket`
 
-Requires `ADMIN`/`DOCTOR`/`PATIENT` (Bearer JWT via header). Returns `{ "ticket": "<random>", "expiresIn": 30 }` — a single-use, 30-second ticket bound to the caller's userId. The JWT never appears in a URL.
+Requires `ADMIN`/`DOCTOR`/`PATIENT` (Bearer JWT via header). Returns `{ "ticket": "<random>", "expiresIn": 30 }` — a single-use, 30-second ticket bound to the caller's `(type, userId)`. The JWT never appears in a URL.
 
 ### Chat SSE — `GET /api/v1/chat/subscribe?ticket=<ticket>`
 
-Server-Sent Events endpoint for real-time message push. `permitAll` in the security chain — authentication is the single-use ticket obtained from `POST /api/v1/chat/sse-ticket` (EventSource cannot send Authorization headers). Invalid/expired/reused ticket → 401. Returns `text/event-stream` with `new_message` events.
+Server-Sent Events endpoint for real-time message push. `permitAll` in the security chain — authentication is the single-use ticket obtained from `POST /api/v1/chat/sse-ticket` (EventSource cannot send Authorization headers). Invalid/expired/reused ticket → 401. Returns `text/event-stream` with `new_message` events. Emitters are keyed `type:id` so a patient and a staff user with the same numeric id cannot overwrite each other's connection.
 
 ### Chat (Patient) — `/api/v1/patient/me/messages`
 
-Requires `PATIENT`. Same endpoints as staff chat.
+Requires `PATIENT`. Same endpoints as staff chat (including `GET /unread-count`), except: `GET /{partnerId}` and `POST /` need no `partnerType`/`receiverType` — partners are always `STAFF` (patients only chat with staff).
 
 ### Dashboard — `/api/v1/dashboard`
 

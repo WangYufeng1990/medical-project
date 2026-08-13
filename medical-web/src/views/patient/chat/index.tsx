@@ -46,7 +46,7 @@ export default function PatientChat() {
     if (!input.trim() || !selectedPartner) return
     const content = input.trim()
     setInput('')
-    const msg: MessageVO = { id: Date.now(), senderId: currentUserId, receiverId: selectedPartner.id, content, isRead: false, createTime: new Date().toISOString() }
+    const msg: MessageVO = { id: Date.now(), senderId: currentUserId, senderType: 'PATIENT', receiverId: selectedPartner.id, receiverType: 'STAFF', content, isRead: false, createTime: new Date().toISOString() }
     setMessages(prev => [...prev, msg])
     await http.post<MessageVO>('/patient/me/messages', { receiverId: selectedPartner.id, content })
       .catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
@@ -56,7 +56,9 @@ export default function PatientChat() {
   }
 
   const handleSseMessage = useCallback((msg: MessageVO) => {
-    if (selectedPartner && (msg.senderId === selectedPartner.id || msg.receiverId === selectedPartner.id)) {
+    if (selectedPartner && (
+      (msg.senderType === 'STAFF' && msg.senderId === selectedPartner.id) ||
+      (msg.receiverType === 'STAFF' && msg.receiverId === selectedPartner.id))) {
       setMessages(prev => { if (prev.find(m => m.id === msg.id)) return prev; return [...prev, msg] })
       setTimeout(() => {
         messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
@@ -114,7 +116,7 @@ export default function PatientChat() {
                 </div>
               )}
               {messages.map(m => {
-                const isMe = m.senderId === currentUserId
+                const isMe = m.senderType === 'PATIENT' && m.senderId === currentUserId
                 return (
                 <div key={m.id} className={`${chatStyles.messageRow} ${isMe ? chatStyles.messageRowMe : chatStyles.messageRowOther}`}>
                   <div>

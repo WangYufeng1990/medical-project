@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import patientRequest from '../../../api/patientRequest'
+import { useState, useEffect } from 'react'
+import patientRequest, { http } from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 import SessionWarningModal from '../../../layout/SessionWarningModal'
 
@@ -18,12 +19,24 @@ export default function PatientLayout() {
   const navigate = useNavigate()
   const loc = useLocation()
   const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const [unread, setUnread] = useState(0)
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
     queryFn: () => patientRequest.get('/patient/me').then(r => r),
     staleTime: 60_000,
   })
   const info = profile || cachedInfo
+
+  // Unread badge: refresh on every route change + poll every 30s. SSE stays
+  // page-local (chat view), so the sidebar uses lightweight polling instead.
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => http.get<number>('/patient/me/messages/unread-count')
+      .then(n => { if (!cancelled) setUnread(n) }).catch(() => {})
+    refresh()
+    const timer = setInterval(refresh, 30_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [loc.pathname])
 
   const handleLogout = () => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }
   const { warningVisible, reset } = useIdleTimeout(handleLogout)
@@ -34,7 +47,11 @@ export default function PatientLayout() {
         <h3 style={{ marginBottom: 16 }}>{info.name || 'Patient'}</h3>
         {items.map(i => (
           <Link key={i.path} to={i.path} style={{ padding: '8px 0', cursor: 'pointer', color: loc.pathname === i.path ? '#409EFF' : '#d1d5db', textDecoration: 'none', display: 'block' }}
-            >{i.label}</Link>
+            >{i.label}
+            {i.path === '/patient/chat' && unread > 0 && (
+              <span style={{ marginLeft: 8, background: '#f56c6c', color: '#fff', fontSize: 11, padding: '1px 6px', borderRadius: 10 }}>{unread > 99 ? '99+' : unread}</span>
+            )}
+          </Link>
         ))}
         <div style={{ marginTop: 24, padding: '8px 0', color: '#93c5fd', cursor: 'pointer', fontSize: 14 }}
           onClick={async () => {

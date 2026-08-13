@@ -11,14 +11,15 @@ import java.time.LocalDateTime;
 public class ConversationVO {
 
     private Long partnerId;
+    private String partnerType;
     private String partnerName;
     private String lastMessage;
     private LocalDateTime lastMessageTime;
     private int unreadCount;
 
-    public static ConversationVO of(Long partnerId, String partnerName,
+    public static ConversationVO of(Long partnerId, String partnerType, String partnerName,
                                      String lastMessage, LocalDateTime lastMessageTime,
                                      int unreadCount) {
-        return new ConversationVO(partnerId, partnerName, lastMessage, lastMessageTime, unreadCount);
+        return new ConversationVO(partnerId, partnerType, partnerName, lastMessage, lastMessageTime, unreadCount);
     }
 }

@@ -2,6 +2,8 @@ package com.example.medical;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.medical.module.chat.entity.Message;
+import com.example.medical.module.chat.repository.MessageRepository;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -46,6 +48,9 @@ class IntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private MessageRepository messageRepository;
 
     private static String adminToken;
     private static String doctorToken;
@@ -996,6 +1001,7 @@ class IntegrationTest {
     @Order(67)
     void getConversation_shouldReturnMessages() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/v1/messages/100")
+                        .param("partnerType", "PATIENT")
                         .param("page", "1").param("size", "50")
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk())
@@ -1010,12 +1016,27 @@ class IntegrationTest {
     void sendMessage_shouldSucceed() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "receiverId", 100,
+                "receiverType", "PATIENT",
                 "content", "Test message from doctor"
         ));
         mockMvc.perform(post("/api/v1/messages")
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(68)
+    void sendMessage_withoutReceiverType_shouldReject() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "receiverId", 100,
+                "content", "Test message without type"
+        ));
+        mockMvc.perform(post("/api/v1/messages")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
     }
 
     @Test
@@ -1041,6 +1062,34 @@ class IntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(71)
+    void patientChat_idSpaceCollision_shouldNotLeakStaffMessages() throws Exception {
+        // R2-1 regression: patient 100 shares its numeric id with a hypothetical
+        // staff user 100. A message "from staff 100 to patient 99" must never
+        // surface in patient 100's inbox (the old bare-id query returned it).
+        Message leak = new Message();
+        leak.setSenderId(100L);
+        leak.setSenderType("STAFF");
+        leak.setReceiverId(99L);
+        leak.setReceiverType("PATIENT");
+        leak.setContent("confidential staff-to-other-patient message");
+        leak.setIsRead(0);
+        messageRepository.save(leak);
+
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me/messages/conversations")
+                        .param("page", "1").param("size", "20")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        JsonNode records = node.get("data").get("records");
+        // Patient 100 only talks with staff user 2 — the colliding staff-100 row must not appear.
+        assertEquals(1, records.size());
+        assertEquals(2, records.get(0).get("partnerId").asLong());
+        assertEquals("STAFF", records.get(0).get("partnerType").asText());
     }
 
     // ──────────────────────────────────────────────────────
