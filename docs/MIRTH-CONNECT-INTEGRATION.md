@@ -102,6 +102,7 @@ channelMap.put('adtPayload', JSON.stringify(json));
 
 - Looks up patient by `patient.mrn`: merges fields on update if found, creates a new Patient record if not.
 - Sensitive fields (name, address, etc.) are automatically encrypted at rest via `@Convert(converter = AesAttributeConverter.class)` (AES-256-GCM).
+- Every write is audited: `AdtService.processAdt` / `LabResultService.processLabResults` carry `@Auditable` (`integration` module, `ADT_UPSERT` / `LAB_RESULTS`) — Mirth-sourced PHI changes appear in the 21 CFR Part 11 audit trail.
 
 ---
 

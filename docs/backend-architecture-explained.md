@@ -298,7 +298,9 @@ RBAC model: User → Role → Menu/Permission → API access control. Five table
                      "/api/v1/patient/forgot-password", "/api/v1/patient/reset-password",
                      "/api/v1/fhir/metadata",
                      "/api/v1/chat/subscribe").permitAll()   // subscribe auth = single-use ticket
-    .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**", "/h2-console/**").permitAll()
+    // h2-console is permitted ONLY when the h2 profile is active (Round 48)
+    .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll()
+    // if (h2ProfileActive) auth.requestMatchers("/h2-console/**").permitAll();
     .anyRequest().authenticated())
 .oauth2ResourceServer(oauth2 -> oauth2
     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtClaimMapper)));
@@ -355,7 +357,11 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 | Message | `content` (chat records) | 1 |
 | Bill | `insuranceClaimNumber` | 1 |
 | Prescription | `deaNumber` | 1 |
-| **Total** | | **26+1** |
+| Appointment | `chiefComplaint`, `description`, `notes` (free-text clinical — Round 48) | 3 |
+| Charge | `notes` | 1 |
+| Referral | `notes` | 1 |
+| VitalSign | `notes` | 1 |
+| **Total** | | **32+1** |
 
 ### 6.3 Encryption Algorithm
 
@@ -374,7 +380,7 @@ Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:1
 1. Admin generates a new key externally (e.g. `openssl rand -base64 32`)
 2. `POST /api/v1/admin/keys/rotate { "newKey": "<new key>", "oldKey": "<current app.aes.key>" }`
 3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates rotation
-4. `KeyRotationService` starts async background migration — scans all 27 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
+4. `KeyRotationService` starts async background migration — scans all 33 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
 5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
 6. Once `rotationActive=false` and `complete=true`, update `application.yml` (`app.aes.key` → new value, `app.aes.key.previous` → old value) to survive restarts
 
@@ -675,6 +681,7 @@ Result.fail(404, "Patient not found")
 | `/api/v1/patient/login` | 10/min/IP |
 | `/api/v1/auth/refresh` + `/api/v1/patient/refresh` | 20/min/IP |
 | `/api/v1/export/*` | 5/hour/IP |
+| `/api/v1/patient/forgot-password` + `/api/v1/patient/reset-password` | 5/min/IP (Round 48) |
 
 Based on Redisson `RRateLimiter`, exceeded limits return HTTP 429.
 
@@ -709,8 +716,8 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-135 tests across 5 files:
-- `IntegrationTest` — 110 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
+145 tests across 5 files:
+- `IntegrationTest` — 120 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
 - `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
 - `AesAttributeConverterTest` — 8 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases)
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
@@ -725,7 +732,7 @@ Using `admin` accessing the patient list as an example:
 ```
 1. Filter Layer
    - CorsFilter: validates Origin
-   - RateLimiter: non-login endpoints have no rate limit
+   - RateLimiter: login/refresh/export/password-reset endpoints only (see §11.3)
 
 2. Spring Security Layer
    - Extracts "Bearer <access_token>" from Header

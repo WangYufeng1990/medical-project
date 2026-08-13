@@ -157,7 +157,7 @@ All require `PATIENT` role.
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
-| GET | `/observations` | `?loinc=&page=1&size=20` | My lab results — `PageResult<Observation>`; `loinc` filters server-side |
+| GET | `/observations` | `?loinc=&page=1&size=20` | My lab results — `PageResult<ObservationVO>`; `loinc` filters server-side |
 | GET | `/observations/trend` | `?loinc=` (required) | Full history of one test (bounded single-test dataset) for trend rendering |
 | GET | `/vitals` | — | My vital signs |
 | GET | `/problems` | — | My problem list |
@@ -230,9 +230,9 @@ Requires `ADMIN` or `DOCTOR`. Charge capture linked to appointments, convertible
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/` | `?page=1&size=10` | Paginated charge list |
-| POST | `/` | body: {patientId, appointmentId?, cptCodes?, icd10Codes?, chargeAmount?, visitType?, notes?} | Create charge (DRAFT) |
-| PUT | `/{id}/convert` | path | Convert DRAFT charge → bill (status → BILLED, creates Bill) |
+| GET | `/` | `?page=1&size=10&patientId=` | Paginated charge list (`ChargeVO`; DOCTOR scoped to own patients) |
+| POST | `/` | body: {patientId*, chargeAmount*, appointmentId?, cptCodes?, icd10Codes?, units?, visitType?, notes?} | Create charge (DRAFT). `patientId` and `chargeAmount` required (400 otherwise; amount must be ≥ 0) |
+| PUT | `/{id}/convert` | path | Convert DRAFT charge → bill (`BillVO`; status → BILLED, creates Bill). Non-DRAFT → 409 |
 
 ### Referrals — `/api/v1/referrals`
 
@@ -415,7 +415,7 @@ Requires `ADMIN` or `DOCTOR` (catalog also `PATIENT`). Lab trend analysis and LO
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/patients/{id}/observations` | `?loinc=&page=1&size=20` | Paginated lab results (`PageResult<Observation>`); `loinc` filters server-side |
+| GET | `/patients/{id}/observations` | `?loinc=&page=1&size=20` | Paginated lab results (`PageResult<ObservationVO>`); `loinc` filters server-side |
 | GET | `/patients/{id}/observations/trend` | `?loinc=` (required) | Full history of one test for trend rendering |
 | GET | `/loinc/catalog` | — | Full LOINC dictionary (ADMIN,DOCTOR,PATIENT) |
 | GET | `/loinc/panel/{parentCode}` | path | LOINC codes grouped by panel (CBC/BMP/LIPID) |
