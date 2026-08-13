@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -54,6 +55,7 @@ public class VitalSign extends BaseEntity {
     @Column(name = "bmi")
     private BigDecimal bmi;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(length = 500)
     private String notes;
 }

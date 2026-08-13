@@ -3,8 +3,8 @@ package com.example.medical.module.patient.controller;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.common.security.DoctorPatientScope;
+import com.example.medical.module.patient.dto.ObservationVO;
 import com.example.medical.module.patient.entity.LoincCatalog;
-import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.repository.LoincCatalogRepository;
 import com.example.medical.module.patient.service.LabAnalysisService;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ public class LabResultController {
 
     @GetMapping("/patients/{patientId}/observations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<Observation>> getObservations(
+    public Result<PageResult<ObservationVO>> getObservations(
             @PathVariable Long patientId,
             @RequestParam(required = false) String loinc,
             @RequestParam(defaultValue = "1") long page,
@@ -35,7 +35,7 @@ public class LabResultController {
 
     @GetMapping("/patients/{patientId}/observations/trend")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<List<Observation>> getTrend(
+    public Result<List<ObservationVO>> getTrend(
             @PathVariable Long patientId,
             @RequestParam String loinc) {
         doctorPatientScope.requireAccess(patientId);

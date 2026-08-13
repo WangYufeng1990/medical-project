@@ -16,6 +16,7 @@ public class AdtService {
     private final PatientRepository patientRepository;
 
     @Transactional
+    @com.example.medical.common.audit.Auditable(module = "integration", action = "ADT_UPSERT")
     public void processAdt(AdtEventPayload event) {
         Patient patient = patientRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("mrn"), event.getPatient().getMrn()),

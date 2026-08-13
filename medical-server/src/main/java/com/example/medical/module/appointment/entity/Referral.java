@@ -1,6 +1,7 @@
 package com.example.medical.module.appointment.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -53,6 +54,7 @@ public class Referral extends BaseEntity {
     @Column(name = "completion_date")
     private LocalDate completionDate;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(length = 500)
     private String notes;
 }

@@ -30,8 +30,16 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:5173}")
     private String allowedOrigins;
 
+    @Value("${spring.profiles.active:}")
+    private String activeProfiles;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // H2 console is only reachable when the h2 profile is active — never
+        // expose an empty-password DB console from the prod profile.
+        boolean h2ConsoleEnabled = java.util.Arrays.stream(activeProfiles.split(","))
+                .anyMatch("h2"::equals);
+
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
@@ -45,15 +53,18 @@ public class SecurityConfig {
                         .cacheControl(cache -> {})
                 )
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
-                                "/api/v1/patient/login", "/api/v1/patient/refresh",
-                                "/api/v1/patient/forgot-password", "/api/v1/patient/reset-password",
-                                "/api/v1/fhir/metadata",
-                                "/api/v1/chat/subscribe").permitAll()
-                        .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**", "/h2-console/**").permitAll()
-                        .anyRequest().authenticated()
-                )
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
+                                    "/api/v1/patient/login", "/api/v1/patient/refresh",
+                                    "/api/v1/patient/forgot-password", "/api/v1/patient/reset-password",
+                                    "/api/v1/fhir/metadata",
+                                    "/api/v1/chat/subscribe").permitAll()
+                            .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll();
+                    if (h2ConsoleEnabled) {
+                        auth.requestMatchers("/h2-console/**").permitAll();
+                    }
+                    auth.anyRequest().authenticated();
+                })
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtClaimMapper)));
 

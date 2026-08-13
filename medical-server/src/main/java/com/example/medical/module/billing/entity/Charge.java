@@ -1,6 +1,7 @@
 package com.example.medical.module.billing.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -47,6 +48,7 @@ public class Charge extends BaseEntity {
     @Column(name = "bill_id")
     private Long billId;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(length = 500)
     private String notes;
 }

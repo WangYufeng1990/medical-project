@@ -5,6 +5,7 @@ import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.common.security.DoctorPatientScope;
+import com.example.medical.module.patient.dto.VitalSignVO;
 import com.example.medical.module.patient.entity.VitalSign;
 import com.example.medical.module.patient.repository.VitalSignRepository;
 import jakarta.validation.Valid;
@@ -30,21 +31,21 @@ public class VitalSignController {
 
     @GetMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<VitalSign>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<VitalSignVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "recordedAt"));
         var page = vitalSignRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId), pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
-                page.getNumber() + 1, page.getContent()));
+                page.getNumber() + 1, page.getContent().stream().map(VitalSignVO::fromEntity).toList()));
     }
 
     @PostMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @Auditable(module = "vital_sign", action = "CREATE")
-    public Result<VitalSign> create(@PathVariable Long patientId, @Valid @RequestBody VitalSignForm form) {
+    public Result<VitalSignVO> create(@PathVariable Long patientId, @Valid @RequestBody VitalSignForm form) {
         VitalSign v = new VitalSign();
         v.setPatientId(patientId);
         v.setRecordedBy(form.getRecordedBy());
@@ -59,7 +60,7 @@ public class VitalSignController {
         v.setWeightKg(form.getWeightKg());
         v.setBmi(form.getBmi());
         v.setNotes(form.getNotes());
-        return Result.ok(vitalSignRepository.save(v));
+        return Result.ok(VitalSignVO.fromEntity(vitalSignRepository.save(v)));
     }
 
     @Data

@@ -1,6 +1,7 @@
 package com.example.medical.module.appointment.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -36,6 +37,7 @@ public class Appointment extends BaseEntity {
     @Column(name = "visit_type", length = 30)
     private String visitType;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "chief_complaint")
     private String chiefComplaint;
 
@@ -57,9 +59,11 @@ public class Appointment extends BaseEntity {
     @Column(name = "check_out_time")
     private LocalDateTime checkOutTime;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "description")
     private String description;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "notes")
     private String notes;
 }

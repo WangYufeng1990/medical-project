@@ -49,6 +49,12 @@ public class BillService {
         return billRepository.findAll(spec, pageable).map(this::toVO);
     }
 
+    public BillVO toVO(Bill b) {
+        String patientName = patientRepository.findById(b.getPatientId())
+                .map(Patient::getName).orElse("");
+        return BillVO.fromEntity(b, patientName);
+    }
+
     public BillVO getById(Long id) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
@@ -141,11 +147,5 @@ public class BillService {
     @Auditable(module = "billing", action = "DELETE")
     public void delete(Long id) {
         billRepository.deleteById(id);
-    }
-
-    private BillVO toVO(Bill b) {
-        String patientName = patientRepository.findById(b.getPatientId())
-                .map(Patient::getName).orElse("");
-        return BillVO.fromEntity(b, patientName);
     }
 }

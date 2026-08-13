@@ -102,4 +102,29 @@ public class RateLimiterConfig {
         bean.setOrder(1);
         return bean;
     }
+
+    @Bean
+    public FilterRegistrationBean<Filter> passwordResetRateLimiter(RedissonClient redissonClient) {
+        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
+            HttpServletRequest httpReq = (HttpServletRequest) request;
+            String key = "rate:password-reset:" + httpReq.getRemoteAddr();
+            RRateLimiter limiter = redissonClient.getRateLimiter(key);
+            limiter.trySetRate(RateType.OVERALL, 5, Duration.ofMinutes(1));
+
+            if (!limiter.tryAcquire()) {
+                HttpServletResponse httpResp = (HttpServletResponse) response;
+                httpResp.setStatus(429);
+                httpResp.setContentType("application/json");
+                httpResp.getWriter().write("{\"code\":429,\"message\":\"Too many password reset requests. Please wait.\"}");
+                return;
+            }
+            chain.doFilter(request, response);
+        };
+
+        FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
+        bean.setFilter(filter);
+        bean.addUrlPatterns("/api/v1/patient/forgot-password", "/api/v1/patient/reset-password");
+        bean.setOrder(1);
+        return bean;
+    }
 }

@@ -1204,6 +1204,33 @@ class IntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    // ── R2-3: charge validation (Post-Round 44) ──
+
+    @Test
+    @Order(78)
+    void createCharge_missingPatient_should400() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "chargeAmount", 50.00, "cptCodes", "99213"));
+        mockMvc.perform(post("/api/v1/charges")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Order(79)
+    void createCharge_valid_shouldSucceed_andRoundTripEncryptedNotes() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "patientId", 100, "chargeAmount", 50.00, "cptCodes", "99213",
+                "notes", "encrypted smoke"));
+        mockMvc.perform(post("/api/v1/charges")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.patientId").value(100))
+                .andExpect(jsonPath("$.data.notes").value("encrypted smoke"));
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────

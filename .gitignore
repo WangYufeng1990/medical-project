@@ -14,6 +14,10 @@ medical-web/.next/
 medical-web/dist/
 medical-web/.env.local
 
+# Local H2 file databases (dev seed data, regenerated on boot)
+data/
+medical-server/data/
+
 # ==========================================
 # 3. 系统通用缓存
 # ==========================================

@@ -210,33 +210,33 @@ public class DataInitializer implements CommandLineRunner {
 
         jdbcTemplate.update(sql,
                 200L, 100L, 2L, LocalDateTime.of(2026, 5, 15, 9, 0), 3, "FOLLOW_UP",
-                "Routine blood pressure check", "Cardiology", 30, "99213", "I10",
-                "Follow-up for hypertension",
-                "Blood pressure 130/85, stable. Continue current medication.", now, now);
+                AesCryptoUtil.encrypt("Routine blood pressure check"), "Cardiology", 30, "99213", "I10",
+                AesCryptoUtil.encrypt("Follow-up for hypertension"),
+                AesCryptoUtil.encrypt("Blood pressure 130/85, stable. Continue current medication."), now, now);
 
         jdbcTemplate.update(sql,
                 201L, 100L, 2L, LocalDateTime.of(2026, 5, 20, 10, 30), 3, "URGENT_CARE",
-                "Fever and sore throat x3 days", "Family Medicine", 30, "99203", "J06.9",
-                "Fever and sore throat",
-                "Diagnosed with upper respiratory infection. Prescribed antibiotics.", now, now);
+                AesCryptoUtil.encrypt("Fever and sore throat x3 days"), "Family Medicine", 30, "99203", "J06.9",
+                AesCryptoUtil.encrypt("Fever and sore throat"),
+                AesCryptoUtil.encrypt("Diagnosed with upper respiratory infection. Prescribed antibiotics."), now, now);
 
         jdbcTemplate.update(sql,
                 202L, 100L, 2L, LocalDateTime.of(2026, 5, 28, 14, 0), 0, "ANNUAL_PHYSICAL",
-                "Annual diabetes checkup and wellness exam", "Family Medicine", 45, "99214", "E11.9;Z00.00",
-                "Annual diabetes checkup", null, now, now);
+                AesCryptoUtil.encrypt("Annual diabetes checkup and wellness exam"), "Family Medicine", 45, "99214", "E11.9;Z00.00",
+                AesCryptoUtil.encrypt("Annual diabetes checkup"), null, now, now);
 
         jdbcTemplate.update(sql,
                 203L, 100L, 2L, LocalDateTime.of(2026, 6, 15, 8, 30), 0, "FOLLOW_UP",
-                "Blood sugar recheck post medication adjustment", "Family Medicine", 30, "99213", "E11.9",
-                "Blood sugar recheck",
-                "Patient needs to fast for 8h before test", now, now);
+                AesCryptoUtil.encrypt("Blood sugar recheck post medication adjustment"), "Family Medicine", 30, "99213", "E11.9",
+                AesCryptoUtil.encrypt("Blood sugar recheck"),
+                AesCryptoUtil.encrypt("Patient needs to fast for 8h before test"), now, now);
 
         jdbcTemplate.update(sql,
                 204L, 101L, 2L, LocalDateTime.of(2026, 5, 22, 11, 0), 3, "CONSULTATION",
-                "Persistent allergy symptoms, suspected environmental triggers",
+                AesCryptoUtil.encrypt("Persistent allergy symptoms, suspected environmental triggers"),
                 "Allergy & Immunology", 45, "99244", "J45.30",
-                "Allergy consultation",
-                "Skin prick test positive for dust mites and pollen. Prescribed antihistamines.", now, now);
+                AesCryptoUtil.encrypt("Allergy consultation"),
+                AesCryptoUtil.encrypt("Skin prick test positive for dust mites and pollen. Prescribed antihistamines."), now, now);
     }
 
     private void seedPrescriptions() {
@@ -663,16 +663,16 @@ public class DataInitializer implements CommandLineRunner {
         LocalDateTime now = LocalDateTime.now();
         jdbcTemplate.update(sql, 100L, 2L, LocalDateTime.of(2026, 5, 15, 9, 15),
                 128, 82, 72, 36.6, 16, 98, 175.3, 85.0, 27.6,
-                "Routine checkup; BP slightly elevated", now);
+                AesCryptoUtil.encrypt("Routine checkup; BP slightly elevated"), now);
         jdbcTemplate.update(sql, 100L, 2L, LocalDateTime.of(2026, 7, 10, 10, 0),
                 134, 86, 76, 36.8, 18, 97, 175.3, 84.5, 27.4,
-                "Follow-up; BP trending up, counseled on diet", now);
+                AesCryptoUtil.encrypt("Follow-up; BP trending up, counseled on diet"), now);
         jdbcTemplate.update(sql, 101L, 2L, LocalDateTime.of(2026, 5, 23, 11, 0),
                 118, 76, 68, 36.5, 14, 99, 162.0, 58.0, 22.1,
-                "Annual physical; all vitals within normal range", now);
+                AesCryptoUtil.encrypt("Annual physical; all vitals within normal range"), now);
         jdbcTemplate.update(sql, 103L, 2L, LocalDateTime.of(2026, 5, 20, 10, 30),
                 142, 90, 80, 36.9, 20, 95, 165.0, 92.0, 33.8,
-                "Hypertension follow-up; BP elevated, adjust meds", now);
+                AesCryptoUtil.encrypt("Hypertension follow-up; BP elevated, adjust meds"), now);
     }
 
     private void seedProblems() {
@@ -767,19 +767,19 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(sql, 100L, 2L, "Dr. Emily Chen", "9876543210",
                 "Ophthalmology", "Diabetic retinopathy screening", "Annual eye exam for diabetic patient",
                 "ROUTINE", "SCHEDULED", LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 15),
-                "Patient scheduled at Northwestern Ophthalmology", now);
+                AesCryptoUtil.encrypt("Patient scheduled at Northwestern Ophthalmology"), now);
         jdbcTemplate.update(sql, 100L, 2L, "Dr. Robert Park", "8765432109",
                 "Cardiology", "Essential hypertension", "BP trending up despite medication; evaluate for secondary causes",
                 "ROUTINE", "PENDING", LocalDate.of(2026, 7, 10), null,
-                "Referral faxed 7/10; awaiting scheduling", now);
+                AesCryptoUtil.encrypt("Referral faxed 7/10; awaiting scheduling"), now);
         jdbcTemplate.update(sql, 102L, 2L, "Dr. Lisa Zhang", "7654321098",
                 "Orthopedic Surgery", "Lumbar disc herniation", "Persistent radiculopathy; surgical consultation",
                 "URGENT", "PENDING", LocalDate.of(2026, 6, 28), null,
-                "MRI shows L4-L5 herniation with nerve root compression", now);
+                AesCryptoUtil.encrypt("MRI shows L4-L5 herniation with nerve root compression"), now);
         jdbcTemplate.update(sql, 103L, 2L, "Dr. James Miller", "6543210987",
                 "Endocrinology", "Type 2 diabetes mellitus", "HbA1c 8.2% despite insulin; optimize regimen",
                 "ROUTINE", "COMPLETED", LocalDate.of(2026, 4, 15), LocalDate.of(2026, 5, 20),
-                "Insulin adjusted; follow-up in 3 months", now);
+                AesCryptoUtil.encrypt("Insulin adjusted; follow-up in 3 months"), now);
     }
 
     private void seedCharges() {
@@ -792,10 +792,10 @@ public class DataInitializer implements CommandLineRunner {
         LocalDateTime now = LocalDateTime.now();
         jdbcTemplate.update(sql, 100L, 201L, 2L, "99213", "I10;E11.9",
                 1, 20.85, "FOLLOW_UP", "DRAFT",
-                "Hypertension + diabetes follow-up; captured from appointment #201", now);
+                AesCryptoUtil.encrypt("Hypertension + diabetes follow-up; captured from appointment #201"), now);
         jdbcTemplate.update(sql, 101L, 204L, 2L, "99214", "J45.30",
                 1, 100.00, "FOLLOW_UP", "DRAFT",
-                "Asthma follow-up with pulmonary function assessment", now);
+                AesCryptoUtil.encrypt("Asthma follow-up with pulmonary function assessment"), now);
     }
 
     private void seedCarePlans() {

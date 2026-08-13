@@ -8,7 +8,7 @@
 >
 > **Full-system review (2026-08-04): Ready to merge — 0 CRITICAL, 0 HIGH. 2 MEDIUM (raw-entity responses in 6 endpoints; missing @Valid in 5 controllers), 2 LOW (silent catch in LoincCatalog + RxNorm lookup). See Post-Round 42 section.**
 >
-> **Full-system review II (2026-08-12): 1 CRITICAL (chat ID-space collision) fixed in Round 45, 1 HIGH (DOCTOR scoping) fixed in Round 47; 1 HIGH, 3 MEDIUM, 3 LOW pending. See Post-Round 44 section.**
+> **Full-system review II (2026-08-12): all findings fixed — R2-1 (CRITICAL) Round 45, R2-2 (HIGH) Round 47, R2-3..R2-9 Round 48. See Post-Round 44 section.**
 
 ---
 
@@ -2159,7 +2159,7 @@ Verified: `npx tsc --noEmit` clean (noImplicitAny: true), `npm run build` passes
 
 ## Resolution Status
 
-- R2-1: ✅ Fixed in Round 45 (2026-08-12). R2-2: ✅ Fixed in Round 47 (2026-08-12). R2-3..R2-9: pending — user to decide scope of fixes.
+- R2-1: ✅ Fixed in Round 45 (2026-08-12). R2-2: ✅ Fixed in Round 47 (2026-08-12). R2-3..R2-9: ✅ Fixed in Round 48 (2026-08-13). All Post-Round 44 findings closed.
 
 ---
 
@@ -2292,3 +2292,47 @@ Deliberately unscoped: create endpoints and the patient directory/detail (`GET /
 ## Notes
 
 - FHIR read endpoints (`/api/v1/fhir/Patient/{id}` etc.) remain unscoped — machine-facing consumers, flagged as a follow-up decision.
+
+---
+
+# Round 48: R2-3..R2-9 — Validation, Audit, VOs, Free-Text Encryption, Hardening ✅ Complete
+
+> **Status: Complete (2026-08-13) — all remaining Post-Round 44 findings closed (R2-3 HIGH; R2-4/5/6 MEDIUM; R2-7/8/9 LOW).**
+
+## Changes
+
+### R2-3 (HIGH) — ChargeController validation + architecture
+- `ChargeForm` moved to `billing/dto/` with constraints (`patientId` @NotNull @Positive — blocks the frontend's `Number('')=0` case; `chargeAmount` @NotNull @PositiveOrZero; `units` @PositiveOrZero) + `toEntity()`
+- New `ChargeService` owns `@Transactional`/`@Auditable`/scope filtering; controller is thin and applies `@Valid`
+- `convert` now throws `BusinessException(CONFLICT)` (was inline `Result.fail(409)`) and returns `BillVO` (`BillService.toVO` made public; private duplicate removed)
+- Raw `Result<Charge>`/`Result<Bill>` replaced with `ChargeVO`/`BillVO`
+
+### R2-4 (MEDIUM) — Integration audit trail
+- `@Auditable(module="integration")` on `AdtService.processAdt` (ADT_UPSERT) and `LabResultService.processLabResults` (LAB_RESULTS) — Mirth-sourced PHI writes now leave audit records
+
+### R2-5 (MEDIUM) — Raw entity responses eliminated
+- New `VitalSignVO` + `ObservationVO` (patient/dto, `fromEntity` per convention)
+- `VitalSignController`, `LabResultController`, `PatientPortalController`, `LabAnalysisService` all return VOs; field names identical to prior entity JSON → zero frontend changes
+
+### R2-6 (MEDIUM) — Free-text clinical encryption
+- `@Convert(AesAttributeConverter)` on `Appointment.chiefComplaint/description/notes`, `Charge.notes`, `Referral.notes`, `VitalSign.notes`
+- DataInitializer seeds encrypt these columns (raw SQL bypasses the converter)
+- Note: Problem/CarePlan/PriorAuth/MedicalHistory free-text fields remain plaintext — flagged as candidates for a follow-up round
+
+### R2-7 (LOW) — .gitignore
+- `data/` + `medical-server/data/` added (H2 file DBs no longer show as untracked)
+
+### R2-8 (LOW) — Password reset hardening
+- New rate limiter: forgot-password + reset-password, 5/min/IP (`rate:password-reset:`)
+- Reset token logged only when `app.security.dev-mode: true` (prod logs username only — tokens never hit prod logs; dev-mode log is the delivery channel until a mailer exists)
+
+### R2-9 (LOW) — H2 console gating
+- `SecurityConfig` permits `/h2-console/**` only when the `h2` profile is active; other profiles require auth (401) instead of exposing an empty-password console
+
+### Tests
+- `createCharge_missingPatient_should400`, `createCharge_valid_shouldSucceed_andRoundTripEncryptedNotes` (verifies AES round-trip through the converter)
+
+## Verified
+
+- `mvn test`: **145 tests, 0 failures** (was 143 — 2 new)
+- `npx tsc --noEmit`: clean

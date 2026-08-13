@@ -13,9 +13,9 @@ import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.service.BillService;
+import com.example.medical.module.patient.dto.ObservationVO;
 import com.example.medical.module.patient.dto.PatientDataExport;
 import com.example.medical.module.patient.dto.PatientVO;
-import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
@@ -78,7 +78,7 @@ public class PatientPortalController {
 
     @GetMapping("/observations")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
-    public Result<PageResult<Observation>> myObservations(
+    public Result<PageResult<ObservationVO>> myObservations(
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(required = false) String loinc,
             @RequestParam(defaultValue = "1") long page,
@@ -88,7 +88,7 @@ public class PatientPortalController {
 
     @GetMapping("/observations/trend")
     @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
-    public Result<List<Observation>> myObservationsTrend(
+    public Result<List<ObservationVO>> myObservationsTrend(
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam String loinc) {
         return Result.ok(labAnalysisService.getTrend(loginUser.getUserId(), loinc));

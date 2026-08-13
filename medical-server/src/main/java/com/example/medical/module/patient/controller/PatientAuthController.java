@@ -59,6 +59,9 @@ public class PatientAuthController {
     @Value("${app.security.patient-refresh-token-expiry-seconds:2592000}")
     private long patientRefreshTokenExpirySeconds;
 
+    @Value("${app.security.dev-mode:false}")
+    private boolean devMode;
+
     @PostMapping("/login")
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGIN_SUCCESS")
@@ -116,8 +119,15 @@ public class PatientAuthController {
             String token = UUID.randomUUID().toString().replace("-", "");
             RESET_TOKENS.put(token, new ResetToken(auth.getUsername(),
                     LocalDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES)));
-            log.info("Password reset token for {}: {} (expires in {} min)",
-                    auth.getUsername(), token, RESET_TOKEN_TTL_MINUTES);
+            // No email infrastructure yet — dev-mode logs the token (the delivery
+            // channel); production must never write reset tokens to the log.
+            if (devMode) {
+                log.info("Password reset token for {}: {} (expires in {} min)",
+                        auth.getUsername(), token, RESET_TOKEN_TTL_MINUTES);
+            } else {
+                log.info("Password reset token issued for {} (expires in {} min)",
+                        auth.getUsername(), RESET_TOKEN_TTL_MINUTES);
+            }
         });
         return Result.ok();
     }

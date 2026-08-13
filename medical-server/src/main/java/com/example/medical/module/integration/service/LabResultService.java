@@ -22,6 +22,7 @@ public class LabResultService {
     private final ObservationRepository observationRepository;
 
     @Transactional
+    @com.example.medical.common.audit.Auditable(module = "integration", action = "LAB_RESULTS")
     public int processLabResults(LabResultPayload dto) {
         if (observationRepository.existsBySourceMessageId(dto.getSourceMessageId())) {
             log.info("Duplicate lab result ignored: sourceMessageId={}", dto.getSourceMessageId());
