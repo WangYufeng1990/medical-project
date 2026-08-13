@@ -1,19 +1,16 @@
 package com.example.medical.module.export.controller;
 
 import com.example.medical.common.audit.Auditable;
-import com.example.medical.module.appointment.repository.AppointmentRepository;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
-import com.example.medical.module.prescription.repository.PrescriptionRepository;
-import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,7 +19,6 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
 import java.util.Set;
 
 @RestController
@@ -35,15 +31,12 @@ public class ExportController {
 
     private final PatientRepository patientRepository;
     private final BillRepository billRepository;
-    private final AppointmentRepository appointmentRepository;
-    private final PrescriptionRepository prescriptionRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients")
     @Auditable(module = "export", action = "EXPORT_PATIENTS", phiAccess = true)
     public ResponseEntity<StreamingResponseBody> exportPatients() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        LoginUser user = auth != null ? (LoginUser) auth.getPrincipal() : null;
-        Set<Long> scopedPatientIds = resolveExportScope(user);
+        Set<Long> scopedPatientIds = doctorPatientScope.resolve();
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream);
@@ -89,9 +82,7 @@ public class ExportController {
     @GetMapping("/bills")
     @Auditable(module = "export", action = "EXPORT_BILLS", phiAccess = true)
     public ResponseEntity<StreamingResponseBody> exportBills() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        LoginUser user = auth != null ? (LoginUser) auth.getPrincipal() : null;
-        Set<Long> scopedPatientIds = resolveExportScope(user);
+        Set<Long> scopedPatientIds = doctorPatientScope.resolve();
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream);
@@ -134,19 +125,6 @@ public class ExportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bills.csv")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(stream);
-    }
-
-    private Set<Long> resolveExportScope(LoginUser user) {
-        if (user == null) return null;
-        var authorities = user.getAuthorities();
-        boolean isAdmin = authorities.stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        if (isAdmin) return null;
-
-        Set<Long> ids = new HashSet<>();
-        ids.addAll(appointmentRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
-        ids.addAll(prescriptionRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
-        return ids;
     }
 
     private static String csv(Object value) {

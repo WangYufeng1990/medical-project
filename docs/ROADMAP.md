@@ -8,7 +8,7 @@
 >
 > **Full-system review (2026-08-04): Ready to merge — 0 CRITICAL, 0 HIGH. 2 MEDIUM (raw-entity responses in 6 endpoints; missing @Valid in 5 controllers), 2 LOW (silent catch in LoincCatalog + RxNorm lookup). See Post-Round 42 section.**
 >
-> **Full-system review II (2026-08-12): 1 CRITICAL (chat ID-space collision) fixed in Round 45; 2 HIGH, 3 MEDIUM, 3 LOW pending. See Post-Round 44 section.**
+> **Full-system review II (2026-08-12): 1 CRITICAL (chat ID-space collision) fixed in Round 45, 1 HIGH (DOCTOR scoping) fixed in Round 47; 1 HIGH, 3 MEDIUM, 3 LOW pending. See Post-Round 44 section.**
 
 ---
 
@@ -2159,7 +2159,7 @@ Verified: `npx tsc --noEmit` clean (noImplicitAny: true), `npm run build` passes
 
 ## Resolution Status
 
-- R2-1: ✅ Fixed in Round 45 (2026-08-12). R2-2..R2-9: pending — user to decide scope of fixes; R2-2 needs a docs-vs-code decision first.
+- R2-1: ✅ Fixed in Round 45 (2026-08-12). R2-2: ✅ Fixed in Round 47 (2026-08-12). R2-3..R2-9: pending — user to decide scope of fixes.
 
 ---
 
@@ -2251,3 +2251,44 @@ SSE stays page-local (chat view owns the single emitter per user) — the sideba
 - `mvn test`: 137 tests, 0 failures
 - `npx tsc --noEmit`: clean
 - Live smoke: patient1 unread → 0 (conversation was auto-read by prior smoke), doctor unread → 0; patient sends message → doctor unread → 1 (badge data flows end to end)
+
+---
+
+# Round 47: R2-2 — DOCTOR Patient Scoping ✅ Complete
+
+> **Status: Complete (2026-08-12) — Post-Round 44 finding R2-2 (HIGH: DOCTOR scoping claimed in docs but only bills implemented) resolved.**
+
+## Problem
+
+API-LAYOUT claimed "DOCTOR scoped to own patients" for appointments/prescriptions/bills lists, but only `BillService` (and CSV export) implemented it; `AppointmentService.page` and `PrescriptionService.page` returned everything. Detail endpoints (`GET /bills/{id}` etc.) had no ownership check anywhere — scoping a list without detail checks is bypassable by id enumeration. Bonus latent bug found during the fix: the existing ADMIN checks used `LoginUser.getAuthorities()` which mirrors token *scopes*, not roles — the ADMIN bypass never fired.
+
+## Solution
+
+"Own patients" = patients where the doctor has appointments or prescriptions (the definition already used by bills/export).
+
+### Backend
+| File | Change |
+|------|--------|
+| `common/security/DoctorPatientScope` (new) | Shared resolver: `resolve()` → null for ADMIN, else patient-id set (appointments ∪ prescriptions ∪ emergency patientId). `requireAccess(patientId)` → 403 for out-of-scope. Role check via `Authentication` authorities (fixes the latent ADMIN-bypass bug) |
+| `billing/service/BillService` | Uses shared resolver; latent empty-scope→null bug fixed (empty now filters to nothing); `getById`/`submitClaim` add 403 |
+| `export/controller/ExportController` | Uses shared resolver (removed duplicate `resolveExportScope`) |
+| `appointment/service/AppointmentService` | `page` filtered; `getById`/`update` add 403 |
+| `prescription/service/PrescriptionService` | `page` filtered; `getById`/`getByPatientId`/`cancel` add 403 |
+| `billing/controller/ChargeController` | `list` filtered; `convert` adds 403 |
+| `prescription/controller/RefillController` | Pending list filtered (new repo query `findByStatusAndPatientIdInOrderByRequestedAtDesc`); `approve`/`deny` add 403 |
+| `patient/controller/VitalSignController`, `LabResultController` (observations + trend), `ProblemController`, `CarePlanController`, `ImmunizationController`, `PatientController` (history/allergies reads + allergy resolve), `PatientCaseController` (FHIR case) | by-patient reads/updates add 403 |
+
+Deliberately unscoped: create endpoints and the patient directory/detail (`GET /patients`, `GET /patients/{id}`) — booking or prescribing for a new patient establishes the care relationship; emergency break-glass tokens bypass via the `patientId` claim.
+
+### Tests
+6 new integration tests (Orders 72–77): out-of-scope 403 on vitals + 7 clinical read endpoints; charge list excludes patient 102; appointment detail 403 (with in-scope 200 control); admin sees all; emergency token bypasses scope.
+
+## Verified
+
+- `mvn test`: **143 tests, 0 failures** (was 137 — 6 new)
+- Existing 137 tests unaffected (admin-token list tests stay unscoped; doctor tests use patients 100/101, both in doctor 2's scope)
+- `npx tsc --noEmit`: clean (no frontend changes)
+
+## Notes
+
+- FHIR read endpoints (`/api/v1/fhir/Patient/{id}` etc.) remain unscoped — machine-facing consumers, flagged as a follow-up decision.

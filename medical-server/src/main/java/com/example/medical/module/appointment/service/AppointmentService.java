@@ -3,6 +3,7 @@ package com.example.medical.module.appointment.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
 import com.example.medical.module.appointment.entity.Appointment;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -29,12 +31,17 @@ public class AppointmentService {
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
     private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     public Page<AppointmentVO> page(long page, long size, Integer status, Long patientId) {
+        Set<Long> scopedPatientIds = doctorPatientScope.resolve();
         Specification<Appointment> spec = (root, query, cb) -> {
             var predicates = cb.conjunction();
             if (status != null) predicates = cb.and(predicates, cb.equal(root.get("status"), status));
             if (patientId != null) predicates = cb.and(predicates, cb.equal(root.get("patientId"), patientId));
+            if (scopedPatientIds != null) {
+                predicates = cb.and(predicates, root.get("patientId").in(scopedPatientIds));
+            }
             return predicates;
         };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
@@ -44,6 +51,7 @@ public class AppointmentService {
     public AppointmentVO getById(Long id) {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
+        doctorPatientScope.requireAccess(a.getPatientId());
         return toVO(a);
     }
 
@@ -62,6 +70,7 @@ public class AppointmentService {
     public void update(Long id, AppointmentFormDTO dto) {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
+        doctorPatientScope.requireAccess(a.getPatientId());
         if (a.getStatus() != null && java.util.Set.of(2, 3, 4).contains(a.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Terminal appointments cannot be modified");
         }

@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.dto.CarePlanVO;
 import com.example.medical.module.patient.entity.CarePlan;
 import com.example.medical.module.patient.repository.CarePlanRepository;
@@ -24,10 +25,12 @@ import java.time.LocalDate;
 public class CarePlanController {
 
     private final CarePlanRepository carePlanRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients/{patientId}/care-plans")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<CarePlanVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+        doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "startDate"));
         var page = carePlanRepository.findAll(
@@ -59,6 +62,7 @@ public class CarePlanController {
     @Transactional
     @Auditable(module = "care_plan", action = "UPDATE")
     public Result<CarePlanVO> update(@PathVariable Long patientId, @PathVariable Long id, @Valid @RequestBody CarePlanForm form) {
+        doctorPatientScope.requireAccess(patientId);
         CarePlan cp = carePlanRepository.findById(id).orElseThrow();
         if (form.getStatus() != null) cp.setStatus(form.getStatus());
         if (form.getCompletedDate() != null) cp.setCompletedDate(form.getCompletedDate());

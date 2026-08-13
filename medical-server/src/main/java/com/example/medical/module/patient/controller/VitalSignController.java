@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.entity.VitalSign;
 import com.example.medical.module.patient.repository.VitalSignRepository;
 import jakarta.validation.Valid;
@@ -25,10 +26,12 @@ import java.time.LocalDateTime;
 public class VitalSignController {
 
     private final VitalSignRepository vitalSignRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<VitalSign>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+        doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "recordedAt"));
         var page = vitalSignRepository.findAll(

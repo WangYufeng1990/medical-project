@@ -470,8 +470,17 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 | Role | Scope |
 |------|-------|
 | ADMIN | Full access — all endpoints |
-| DOCTOR | Patient/appointment/prescription/bill CRUD, dashboard, export, chat, own profile |
+| DOCTOR | Patient/appointment/prescription/bill CRUD, dashboard, export, chat, own profile. **Clinical/billing data is scoped to own patients** (patients they have appointments or prescriptions with) — see note below. |
 | PATIENT | Patient portal (`/api/v1/patient/me/*`), patient chat (`/api/v1/patient/me/messages/*`) |
+
+### DOCTOR Patient Scoping (Round 47)
+
+For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own patients (defined as patients where the doctor has appointments or prescriptions — `DoctorPatientScope` in `common/security`):
+
+- **List endpoints** (`appointments`, `prescriptions`, `charges`, refill pending list) filter rows to in-scope patients; ADMIN sees all.
+- **By-patient read/update endpoints** (vitals, observations + trend, problems, care-plans, immunizations, patient history/allergies, FHIR case, appointment/prescription/bill detail, charge convert, refill approve/deny) return **403** for out-of-scope patients.
+- **Create endpoints and the patient directory** (`GET /patients`, `GET /patients/{id}`, patient search dropdowns) stay open — booking or prescribing for a new patient establishes the care relationship.
+- **Emergency break-glass tokens** (`scope=EMERGENCY`, `patientId` claim) bypass the scope for the named patient.
 
 ### Data Encryption
 - **Passwords**: BCrypt hashed + complexity policy (8+ chars, upper/lower/digit/special) + history enforcement (last 3 cannot be reused)

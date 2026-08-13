@@ -4,6 +4,7 @@ import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.dto.PatientFormDTO;
 import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.entity.AllergyEntry;
@@ -33,6 +34,7 @@ public class PatientController {
     private final PatientService patientService;
     private final MedicalHistoryEntryRepository historyRepo;
     private final AllergyEntryRepository allergyRepo;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
@@ -88,6 +90,7 @@ public class PatientController {
     @GetMapping("/{patientId}/history")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<MedicalHistoryEntry>> getHistory(@PathVariable Long patientId) {
+        doctorPatientScope.requireAccess(patientId);
         return Result.ok(historyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
     }
 
@@ -108,6 +111,7 @@ public class PatientController {
     @GetMapping("/{patientId}/allergies")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<AllergyEntry>> getAllergies(@PathVariable Long patientId) {
+        doctorPatientScope.requireAccess(patientId);
         return Result.ok(allergyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
     }
 
@@ -133,6 +137,7 @@ public class PatientController {
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "patient", action = "RESOLVE_ALLERGY")
     public Result<Void> resolveAllergy(@PathVariable Long patientId, @PathVariable Long id) {
+        doctorPatientScope.requireAccess(patientId);
         AllergyEntry e = allergyRepo.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Allergy entry not found"));
         if (!e.getPatientId().equals(patientId)) {

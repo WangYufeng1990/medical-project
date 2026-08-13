@@ -1092,6 +1092,118 @@ class IntegrationTest {
         assertEquals("STAFF", records.get(0).get("partnerType").asText());
     }
 
+    // ── R2-2: DOCTOR patient scoping (patient 102 has no doctor-2 relationship) ──
+
+    @Test
+    @Order(72)
+    void doctorVitals_outOfScopePatient_should403() throws Exception {
+        mockMvc.perform(get("/api/v1/patients/102/vitals")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(73)
+    void doctorClinicalReads_outOfScopePatient_should403() throws Exception {
+        mockMvc.perform(get("/api/v1/patients/102/history")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/allergies")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/observations")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/problems")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/care-plans")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/immunizations")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/patients/102/case")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(74)
+    void doctorChargeList_shouldExcludeOutOfScopePatients() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/charges")
+                        .param("page", "1").param("size", "50")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        for (JsonNode r : node.get("data").get("records")) {
+            assertNotEquals(102, r.get("patientId").asLong(),
+                    "seed charge for patient 102 must not leak into doctor 2's list");
+        }
+    }
+
+    @Test
+    @Order(75)
+    void doctorAppointmentDetail_outOfScope_should403() throws Exception {
+        // Admin books an appointment for patient 102 (doctorId 1) so the row exists.
+        String body = objectMapper.writeValueAsString(Map.of(
+                "patientId", 102, "doctorId", 1,
+                "appointmentTime", LocalDateTime.now().plusDays(5)
+                        .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                "department", "Neurology"));
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        // Find the new appointment id via the admin list.
+        MvcResult list = mockMvc.perform(get("/api/v1/appointments")
+                        .param("patientId", "102")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(list.getResponse().getContentAsString())
+                .get("data").get("records");
+        long newId = records.get(0).get("id").asLong();
+
+        // Doctor 2 (no relationship with patient 102) must get 403 on detail.
+        mockMvc.perform(get("/api/v1/appointments/" + newId)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+
+        // In-scope control: appointment 200 belongs to patient 100 (doctor 2's own).
+        mockMvc.perform(get("/api/v1/appointments/200")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(76)
+    void adminReads_outOfScopeForDoctors_shouldStillSeeAll() throws Exception {
+        mockMvc.perform(get("/api/v1/patients/102/vitals")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(77)
+    void emergencyAccess_shouldBypassDoctorScope() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("reason", "break-glass test"));
+        MvcResult em = mockMvc.perform(post("/api/v1/emergency/access/102")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(em.getResponse().getContentAsString());
+        String emToken = node.get("data").get("token").asText();
+
+        // The emergency token carries patientId=102 — vitals for 102 must now be readable.
+        mockMvc.perform(get("/api/v1/patients/102/vitals")
+                        .header("Authorization", "Bearer " + emToken))
+                .andExpect(status().isOk());
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────

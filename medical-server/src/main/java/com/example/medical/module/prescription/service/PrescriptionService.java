@@ -3,6 +3,7 @@ package com.example.medical.module.prescription.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
@@ -18,11 +19,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -34,19 +37,30 @@ public class PrescriptionService {
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
     private final CdsService cdsService;
+    private final DoctorPatientScope doctorPatientScope;
 
     public Page<PrescriptionVO> page(long page, long size) {
+        Set<Long> scopedPatientIds = doctorPatientScope.resolve();
+        Specification<Prescription> spec = (root, query, cb) -> {
+            var predicates = cb.conjunction();
+            if (scopedPatientIds != null) {
+                predicates = cb.and(predicates, root.get("patientId").in(scopedPatientIds));
+            }
+            return predicates;
+        };
         PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
-        return prescriptionRepository.findAll(pageable).map(this::toVO);
+        return prescriptionRepository.findAll(spec, pageable).map(this::toVO);
     }
 
     public PrescriptionVO getById(Long id) {
         Prescription p = prescriptionRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Prescription not found"));
+        doctorPatientScope.requireAccess(p.getPatientId());
         return toVO(p);
     }
 
     public List<PrescriptionVO> getByPatientId(Long patientId) {
+        doctorPatientScope.requireAccess(patientId);
         return prescriptionRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
                 org.springframework.data.domain.Sort.by(
@@ -105,6 +119,7 @@ public class PrescriptionService {
     public void cancel(Long id) {
         Prescription p = prescriptionRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Prescription not found"));
+        doctorPatientScope.requireAccess(p.getPatientId());
         if (!"active".equals(p.getRxStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Only active prescriptions can be cancelled");
         }

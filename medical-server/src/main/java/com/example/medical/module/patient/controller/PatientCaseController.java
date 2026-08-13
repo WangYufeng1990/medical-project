@@ -2,6 +2,7 @@ package com.example.medical.module.patient.controller;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.service.PatientCaseService;
 import lombok.RequiredArgsConstructor;
 import org.hl7.fhir.r4.model.Bundle;
@@ -17,10 +18,12 @@ public class PatientCaseController {
 
     private final PatientCaseService patientCaseService;
     private final FhirContext fhirContext;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/{id}/case")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> getCase(@PathVariable Long id) {
+        doctorPatientScope.requireAccess(id);
         Bundle bundle = patientCaseService.getPatientCase(id);
         IParser parser = fhirContext.newJsonParser().setPrettyPrint(true);
         return ResponseEntity.ok()

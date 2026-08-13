@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.dto.ImmunizationVO;
 import com.example.medical.module.patient.entity.Immunization;
 import com.example.medical.module.patient.repository.ImmunizationRepository;
@@ -24,10 +25,12 @@ import java.time.LocalDate;
 public class ImmunizationController {
 
     private final ImmunizationRepository immunizationRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<ImmunizationVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+        doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "administrationDate"));
         var page = immunizationRepository.findAll(

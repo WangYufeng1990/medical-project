@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.dto.ProblemVO;
 import com.example.medical.module.patient.entity.Problem;
 import com.example.medical.module.patient.repository.ProblemRepository;
@@ -24,10 +25,12 @@ import java.time.LocalDate;
 public class ProblemController {
 
     private final ProblemRepository problemRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients/{patientId}/problems")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<ProblemVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+        doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "onsetDate"));
         var page = problemRepository.findAll(
@@ -60,6 +63,7 @@ public class ProblemController {
     @Transactional
     @Auditable(module = "problem", action = "UPDATE")
     public Result<ProblemVO> update(@PathVariable Long patientId, @PathVariable Long id, @Valid @RequestBody ProblemForm form) {
+        doctorPatientScope.requireAccess(patientId);
         Problem p = problemRepository.findById(id).orElseThrow();
         if (form.getResolutionDate() != null) p.setResolutionDate(form.getResolutionDate());
         if (form.getStatus() != null) p.setStatus(form.getStatus());

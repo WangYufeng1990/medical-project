@@ -2,6 +2,7 @@ package com.example.medical.module.prescription.controller;
 
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.prescription.dto.RefillRequestVO;
 import com.example.medical.module.prescription.entity.RefillRequest;
 import com.example.medical.module.prescription.repository.PrescriptionRepository;
@@ -26,6 +27,7 @@ public class RefillController {
 
     private final RefillRequestRepository refillRequestRepository;
     private final PrescriptionRepository prescriptionRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @PostMapping("/patient/me/refill-requests")
     @PreAuthorize("hasRole('PATIENT')")
@@ -55,8 +57,11 @@ public class RefillController {
     @GetMapping("/prescriptions/refill-requests")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<RefillRequestVO>> listPending() {
-        return Result.ok(refillRequestRepository.findByStatusOrderByRequestedAtDesc("PENDING")
-                .stream().map(RefillRequestVO::fromEntity).toList());
+        var scope = doctorPatientScope.resolve();
+        List<RefillRequest> pending = scope == null
+                ? refillRequestRepository.findByStatusOrderByRequestedAtDesc("PENDING")
+                : refillRequestRepository.findByStatusAndPatientIdInOrderByRequestedAtDesc("PENDING", scope);
+        return Result.ok(pending.stream().map(RefillRequestVO::fromEntity).toList());
     }
 
     @PutMapping("/prescriptions/refill-requests/{id}/approve")
@@ -65,6 +70,7 @@ public class RefillController {
     @Auditable(module = "refill_request", action = "APPROVE")
     public Result<RefillRequestVO> approve(@PathVariable Long id, @AuthenticationPrincipal LoginUser loginUser) {
         RefillRequest r = refillRequestRepository.findById(id).orElseThrow();
+        doctorPatientScope.requireAccess(r.getPatientId());
         r.setStatus("APPROVED");
         r.setReviewedBy(loginUser.getUserId());
         r.setReviewedAt(LocalDateTime.now());
@@ -78,6 +84,7 @@ public class RefillController {
     public Result<RefillRequestVO> deny(@PathVariable Long id, @AuthenticationPrincipal LoginUser loginUser,
                                         @RequestBody(required = false) DenyForm form) {
         RefillRequest r = refillRequestRepository.findById(id).orElseThrow();
+        doctorPatientScope.requireAccess(r.getPatientId());
         r.setStatus("DENIED");
         r.setReviewedBy(loginUser.getUserId());
         r.setReviewedAt(LocalDateTime.now());

@@ -2,6 +2,7 @@ package com.example.medical.module.patient.controller;
 
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.entity.LoincCatalog;
 import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.repository.LoincCatalogRepository;
@@ -19,6 +20,7 @@ public class LabResultController {
 
     private final LabAnalysisService labAnalysisService;
     private final LoincCatalogRepository loincCatalogRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients/{patientId}/observations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
@@ -27,6 +29,7 @@ public class LabResultController {
             @RequestParam(required = false) String loinc,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long size) {
+        doctorPatientScope.requireAccess(patientId);
         return Result.ok(labAnalysisService.pageObservations(patientId, loinc, page, size));
     }
 
@@ -35,6 +38,7 @@ public class LabResultController {
     public Result<List<Observation>> getTrend(
             @PathVariable Long patientId,
             @RequestParam String loinc) {
+        doctorPatientScope.requireAccess(patientId);
         return Result.ok(labAnalysisService.getTrend(patientId, loinc));
     }
 
