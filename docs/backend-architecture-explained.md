@@ -359,9 +359,14 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 | Prescription | `deaNumber` | 1 |
 | Appointment | `chiefComplaint`, `description`, `notes` (free-text clinical — Round 48) | 3 |
 | Charge | `notes` | 1 |
-| Referral | `notes` | 1 |
+| Referral | `notes`, `diagnosis`, `reason` | 3 |
 | VitalSign | `notes` | 1 |
-| **Total** | | **32+1** |
+| MedicalHistoryEntry | `description` (Round 49) | 1 |
+| AllergyEntry | `allergen`, `reaction` (Round 49) | 2 |
+| Problem | `notes` (Round 49) | 1 |
+| CarePlan | `goal`, `interventions`, `notes` (Round 49) | 3 |
+| PriorAuth | `notes` (Round 49) | 1 |
+| **Total** | | **42+1** |
 
 ### 6.3 Encryption Algorithm
 
@@ -380,7 +385,7 @@ Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:1
 1. Admin generates a new key externally (e.g. `openssl rand -base64 32`)
 2. `POST /api/v1/admin/keys/rotate { "newKey": "<new key>", "oldKey": "<current app.aes.key>" }`
 3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates rotation
-4. `KeyRotationService` starts async background migration — scans all 33 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
+4. `KeyRotationService` starts async background migration — scans all 43 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
 5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
 6. Once `rotationActive=false` and `complete=true`, update `application.yml` (`app.aes.key` → new value, `app.aes.key.previous` → old value) to survive restarts
 

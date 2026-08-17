@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -23,10 +24,12 @@ public class CarePlan extends BaseEntity {
     @Column(length = 200, nullable = false)
     private String title;
 
-    @Column(length = 200)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String goal;
 
-    @Column(name = "interventions", length = 1000)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "interventions")
     private String interventions;
 
     @Column(name = "start_date")
@@ -44,6 +47,7 @@ public class CarePlan extends BaseEntity {
     @Column(name = "created_by")
     private Long createdBy;
 
-    @Column(length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String notes;
 }

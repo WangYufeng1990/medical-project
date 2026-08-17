@@ -2336,3 +2336,56 @@ Deliberately unscoped: create endpoints and the patient directory/detail (`GET /
 
 - `mvn test`: **145 tests, 0 failures** (was 143 — 2 new)
 - `npx tsc --noEmit`: clean
+
+---
+
+# Round 49: Free-Text Encryption Completion + FHIR Read Scoping
+
+> **Status: In progress (2026-08-17) — Item 1 done; Items 2-4 pending.**
+
+> **Item 1 (2026-08-17): ✅ Done.** 10 fields encrypted across 6 entities (`MedicalHistoryEntry.description`, `AllergyEntry.allergen/reaction`, `Problem.notes`, `CarePlan.goal/interventions/notes`, `PriorAuth.notes`, `Referral.diagnosis/reason`); new columns widened to TEXT in schema.sql; seeds encrypt; 145 tests pass; smoke verified reads decrypt and the H2 file contains no plaintext PHI (only the `drug_allergy_class` CDS reference dictionary remains plaintext — by design, not patient PHI).
+
+## Background
+
+Two items were left open after Round 48, plus one latent bug discovered during follow-up analysis.
+
+### Item 1: Complete free-text PHI encryption (HIGH)
+
+Round 48 encrypted the 6 fields named in finding R2-6, but the same category of free text (can embed identifiers) remains plaintext:
+
+| Entity | Fields to encrypt |
+|--------|-------------------|
+| MedicalHistoryEntry | `description` |
+| AllergyEntry | `allergen`, `reaction` |
+| Problem | `notes` |
+| CarePlan | `goal`, `interventions`, `notes` |
+| PriorAuth | `notes` |
+| Referral | `diagnosis`, `reason` (missed in R2-6) |
+
+Not to encrypt: dictionary/coded labels (`snomedDisplay`, `loincDisplay`, `icd10Code`, `cptCodes`) — non-free-text.
+
+**Verified safe**: no repository queries/sorts touch these columns (all patient-owned reads are by `patientId`); CDS allergy matching uses the already-encrypted `Patient.allergies` summary in memory — unaffected.
+
+### Item 2: Round 48 latent bug — schema widths (HIGH)
+
+The 6 columns encrypted in Round 48 (and the Item 1 columns) keep their plaintext-era widths. Ciphertext is hex ≈ `58 + 2×plaintext-length` chars, so e.g. `appointment.description VARCHAR(200)` now holds only ~70 plaintext chars — **long values silently truncate on write**. All newly encrypted columns must widen to `TEXT` (schema.sql).
+
+### Item 3: FHIR read endpoints + DOCTOR scope (MEDIUM/HIGH)
+
+`FhirPatientController` (`GET /Patient/{id}`, `GET /Patient?search`) and `FhirObservationController` (`GET /Observation/{id}`, `GET /Observation?patient=`) are ADMIN/DOCTOR but unscoped — inconsistent with the Round 47 REST model. Apply `DoctorPatientScope.requireAccess` (metadata stays public; emergency exemption flows through the resolver). Tests: doctor out-of-scope 403, admin 200, emergency token 200.
+
+### Item 4: Machine-to-machine FHIR access — DEFERRED design (do not implement)
+
+No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flow; SMART-on-FHIR is a metadata declaration only). Design for when it becomes real:
+
+- System accounts authenticate via OAuth2 client-credentials; JWT carries `scp: fhir/Patient.read` / `fhir/Observation.read`
+- `DoctorPatientScope` exempts tokens holding the `fhir/*.read` scopes from patient scoping (system-level read)
+- Human DOCTOR tokens keep patient scoping; PATIENT tokens already carry `patient/Patient.read` / `patient/Observation.read` scopes for a future patient-facing FHIR API
+
+## Execution Plan
+
+1. Add `@Convert` to the Item 1 fields; widen all affected columns (incl. Round 48's 6) to `TEXT` in schema.sql; encrypt the seed inserts
+2. Dev H2 DB wipe + regenerate (plaintext rows would read as `[DECRYPT_FAILED]`)
+3. `requireAccess` on the 4 FHIR read endpoints + integration tests
+4. Verify: `mvn test`, `tsc`, live smoke (long-text round-trip, FHIR 403/200/emergency)
+5. Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section

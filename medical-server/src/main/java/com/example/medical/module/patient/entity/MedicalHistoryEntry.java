@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,7 +19,8 @@ public class MedicalHistoryEntry extends BaseEntity {
     @Column(name = "patient_id", nullable = false)
     private Long patientId;
 
-    @Column(name = "description", length = 500, nullable = false)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "description", nullable = false)
     private String description;
 
     @Column(name = "recorded_by")

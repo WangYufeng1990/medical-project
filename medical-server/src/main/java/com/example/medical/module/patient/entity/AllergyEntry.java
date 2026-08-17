@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,10 +19,12 @@ public class AllergyEntry extends BaseEntity {
     @Column(name = "patient_id", nullable = false)
     private Long patientId;
 
-    @Column(name = "allergen", length = 200, nullable = false)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "allergen", nullable = false)
     private String allergen;
 
-    @Column(name = "reaction", length = 200)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "reaction")
     private String reaction;
 
     @Column(name = "severity", length = 20)

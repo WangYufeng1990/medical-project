@@ -33,10 +33,12 @@ public class Referral extends BaseEntity {
     @Column(length = 100)
     private String specialty;
 
-    @Column(length = 200)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String diagnosis;
 
-    @Column(length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String reason;
 
     @Column(length = 20)

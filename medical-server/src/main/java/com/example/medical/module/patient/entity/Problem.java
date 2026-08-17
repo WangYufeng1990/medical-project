@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -44,6 +45,7 @@ public class Problem extends BaseEntity {
     @Column(name = "recorded_by")
     private Long recordedBy;
 
-    @Column(length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String notes;
 }

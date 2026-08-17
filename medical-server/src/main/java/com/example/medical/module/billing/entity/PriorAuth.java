@@ -1,6 +1,7 @@
 package com.example.medical.module.billing.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -47,6 +48,7 @@ public class PriorAuth extends BaseEntity {
     @Column(name = "requested_by")
     private Long requestedBy;
 
-    @Column(length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String notes;
 }
