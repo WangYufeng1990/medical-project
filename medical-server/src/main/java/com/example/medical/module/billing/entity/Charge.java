@@ -49,6 +49,6 @@ public class Charge extends BaseEntity {
     private Long billId;
 
     @Convert(converter = AesAttributeConverter.class)
-    @Column(length = 500)
+    @Column
     private String notes;
 }

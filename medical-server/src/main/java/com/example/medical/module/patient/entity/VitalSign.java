@@ -56,6 +56,6 @@ public class VitalSign extends BaseEntity {
     private BigDecimal bmi;
 
     @Convert(converter = AesAttributeConverter.class)
-    @Column(length = 500)
+    @Column
     private String notes;
 }

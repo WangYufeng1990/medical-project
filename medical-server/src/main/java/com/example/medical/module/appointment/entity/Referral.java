@@ -57,6 +57,6 @@ public class Referral extends BaseEntity {
     private LocalDate completionDate;
 
     @Convert(converter = AesAttributeConverter.class)
-    @Column(length = 500)
+    @Column
     private String notes;
 }

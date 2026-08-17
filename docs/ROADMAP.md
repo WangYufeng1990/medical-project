@@ -2341,9 +2341,11 @@ Deliberately unscoped: create endpoints and the patient directory/detail (`GET /
 
 # Round 49: Free-Text Encryption Completion + FHIR Read Scoping
 
-> **Status: In progress (2026-08-17) — Item 1 done; Items 2-4 pending.**
+> **Status: In progress (2026-08-17) — Items 1-2 done; Items 3-4 pending.**
 
 > **Item 1 (2026-08-17): ✅ Done.** 10 fields encrypted across 6 entities (`MedicalHistoryEntry.description`, `AllergyEntry.allergen/reaction`, `Problem.notes`, `CarePlan.goal/interventions/notes`, `PriorAuth.notes`, `Referral.diagnosis/reason`); new columns widened to TEXT in schema.sql; seeds encrypt; 145 tests pass; smoke verified reads decrypt and the H2 file contains no plaintext PHI (only the `drug_allergy_class` CDS reference dictionary remains plaintext — by design, not patient PHI).
+
+> **Item 2 (2026-08-17): ✅ Done.** Round 48's encrypted columns widened to TEXT: `appointment.chief_complaint`/`description`, `charge.notes`, `vital_sign.notes`, `referral.notes` (appointment.notes was already TEXT); stale `@Column(length = 500)` attributes dropped on the entity side. Verified: 145 tests pass; live smoke round-trips a 360-char note (ciphertext ~778 hex — would have truncated under VARCHAR(500)).
 
 ## Background
 
