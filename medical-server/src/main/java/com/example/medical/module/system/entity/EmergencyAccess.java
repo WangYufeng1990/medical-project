@@ -1,7 +1,6 @@
 package com.example.medical.module.system.entity;
 
 import com.example.medical.common.base.BaseEntity;
-import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -24,8 +23,7 @@ public class EmergencyAccess extends BaseEntity {
     @Column(name = "patient_id")
     private Long patientId;
 
-    @Convert(converter = AesAttributeConverter.class)
-    @Column(name = "reason")
+    @Column(name = "reason", length = 500)
     private String reason;
 
     @Column(name = "accessed_at")

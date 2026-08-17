@@ -42,7 +42,6 @@ export default function Patients() {
   const [emergencySubmitting, setEmergencySubmitting] = useState(false)
   const [emergencyPrescriptions, setEmergencyPrescriptions] = useState<PrescriptionVO[] | null>(null)
   const [historyEntries, setHistoryEntries] = useState<MedicalHistoryEntry[]>([])
-  const [detailError, setDetailError] = useState('')
   const [allergyEntries, setAllergyEntries] = useState<AllergyEntry[]>([])
   const [newHistoryDesc, setNewHistoryDesc] = useState('')
   const [newAllergy, setNewAllergy] = useState({ allergen: '', reaction: '', severity: 'MODERATE' })
@@ -100,29 +99,24 @@ export default function Patients() {
       setEditId(row.id)
       const emToken = sessionStorage.getItem('emergencyToken')
       const emPid = sessionStorage.getItem('emergencyPatientId')
-      setDetailError('')
       if (emToken && emPid && String(row.id) === emPid) {
-        try {
-          const [patientRes, rxRes] = await Promise.all([
-            axios.get(`/api/v1/patients/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } }),
-            axios.get(`/api/v1/prescriptions/by-patient/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
-          ])
-          setForm({ ...emptyForm, ...patientRes.data.data })
-          setEmergencyPrescriptions(rxRes.data.data || [])
-          sessionStorage.removeItem('emergencyToken')
-          sessionStorage.removeItem('emergencyPatientId')
-        } catch {
-          setDetailError('Emergency access data could not be loaded — the token may have expired.')
-        }
+        const [patientRes, rxRes] = await Promise.all([
+          axios.get(`/api/v1/patients/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } }),
+          axios.get(`/api/v1/prescriptions/by-patient/${row.id}`, { headers: { Authorization: `Bearer ${emToken}` } })
+        ])
+        setForm({ ...emptyForm, ...patientRes.data.data })
+        setEmergencyPrescriptions(rxRes.data.data || [])
+        sessionStorage.removeItem('emergencyToken')
+        sessionStorage.removeItem('emergencyPatientId')
       } else {
         const d = await getPatientById(row.id)
         setForm({ ...emptyForm, ...d })
-        try { setHistoryEntries(await getPatientHistory(row.id) || []) } catch { setDetailError('Medical history failed to load'); setHistoryEntries([]) }
-        try { setAllergyEntries(await getPatientAllergies(row.id) || []) } catch { setDetailError('Allergies failed to load'); setAllergyEntries([]) }
-        try { setVitalSigns((await getVitalSigns(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setDetailError('Vitals failed to load'); setVitalSigns([]) }
-        try { setProblems((await getProblems(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setDetailError('Problems failed to load'); setProblems([]) }
-        try { setImmunizations((await getImmunizations(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setDetailError('Immunizations failed to load'); setImmunizations([]) }
-        try { setCarePlans((await getCarePlans(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setDetailError('Care plans failed to load'); setCarePlans([]) }
+        try { setHistoryEntries(await getPatientHistory(row.id) || []) } catch { setHistoryEntries([]) }
+        try { setAllergyEntries(await getPatientAllergies(row.id) || []) } catch { setAllergyEntries([]) }
+        try { setVitalSigns((await getVitalSigns(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setVitalSigns([]) }
+        try { setProblems((await getProblems(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setProblems([]) }
+        try { setImmunizations((await getImmunizations(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setImmunizations([]) }
+        try { setCarePlans((await getCarePlans(row.id, { page: 1, size: 100 }))?.records ?? []) } catch { setCarePlans([]) }
       }
     } else {
       setEditId(null); setForm({ ...emptyForm })
@@ -308,7 +302,6 @@ export default function Patients() {
         <div className={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{editId ? (viewOnly ? 'View Patient' : 'Edit Patient') : 'Add Patient'}</h3>
-            {detailError && <p style={{ color: '#f56c6c', fontSize: 13, marginBottom: 12 }}>⚠️ {detailError}</p>}
             <form onSubmit={handleSubmit} className={styles.formGrid}>
               {READONLY_FIELDS.map(f => (
                 <div key={f} className={styles.formGroup}>

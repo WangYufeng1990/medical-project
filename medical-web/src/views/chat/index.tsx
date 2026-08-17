@@ -14,7 +14,6 @@ export default function Chat() {
   const [msgPage, setMsgPage] = useState(1)
   const [msgTotal, setMsgTotal] = useState(0)
   const [input, setInput] = useState('')
-  const [sendError, setSendError] = useState('')
   const messageListRef = useRef<HTMLDivElement>(null)
 
   const token = localStorage.getItem('token')
@@ -59,11 +58,7 @@ export default function Chat() {
     setInput('')
     const msg: MessageVO = { id: Date.now(), senderId: currentUserId, senderType: 'STAFF', receiverId: selectedPartner.id, receiverType: selectedPartner.type, content, isRead: false, createTime: new Date().toISOString() }
     setMessages(prev => [...prev, msg])
-    setSendError('')
-    await sendMessage(selectedPartner.id, selectedPartner.type, content).catch(() => {
-      setMessages(prev => prev.filter(m => m.id !== msg.id))
-      setSendError('Message could not be sent. Please try again.')
-    })
+    await sendMessage(selectedPartner.id, selectedPartner.type, content).catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
     setTimeout(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
     }, 50)
@@ -142,7 +137,6 @@ export default function Chat() {
                 )})}
             </div>
             <div className={styles.inputArea}>
-              {sendError && <span style={{ color: '#F56C6C', fontSize: 12, marginBottom: 4 }}>{sendError}</span>}
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend() }} placeholder="Type a message..." />
               <button onClick={handleSend}>Send</button>
             </div>

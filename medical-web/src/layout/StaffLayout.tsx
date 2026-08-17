@@ -57,9 +57,6 @@ export default function StaffLayout() {
     localStorage.removeItem('patientToken')
     localStorage.removeItem('patientRefreshToken')
     localStorage.removeItem('patientInfo')
-    // Emergency break-glass tokens must not survive into the next user's session.
-    sessionStorage.removeItem('emergencyToken')
-    sessionStorage.removeItem('emergencyPatientId')
     navigate('/login')
   }
 

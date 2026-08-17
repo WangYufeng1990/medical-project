@@ -1,7 +1,6 @@
 package com.example.medical.module.prescription.entity;
 
 import com.example.medical.common.base.BaseEntity;
-import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -30,8 +29,7 @@ public class CdsOverride extends BaseEntity {
     @Column(name = "drugs_involved", length = 200)
     private String drugsInvolved;
 
-    @Convert(converter = AesAttributeConverter.class)
-    @Column(name = "override_reason")
+    @Column(name = "override_reason", length = 500)
     private String overrideReason;
 
     @Column(name = "overridden_by")

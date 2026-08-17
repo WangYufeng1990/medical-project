@@ -46,7 +46,7 @@ export default function Users() {
   })
 
   const openForm = async (row?: SysUserVO) => {
-    if (row) { setEditId(row.id); const d = await getUserById(row.id); setForm({ ...emptyForm, ...d, password: '' } as SysUserForm) }
+    if (row) { setEditId(row.id); const d = await getUserById(row.id); setForm({ ...form, ...d, password: '' } as SysUserForm) }
     else { setEditId(null); setForm({ ...emptyForm }) }
     setShowForm(true)
   }

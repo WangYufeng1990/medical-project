@@ -70,8 +70,8 @@ public class EmergencyAccessController {
         ea.setExpiresAt(LocalDateTime.now().plusMinutes(EMERGENCY_ACCESS_MINUTES));
         emergencyAccessRepository.save(ea);
 
-        log.warn("EMERGENCY ACCESS: user={} patient={} expiresIn={}min",
-                loginUser.getUsername(), patientId, EMERGENCY_ACCESS_MINUTES);
+        log.warn("EMERGENCY ACCESS: user={} patient={} reason={} expiresIn={}min",
+                loginUser.getUsername(), patientId, request.getReason(), EMERGENCY_ACCESS_MINUTES);
 
         return Result.ok(Map.of("token", token, "expiresInMinutes", EMERGENCY_ACCESS_MINUTES,
                 "patientId", patientId));

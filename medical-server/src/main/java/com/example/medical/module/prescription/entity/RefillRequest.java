@@ -1,7 +1,6 @@
 package com.example.medical.module.prescription.entity;
 
 import com.example.medical.common.base.BaseEntity;
-import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -36,11 +35,9 @@ public class RefillRequest extends BaseEntity {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
-    @Convert(converter = AesAttributeConverter.class)
-    @Column
+    @Column(length = 500)
     private String reason;
 
-    @Convert(converter = AesAttributeConverter.class)
-    @Column(name = "review_notes")
+    @Column(name = "review_notes", length = 500)
     private String reviewNotes;
 }
