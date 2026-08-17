@@ -44,6 +44,7 @@ public class ProblemController {
     @Transactional
     @Auditable(module = "problem", action = "CREATE")
     public Result<ProblemVO> create(@PathVariable Long patientId, @Valid @RequestBody ProblemForm form) {
+        doctorPatientScope.requireAccess(patientId);
         Problem p = new Problem();
         p.setPatientId(patientId);
         p.setSnomedCode(form.getSnomedCode());

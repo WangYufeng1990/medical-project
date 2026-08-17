@@ -46,6 +46,7 @@ public class VitalSignController {
     @Transactional
     @Auditable(module = "vital_sign", action = "CREATE")
     public Result<VitalSignVO> create(@PathVariable Long patientId, @Valid @RequestBody VitalSignForm form) {
+        doctorPatientScope.requireAccess(patientId);
         VitalSign v = new VitalSign();
         v.setPatientId(patientId);
         v.setRecordedBy(form.getRecordedBy());

@@ -1293,6 +1293,131 @@ class IntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    // ── Round 49 Item 1/2 regression: encrypted free-text round-trip ──
+
+    @Test
+    @Order(83)
+    void createCarePlan_longEncryptedGoal_shouldRoundTrip() throws Exception {
+        // ~250 plaintext chars — ciphertext (~560 hex) would truncate under
+        // the old VARCHAR(200/500) widths, and the goal must survive DB
+        // write + decrypt on read.
+        String longGoal = "Patient goal: achieve and maintain HbA1c below 7.0 for the next six consecutive " +
+                "months through dietary changes, weekly exercise routine, and compliance with the prescribed " +
+                "oral antidiabetic medication regimen. Reassessment scheduled quarterly with dose adjustment " +
+                "as indicated by continuous glucose monitoring trends.";
+        MvcResult created = mockMvc.perform(post("/api/v1/patients/100/care-plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "Diabetes management",
+                                "goal", longGoal,
+                                "interventions", "Diet, exercise, medication",
+                                "status", "ACTIVE",
+                                "createdBy", 2)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long planId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        MvcResult list = mockMvc.perform(get("/api/v1/patients/100/care-plans")
+                        .param("page", "1").param("size", "100")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(list.getResponse().getContentAsString())
+                .get("data").get("records");
+        JsonNode found = null;
+        for (JsonNode r : records) {
+            if (r.get("id").asLong() == planId) { found = r; break; }
+        }
+        assertNotNull(found, "created care plan must appear in the patient's list");
+        assertEquals(longGoal, found.get("goal").asText(),
+                "long encrypted goal must round-trip intact through DB");
+    }
+
+    @Test
+    @Order(84)
+    void createReferral_encryptedFields_shouldRoundTrip() throws Exception {
+        String diagnosis = "Essential hypertension with recurrent headaches unresponsive to first-line therapy";
+        String reason = "Patient reports bilateral throbbing headaches for the past three weeks; neurology consult needed";
+        String notes = "PCP follow-up scheduled in two weeks";
+        MvcResult created = mockMvc.perform(post("/api/v1/referrals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "patientId", 100,
+                                "specialistName", "Dr. Neurology",
+                                "specialty", "Neurology",
+                                "diagnosis", diagnosis,
+                                "reason", reason,
+                                "notes", notes)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long referralId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        MvcResult list = mockMvc.perform(get("/api/v1/patients/100/referrals")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(list.getResponse().getContentAsString()).get("data");
+        JsonNode found = null;
+        for (JsonNode r : records) {
+            if (r.get("id").asLong() == referralId) { found = r; break; }
+        }
+        assertNotNull(found, "created referral must appear in the patient's list");
+        assertEquals(diagnosis, found.get("diagnosis").asText());
+        assertEquals(reason, found.get("reason").asText());
+        assertEquals(notes, found.get("notes").asText());
+    }
+
+    // ── Round 49: R2-2 create-endpoint gap — writes honor DOCTOR scope too ──
+
+    @Test
+    @Order(85)
+    void doctorCreate_outOfScopePatient_should403() throws Exception {
+        mockMvc.perform(post("/api/v1/patients/102/care-plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "x", "goal", "y")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/102/problems")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("snomedCode", "x", "snomedDisplay", "y")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/102/vitals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("systolicBp", 120)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/102/immunizations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("vaccineName", "x")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/102/history")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("description", "x")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/patients/102/allergies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("allergen", "x", "reaction", "y", "severity", "MILD")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/referrals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("patientId", 102, "specialistName", "Dr. X")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/prior-auths")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "patientId", 102, "authType", "MED", "itemName", "x",
+                                "itemCode", "y", "insurancePayer", "z")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────

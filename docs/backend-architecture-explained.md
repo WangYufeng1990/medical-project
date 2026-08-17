@@ -721,8 +721,8 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-148 tests across 5 files:
-- `IntegrationTest` — 123 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
+151 tests across 5 files:
+- `IntegrationTest` — 126 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
 - `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
 - `AesAttributeConverterTest` — 8 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases)
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping

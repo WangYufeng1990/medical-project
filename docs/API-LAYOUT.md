@@ -477,9 +477,10 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 
 For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own patients (defined as patients where the doctor has appointments or prescriptions — `DoctorPatientScope` in `common/security`):
 
-- **List endpoints** (`appointments`, `prescriptions`, `charges`, refill pending list) filter rows to in-scope patients; ADMIN sees all.
-- **By-patient read/update endpoints** (vitals, observations + trend, problems, care-plans, immunizations, patient history/allergies, FHIR case, appointment/prescription/bill detail, charge convert, refill approve/deny) return **403** for out-of-scope patients.
-- **Create endpoints and the patient directory** (`GET /patients`, `GET /patients/{id}`, patient search dropdowns) stay open — booking or prescribing for a new patient establishes the care relationship.
+- **List endpoints** (`appointments`, `prescriptions`, `charges`, `referrals`, `prior-auths`, refill pending list) filter rows to in-scope patients; ADMIN sees all.
+- **By-patient read/update endpoints** (vitals, observations + trend, problems, care-plans, immunizations, patient history/allergies, FHIR case, referral/prior-auth lists, appointment/prescription/bill detail, charge convert, refill approve/deny) return **403** for out-of-scope patients.
+- **Create endpoints** (vitals, problems, care-plans, immunizations, patient history/allergies, referrals, prior-auths) return **403** when the target patient is out of scope.
+- **The patient directory** (`GET /patients`, `GET /patients/{id}`, patient search dropdowns, patient creation) stays open — booking or prescribing for a new patient establishes the care relationship.
 - **Emergency break-glass tokens** (`scope=EMERGENCY`, `patientId` claim) bypass the scope for the named patient.
 
 ### Data Encryption

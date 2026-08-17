@@ -44,6 +44,7 @@ public class ImmunizationController {
     @Transactional
     @Auditable(module = "immunization", action = "CREATE")
     public Result<ImmunizationVO> create(@PathVariable Long patientId, @Valid @RequestBody ImmunizationForm form) {
+        doctorPatientScope.requireAccess(patientId);
         Immunization imm = new Immunization();
         imm.setPatientId(patientId);
         imm.setVaccineName(form.getVaccineName());

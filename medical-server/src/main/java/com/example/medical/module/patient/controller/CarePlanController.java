@@ -44,6 +44,7 @@ public class CarePlanController {
     @Transactional
     @Auditable(module = "care_plan", action = "CREATE")
     public Result<CarePlanVO> create(@PathVariable Long patientId, @Valid @RequestBody CarePlanForm form) {
+        doctorPatientScope.requireAccess(patientId);
         CarePlan cp = new CarePlan();
         cp.setPatientId(patientId);
         cp.setTitle(form.getTitle());

@@ -100,6 +100,7 @@ public class PatientController {
     @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_HISTORY")
     public Result<Void> addHistory(@PathVariable Long patientId,
                                     @Valid @RequestBody AddEntryRequest request) {
+        doctorPatientScope.requireAccess(patientId);
         MedicalHistoryEntry e = new MedicalHistoryEntry();
         e.setPatientId(patientId);
         e.setDescription(request.getDescription());
@@ -121,6 +122,7 @@ public class PatientController {
     @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_ALLERGY")
     public Result<Void> addAllergy(@PathVariable Long patientId,
                                     @Valid @RequestBody AddAllergyRequest request) {
+        doctorPatientScope.requireAccess(patientId);
         AllergyEntry e = new AllergyEntry();
         e.setPatientId(patientId);
         e.setAllergen(request.getAllergen());

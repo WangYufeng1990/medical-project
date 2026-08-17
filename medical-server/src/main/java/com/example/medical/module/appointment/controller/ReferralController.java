@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.base.PageQuery;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.ReferralVO;
 import com.example.medical.module.appointment.entity.Referral;
 import com.example.medical.module.appointment.repository.ReferralRepository;
@@ -27,15 +28,21 @@ import java.util.List;
 public class ReferralController {
 
     private final ReferralRepository referralRepository;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<ReferralVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "referralDate"));
-        org.springframework.data.jpa.domain.Specification<Referral> spec = patientId != null
-                ? (root, query, cb) -> cb.equal(root.get("patientId"), patientId)
-                : null;
+        org.springframework.data.jpa.domain.Specification<Referral> spec = null;
+        if (patientId != null) {
+            doctorPatientScope.requireAccess(patientId);
+            spec = (root, query, cb) -> cb.equal(root.get("patientId"), patientId);
+        } else {
+            var scope = doctorPatientScope.resolve();
+            if (scope != null) spec = (root, query, cb) -> root.get("patientId").in(scope);
+        }
         var page = referralRepository.findAll(spec, pageable);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
                 page.getNumber() + 1, page.getContent().stream().map(ReferralVO::fromEntity).toList()));
@@ -44,6 +51,7 @@ public class ReferralController {
     @GetMapping("/patients/{patientId}/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<List<ReferralVO>> listByPatient(@PathVariable Long patientId) {
+        doctorPatientScope.requireAccess(patientId);
         return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(patientId)
                 .stream().map(ReferralVO::fromEntity).toList());
     }
@@ -53,6 +61,7 @@ public class ReferralController {
     @Transactional
     @Auditable(module = "referral", action = "CREATE")
     public Result<ReferralVO> create(@Valid @RequestBody ReferralForm form, @AuthenticationPrincipal LoginUser loginUser) {
+        doctorPatientScope.requireAccess(form.getPatientId());
         Referral r = new Referral();
         r.setPatientId(form.getPatientId());
         // referring_doctor_id is NOT NULL; the frontend form never sends it, so
@@ -77,6 +86,7 @@ public class ReferralController {
     @Auditable(module = "referral", action = "UPDATE")
     public Result<ReferralVO> update(@PathVariable Long id, @Valid @RequestBody ReferralForm form) {
         Referral r = referralRepository.findById(id).orElseThrow();
+        doctorPatientScope.requireAccess(r.getPatientId());
         if (form.getStatus() != null) r.setStatus(form.getStatus());
         if (form.getAppointmentDate() != null) r.setAppointmentDate(form.getAppointmentDate());
         if (form.getCompletionDate() != null) r.setCompletionDate(form.getCompletionDate());
