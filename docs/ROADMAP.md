@@ -2396,3 +2396,33 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 4. ✅ Verify: `mvn test` (151 pass), live smoke (long-text round-trip, FHIR 403/200/emergency)
 5. ✅ Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section
 6. ✅ R2-2 write-side audit: `requireAccess` on every create/update (8 gaps found + fixed), encrypted round-trip regression tests (Orders 83-85)
+
+# Round 49 follow-up: Post-Round Cross-Cutting Review — Findings Only (2026-08-17)
+
+> Full-project review after Round 49. Findings below are **identified, NOT fixed** — fixes were drafted, then reverted at the user's request (only the report is kept). Tracked here so a future round can pick them up.
+
+## Backend
+
+| Severity | Finding | Location |
+|----------|---------|----------|
+| 🔴 HIGH | 4 free-text PHI fields still plaintext (Round 48/49 encrypted 16 fields, these were missed): `Immunization.notes`, `RefillRequest.reason` + `reviewNotes`, `CdsOverride.overrideReason`, `EmergencyAccess.reason` — should be `@Convert(AesAttributeConverter)` + column widened to TEXT + seed encryption | module/patient, module/prescription entities; schema.sql; DataInitializer |
+| 🟡 HIGH | Emergency-access WARN log prints the plaintext `reason` (user-typed free text, can embed identifiers) — should log user/patient/expiry only | EmergencyAccessController.java |
+| ⚪ LOW | Test count stale in docs: 151 written, actual was 153 (after the revert it is 151 again) | CLAUDE.md, docs/backend-architecture-explained.md |
+
+## Frontend
+
+| Severity | Finding | Location |
+|----------|---------|----------|
+| 🟡 HIGH | Logout does not clear emergency break-glass `sessionStorage` tokens (`emergencyToken`/`emergencyPatientId`) — a break-glass session can bleed into the next user's session | layout/StaffLayout.tsx handleLogout |
+| 🟠 MEDIUM | Users edit form stale closure: `{ ...form, ...d }` builds the edit state from a stale `form` inside the async `getUserById` callback — races against user typing; should be `{ ...emptyForm, ...d, password: '' }` | views/system/users/index.tsx |
+| 🟠 MEDIUM | Patient detail modal: 7 `.catch(() => {})` on history/allergy/vitals/problems/immunizations/care-plan/emergency loads — failure shows an empty modal with no feedback; should surface an error banner | views/patients/index.tsx |
+| 🟠 MEDIUM | Chat send failure silently removes the optimistic bubble — no feedback to the user; should show an inline error | views/chat/index.tsx |
+
+## Reviewed and confirmed correct (no change needed)
+
+- Patient login / forgot-password use raw axios instead of `patientRequest` — correct: no token exists pre-auth, and `patientRequest`'s interceptor would fire the 401 refresh/redirect chain on the login endpoint itself (the interceptor's own refresh call also uses raw axios for the same reason).
+- Unread-badge poll catches (StaffLayout/PatientLayout) are silent — cosmetic badge; failure degrades to "no badge" and the chat view surfaces errors itself.
+
+## Note
+
+- Fixes for all of the above were implemented and passed (153 tests) in commit `c3a2ce7`, then reverted in `043304a` per user instruction — review only, no code changes.
