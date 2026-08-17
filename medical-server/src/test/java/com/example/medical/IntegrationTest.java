@@ -1418,6 +1418,85 @@ class IntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    // ── Post-Round 49 audit: remaining free-text PHI encrypted (immunization/refill/emergency) ──
+
+    @Test
+    @Order(86)
+    void createImmunization_longNotes_shouldRoundTrip() throws Exception {
+        String longNotes = "Administration note: patient reported mild arm soreness after the previous dose; " +
+                "acetaminophen recommended as needed. Follow-up scheduled to confirm the second dose within " +
+                "the recommended interval per the CDC schedule.";
+        MvcResult created = mockMvc.perform(post("/api/v1/patients/100/immunizations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "vaccineName", "Influenza (seasonal)",
+                                "cvxCode", "141",
+                                "notes", longNotes)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long immId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        MvcResult list = mockMvc.perform(get("/api/v1/patients/100/immunizations")
+                        .param("page", "1").param("size", "100")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(list.getResponse().getContentAsString())
+                .get("data").get("records");
+        JsonNode found = null;
+        for (JsonNode r : records) {
+            if (r.get("id").asLong() == immId) { found = r; break; }
+        }
+        assertNotNull(found, "created immunization must appear in the patient's list");
+        assertEquals(longNotes, found.get("notes").asText(),
+                "long encrypted immunization notes must round-trip intact");
+    }
+
+    @Test
+    @Order(87)
+    void refillAndEmergency_encryptedFields_shouldRoundTrip() throws Exception {
+        // Patient submits a refill request with a free-text reason.
+        String refillReason = "Running low on medication, need a refill for the next thirty days supply";
+        MvcResult created = mockMvc.perform(post("/api/v1/patient/me/refill-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "prescriptionId", 300, "reason", refillReason)))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long refillId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        MvcResult mine = mockMvc.perform(get("/api/v1/patient/me/refill-requests")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode refills = objectMapper.readTree(mine.getResponse().getContentAsString()).get("data");
+        JsonNode refillFound = null;
+        for (JsonNode r : refills) {
+            if (r.get("id").asLong() == refillId) { refillFound = r; break; }
+        }
+        assertNotNull(refillFound, "created refill request must appear in patient's list");
+        assertEquals(refillReason, refillFound.get("reason").asText());
+
+        // Doctor performs a break-glass access; admin reads the audit history back.
+        String accessReason = "Patient unconscious in ER, critical labs unavailable — emergency chart access";
+        mockMvc.perform(post("/api/v1/emergency/access/102")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", accessReason)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+        MvcResult hist = mockMvc.perform(get("/api/v1/emergency/history")
+                        .param("patientId", "102")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode entries = objectMapper.readTree(hist.getResponse().getContentAsString()).get("data");
+        assertTrue(entries.size() > 0, "emergency access record must appear in audit history");
+        assertEquals(accessReason, entries.get(0).get("reason").asText(),
+                "emergency access reason must round-trip intact through encryption");
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────

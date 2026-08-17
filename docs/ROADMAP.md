@@ -2396,3 +2396,37 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 4. ✅ Verify: `mvn test` (151 pass), live smoke (long-text round-trip, FHIR 403/200/emergency)
 5. ✅ Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section
 6. ✅ R2-2 write-side audit: `requireAccess` on every create/update (8 gaps found + fixed), encrypted round-trip regression tests (Orders 83-85)
+
+# Round 49 follow-up: Post-Round Cross-Cutting Review (2026-08-17) ✅ Complete
+
+> Full-project review after Round 49: backend PHI/audit/log sweep + frontend pattern audit. Found and fixed 4 remaining plaintext free-text PHI fields, a plaintext PHI leak in the emergency-access log, and 3 frontend issues. **153 tests pass (128 integration + 25 unit).**
+
+## Backend findings — fixed
+
+1. **4 free-text PHI fields still plaintext** (Round 48/49 encrypted 16 fields, these were missed): `Immunization.notes`, `RefillRequest.reason` + `reviewNotes`, `CdsOverride.overrideReason`, `EmergencyAccess.reason` — all now `@Convert(converter = AesAttributeConverter.class)` with columns widened to TEXT in schema.sql; `DataInitializer.seedImmunizations` notes values now encrypt; stale `@Column(length=500)` dropped.
+2. **Emergency access audit log leaked PHI**: `EmergencyAccessController` logged the plaintext `reason` (user-typed free text, can embed identifiers) at WARN. Removed — reason still persisted encrypted + audited via `@Auditable`; log line keeps user/patient/expiry only.
+3. **Tests** (Orders 86-87): immunization ~250-char notes round-trip; refill `reason` round-trip via patient API; emergency `reason` round-trip read back through admin history `?patientId=102`.
+
+## Frontend findings — fixed
+
+1. **Emergency break-glass tokens survived logout** (`StaffLayout.handleLogout`): `emergencyToken`/`emergencyPatientId` lived in sessionStorage across logins — a break-glass session could bleed into the next user's session. Now removed on logout.
+2. **Stale closure** in `views/system/users/index.tsx:49`: edit form was built from `{ ...form, ...d }` inside the async `getUserById` callback — raced against user typing. Now `{ ...emptyForm, ...d, password: '' }`.
+3. **Silent failures in patient detail modal** (`views/patients/index.tsx`): emergency-token load and 6 history/sub-record loads had `.catch(() => {})` — user saw an empty modal with no explanation. Now a `detailError` banner (⚠️) surfaces the failure; emergency token expiry gets a specific message.
+4. **Chat send failure had no feedback** (`views/chat/index.tsx`): failed sends removed the optimistic bubble silently. Now shows an inline error.
+
+## Reviewed and deliberately NOT changed
+
+- `views/patient/login` + `forgotPassword` use raw axios instead of `patientRequest` — **correct as-is**: no token exists pre-auth, and `patientRequest`'s interceptor would fire the 401 refresh/redirect chain on the login endpoint itself. The interceptor's own refresh call also uses raw axios for the same reason.
+- Unread-badge poll catches (StaffLayout/PatientLayout) are silent — cosmetic badge; failure degrades to "no badge" and the chat view itself surfaces errors. Accepted.
+
+## Verification
+
+- `mvn test`: 153 pass (128 integration + 25 unit)
+- `tsc --noEmit`: clean
+- Live smoke: emergency access history shows reason, refill reason round-trips, immunization long notes round-trip
+
+## Files changed
+
+- Backend: `Immunization`, `RefillRequest`, `CdsOverride`, `EmergencyAccess` entities; `schema.sql` (5 columns → TEXT); `DataInitializer`; `EmergencyAccessController` (log); `IntegrationTest` (Orders 86-87)
+- Frontend: `StaffLayout.tsx`, `views/system/users/index.tsx`, `views/patients/index.tsx`, `views/chat/index.tsx`
+- Docs: this section; test count 151 → 153 in CLAUDE.md + backend-architecture-explained.md

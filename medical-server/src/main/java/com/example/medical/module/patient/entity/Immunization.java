@@ -1,6 +1,7 @@
 package com.example.medical.module.patient.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -50,6 +51,7 @@ public class Immunization extends BaseEntity {
     @Column(name = "administered_by")
     private Long administeredBy;
 
-    @Column(length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column
     private String notes;
 }
