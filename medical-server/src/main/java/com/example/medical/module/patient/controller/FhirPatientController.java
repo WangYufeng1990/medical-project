@@ -4,6 +4,7 @@ import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.security.LoginUser;
@@ -28,6 +29,7 @@ public class FhirPatientController {
 
     private final PatientRepository patientRepository;
     private final FhirContext fhirContext;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping(value = "/metadata", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> metadata() {
@@ -64,6 +66,7 @@ public class FhirPatientController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> getPatient(@PathVariable Long id) {
         enforceEmergencyScope(id);
+        doctorPatientScope.requireAccess(id);
         Patient p = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
 
@@ -100,6 +103,7 @@ public class FhirPatientController {
         if (idParam != null && !idParam.isBlank()) {
             try {
                 Long id = Long.valueOf(idParam);
+                doctorPatientScope.requireAccess(id);
                 patientRepository.findById(id).ifPresent(p ->
                         bundle.addEntry().setResource(buildFhirPatient(p))
                                 .getRequest().setMethod(Bundle.HTTPVerb.GET)
@@ -111,8 +115,10 @@ public class FhirPatientController {
                     org.springframework.data.domain.PageRequest.of(
                             offset / maxCount, maxCount,
                             org.springframework.data.domain.Sort.by("id"));
-            org.springframework.data.domain.Page<Patient> page =
-                    patientRepository.findAll(pageable);
+            var scope = doctorPatientScope.resolve();
+            org.springframework.data.domain.Page<Patient> page = scope == null
+                    ? patientRepository.findAll(pageable)
+                    : patientRepository.findByIdIn(scope, pageable);
             for (Patient p : page.getContent()) {
                 bundle.addEntry().setResource(buildFhirPatient(p))
                         .getRequest().setMethod(Bundle.HTTPVerb.GET)

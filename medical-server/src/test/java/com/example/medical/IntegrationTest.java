@@ -1231,6 +1231,68 @@ class IntegrationTest {
                 .andExpect(jsonPath("$.data.notes").value("encrypted smoke"));
     }
 
+    // ── Round 49 Item 3: FHIR read endpoints honor DOCTOR scope ──
+
+    @Test
+    @Order(80)
+    void fhirRead_outOfScopePatient_should403() throws Exception {
+        mockMvc.perform(get("/api/v1/fhir/Patient/102")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/fhir/Patient")
+                        .param("_id", "102")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/fhir/Observation")
+                        .param("patient", "102")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+        // Out-of-scope observation id (patient 103), resolved via an admin search.
+        MvcResult adminSearch = mockMvc.perform(get("/api/v1/fhir/Observation")
+                        .param("patient", "103")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode entries = objectMapper.readTree(adminSearch.getResponse().getContentAsString())
+                .get("entry");
+        assertNotNull(entries, "seed observations for patient 103 expected");
+        long obsId = Long.parseLong(entries.get(0).get("resource").get("id").asText());
+        mockMvc.perform(get("/api/v1/fhir/Observation/" + obsId)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(81)
+    void fhirRead_inScopeAndAdmin_shouldSucceed() throws Exception {
+        mockMvc.perform(get("/api/v1/fhir/Patient/100")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/fhir/Patient/102")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/fhir/Observation")
+                        .param("patient", "102")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(82)
+    void fhirRead_emergencyToken_shouldBypassDoctorScope() throws Exception {
+        MvcResult em = mockMvc.perform(post("/api/v1/emergency/access/102")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "fhir break-glass")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String emToken = objectMapper.readTree(em.getResponse().getContentAsString())
+                .get("data").get("token").asText();
+        mockMvc.perform(get("/api/v1/fhir/Patient/102")
+                        .header("Authorization", "Bearer " + emToken))
+                .andExpect(status().isOk());
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────

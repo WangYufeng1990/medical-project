@@ -2341,11 +2341,13 @@ Deliberately unscoped: create endpoints and the patient directory/detail (`GET /
 
 # Round 49: Free-Text Encryption Completion + FHIR Read Scoping
 
-> **Status: In progress (2026-08-17) — Items 1-2 done; Items 3-4 pending.**
+> **Status: In progress (2026-08-17) — Items 1-3 done; Item 4 deferred (design only, no implementation).**
 
 > **Item 1 (2026-08-17): ✅ Done.** 10 fields encrypted across 6 entities (`MedicalHistoryEntry.description`, `AllergyEntry.allergen/reaction`, `Problem.notes`, `CarePlan.goal/interventions/notes`, `PriorAuth.notes`, `Referral.diagnosis/reason`); new columns widened to TEXT in schema.sql; seeds encrypt; 145 tests pass; smoke verified reads decrypt and the H2 file contains no plaintext PHI (only the `drug_allergy_class` CDS reference dictionary remains plaintext — by design, not patient PHI).
 
 > **Item 2 (2026-08-17): ✅ Done.** Round 48's encrypted columns widened to TEXT: `appointment.chief_complaint`/`description`, `charge.notes`, `vital_sign.notes`, `referral.notes` (appointment.notes was already TEXT); stale `@Column(length = 500)` attributes dropped on the entity side. Verified: 145 tests pass; live smoke round-trips a 360-char note (ciphertext ~778 hex — would have truncated under VARCHAR(500)).
+
+> **Item 3 (2026-08-17): ✅ Done.** All 4 FHIR read endpoints now honor DOCTOR scope via `DoctorPatientScope`: `GET /Patient/{id}` and `GET /Patient?_id=` call `requireAccess(patientId)`; `GET /Patient` (list) and `GET /Observation` (no patient param) filter through `findByIdIn(scope, ...)` when the caller is a DOCTOR; `GET /Observation/{id}` checks after resolving the row's `patientId` (404 wins over 403); `GET /Observation?patient=` calls `requireAccess`. Metadata stays public; the emergency break-glass exemption flows through the resolver. New repository methods: `PatientRepository.findByIdIn`, `ObservationRepository.findByPatientIdIn`. Tests (Order 80-82): doctor out-of-scope 403 for read/search/observation-id, doctor in-scope 200, admin 200, emergency token 200. **148 tests pass (123 integration + 25 unit).**
 
 ## Background
 
@@ -2386,8 +2388,8 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 
 ## Execution Plan
 
-1. Add `@Convert` to the Item 1 fields; widen all affected columns (incl. Round 48's 6) to `TEXT` in schema.sql; encrypt the seed inserts
-2. Dev H2 DB wipe + regenerate (plaintext rows would read as `[DECRYPT_FAILED]`)
-3. `requireAccess` on the 4 FHIR read endpoints + integration tests
-4. Verify: `mvn test`, `tsc`, live smoke (long-text round-trip, FHIR 403/200/emergency)
-5. Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section
+1. ✅ Add `@Convert` to the Item 1 fields; widen all affected columns (incl. Round 48's 6) to `TEXT` in schema.sql; encrypt the seed inserts
+2. ✅ Dev H2 DB wipe + regenerate (plaintext rows would read as `[DECRYPT_FAILED]`)
+3. ✅ `requireAccess` on the 4 FHIR read endpoints + integration tests
+4. ✅ Verify: `mvn test` (148 pass), live smoke (long-text round-trip, FHIR 403/200/emergency)
+5. ✅ Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section

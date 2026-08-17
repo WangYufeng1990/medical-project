@@ -4,6 +4,7 @@ import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.repository.ObservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,12 +24,14 @@ public class FhirObservationController {
 
     private final ObservationRepository observationRepository;
     private final FhirContext fhirContext;
+    private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/Observation/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public ResponseEntity<String> getObservation(@PathVariable Long id) {
         Observation o = observationRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Observation not found"));
+        doctorPatientScope.requireAccess(o.getPatientId());
         return encode(buildFhirObservation(o));
     }
 
@@ -46,14 +49,21 @@ public class FhirObservationController {
         int maxCount = Math.min(count, 500);
 
         List<Observation> observations;
+        if (patientId != null) {
+            doctorPatientScope.requireAccess(patientId);
+        }
         if (patientId != null && loincCode != null) {
             observations = observationRepository
                     .findByPatientIdAndLoincCodeOrderByEffectiveDateDesc(patientId, loincCode);
         } else if (patientId != null) {
             observations = observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId);
         } else {
-            observations = observationRepository.findAll(
-                    org.springframework.data.domain.PageRequest.of(0, maxCount)).getContent();
+            var scope = doctorPatientScope.resolve();
+            observations = (scope == null
+                    ? observationRepository.findAll(
+                            org.springframework.data.domain.PageRequest.of(0, maxCount))
+                    : observationRepository.findByPatientIdIn(scope,
+                            org.springframework.data.domain.PageRequest.of(0, maxCount))).getContent();
         }
 
         for (Observation o : observations) {

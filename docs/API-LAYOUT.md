@@ -358,8 +358,8 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/metadata` | public | CapabilityStatement (FHIR 4.0.1 + SMART on FHIR security) |
-| GET | `/Patient/{id}` | ADMIN,DOCTOR | FHIR Patient resource (SSN masked to last-4) |
-| GET | `/Patient` | ADMIN,DOCTOR | FHIR search (`?_id=100`) returning Bundle |
+| GET | `/Patient/{id}` | ADMIN,DOCTOR | FHIR Patient resource (SSN masked to last-4); DOCTOR limited to own patient scope (403 otherwise, emergency token exempt) |
+| GET | `/Patient` | ADMIN,DOCTOR | FHIR search (`?_id=100`) returning Bundle; DOCTOR: `_id` outside scope → 403, no `_id` → results filtered to scope |
 
 ### Consent — `/api/v1/consent`
 
@@ -424,8 +424,8 @@ Requires `ADMIN` or `DOCTOR` (catalog also `PATIENT`). Lab trend analysis and LO
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/Observation/{id}` | ADMIN,DOCTOR | Single FHIR Observation resource |
-| GET | `/Observation?patient=` | ADMIN,DOCTOR | Observations by patient (Bundle) |
+| GET | `/Observation/{id}` | ADMIN,DOCTOR | Single FHIR Observation resource; DOCTOR limited to own patient scope (403 otherwise) |
+| GET | `/Observation?patient=` | ADMIN,DOCTOR | Observations by patient (Bundle); DOCTOR: patient outside scope → 403; no `patient` param → results filtered to scope |
 
 ### Pharmacy — `/api/v1/pharmacies`
 
