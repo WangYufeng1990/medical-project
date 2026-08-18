@@ -2401,7 +2401,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 
 > Full-project review after Round 49. Findings below are **identified, NOT fixed** — fixes were drafted, then reverted at the user's request (only the report is kept). Tracked here so a future round can pick them up.
 >
-> **Update (2026-08-18): backend items 1-2 FIXED on explicit user request** — 4 free-text PHI fields encrypted (`@Convert` + TEXT widening + seed encryption), plaintext reason removed from the emergency-access log; round-trip regression tests added (Orders 86-87); 153 tests pass. Frontend items 1-4 remain open.
+> **Update (2026-08-18): all items FIXED on explicit user request** — backend: 4 free-text PHI fields encrypted (`@Convert` + TEXT widening + seed encryption), plaintext reason removed from the emergency-access log; round-trip regression tests added (Orders 86-87); 153 tests pass. Frontend: logout clears emergency break-glass session tokens, users edit form stale closure fixed, patient detail modal surfaces load failures (error banner), chat send failure shows inline error; `tsc --noEmit` + production build pass.
 
 ## Backend
 
