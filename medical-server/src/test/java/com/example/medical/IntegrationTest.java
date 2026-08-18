@@ -1418,6 +1418,80 @@ class IntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    // ── Post-Round-49 review: newly encrypted free-text PHI round-trip ──
+
+    @Test
+    @Order(86)
+    void createImmunization_longNotes_shouldRoundTrip() throws Exception {
+        String longNotes = "Post-vaccination notes (encrypted): patient monitored 15 minutes, " + "x".repeat(200);
+        String body = objectMapper.writeValueAsString(Map.of(
+                "vaccineName", "RSV vaccine",
+                "administrationDate", "2026-01-15",
+                "lotNumber", "RS2026-001",
+                "manufacturer", "GSK",
+                "doseNumber", "1st dose",
+                "site", "left arm",
+                "route", "intramuscular",
+                "notes", longNotes
+        ));
+        mockMvc.perform(post("/api/v1/patients/102/immunizations")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        MvcResult result = mockMvc.perform(get("/api/v1/patients/102/immunizations")
+                        .param("page", "1").param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(result.getResponse().getContentAsString()).get("data").get("records");
+        boolean found = false;
+        for (JsonNode n : records) {
+            if ("RSV vaccine".equals(n.get("vaccineName").asText())) {
+                assertEquals(longNotes, n.get("notes").asText());
+                found = true;
+            }
+        }
+        assertTrue(found, "created immunization not found in list");
+    }
+
+    @Test
+    @Order(87)
+    void refillAndEmergency_encryptedFields_shouldRoundTrip() throws Exception {
+        // Refill reason: patient-created free text round-trips through encryption.
+        String refillReason = "Long refill reason (encrypted): lost the bottle, " + "y".repeat(200);
+        mockMvc.perform(post("/api/v1/patient/me/refill-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("prescriptionId", 300, "reason", refillReason)))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+        MvcResult mine = mockMvc.perform(get("/api/v1/patient/me/refill-requests")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode list = objectMapper.readTree(mine.getResponse().getContentAsString()).get("data");
+        assertTrue(list.size() > 0, "no refill requests listed");
+        assertEquals(refillReason, list.get(0).get("reason").asText());
+
+        // Emergency access reason: round-trips through encryption (admin history read-back).
+        String emReason = "Emergency reason (encrypted): patient unresponsive, " + "z".repeat(200);
+        mockMvc.perform(post("/api/v1/emergency/access/102")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", emReason)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+        MvcResult history = mockMvc.perform(get("/api/v1/emergency/history")
+                        .param("patientId", "102")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode entries = objectMapper.readTree(history.getResponse().getContentAsString()).get("data");
+        boolean found = false;
+        for (JsonNode n : entries) {
+            if (emReason.equals(n.get("reason").asText())) { found = true; break; }
+        }
+        assertTrue(found, "emergency access reason did not round-trip");
+    }
+
     // ──────────────────────────────────────────────────────
     // 10. DASHBOARD
     // ──────────────────────────────────────────────────────
