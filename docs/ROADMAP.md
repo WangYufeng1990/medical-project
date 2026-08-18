@@ -2397,7 +2397,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 5. ✅ Docs: API-LAYOUT (FHIR scope note), architecture doc (field inventory), this section
 6. ✅ R2-2 write-side audit: `requireAccess` on every create/update (8 gaps found + fixed), encrypted round-trip regression tests (Orders 83-85)
 
-# Round 49 follow-up: Post-Round Cross-Cutting Review — Findings Only (2026-08-17)
+# Round 49 follow-up: Post-Round Cross-Cutting Review ✅ Complete (2026-08-17)
 
 > Full-project review after Round 49. Findings below are **identified, NOT fixed** — fixes were drafted, then reverted at the user's request (only the report is kept). Tracked here so a future round can pick them up.
 >
