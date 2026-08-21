@@ -31,7 +31,7 @@ public class VitalSignController {
 
     @GetMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<VitalSignVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<VitalSignVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "recordedAt"));
@@ -44,7 +44,7 @@ public class VitalSignController {
     @PostMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "vital_sign", action = "CREATE")
+    @Auditable(module = "vital_sign", action = "CREATE", phiAccess = true)
     public Result<VitalSignVO> create(@PathVariable Long patientId, @Valid @RequestBody VitalSignForm form) {
         doctorPatientScope.requireAccess(patientId);
         VitalSign v = new VitalSign();

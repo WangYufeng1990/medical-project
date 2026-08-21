@@ -37,6 +37,7 @@ public class PrescriptionService {
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
     private final CdsService cdsService;
+    private final com.example.medical.module.prescription.repository.CdsOverrideRepository cdsOverrideRepository;
     private final DoctorPatientScope doctorPatientScope;
 
     public Page<PrescriptionVO> page(long page, long size) {
@@ -69,11 +70,18 @@ public class PrescriptionService {
     }
 
     @Transactional
-    @Auditable(module = "prescription", action = "CREATE")
-    public void create(PrescriptionFormDTO dto) {
+    @Auditable(module = "prescription", action = "CREATE", phiAccess = true)
+    public void create(PrescriptionFormDTO dto, com.example.medical.security.LoginUser loginUser) {
+        doctorPatientScope.requireAccess(dto.getPatientId());
         Prescription p = new Prescription();
         p.setPatientId(dto.getPatientId());
-        p.setDoctorId(dto.getDoctorId());
+        // Prescriber identity is server-derived (Review III C5): doctorId, NPI
+        // and DEA come from the authenticated user's profile, never the client.
+        p.setDoctorId(loginUser.getUserId());
+        com.example.medical.module.system.entity.SysUser prescriber =
+                sysUserRepository.findById(loginUser.getUserId()).orElse(null);
+        p.setPrescriberNpi(prescriber != null ? prescriber.getNpi() : null);
+        p.setDeaNumber(prescriber != null ? prescriber.getDeaNumber() : null);
         p.setDiagnosis(dto.getDiagnosis());
         p.setIcd10Codes(dto.getIcd10Codes());
         p.setPrescriptionDate(dto.getPrescriptionDate() != null
@@ -81,29 +89,61 @@ public class PrescriptionService {
         p.setPrescriptionType(dto.getPrescriptionType() != null
                 ? dto.getPrescriptionType() : "MEDICATION");
         p.setRxStatus(dto.getRxStatus() != null ? dto.getRxStatus() : "active");
-        p.setPrescriberNpi(dto.getPrescriberNpi());
-        p.setDeaNumber(dto.getDeaNumber());
         p.setControlledSchedule(dto.getControlledSchedule());
         p.setPharmacyName(dto.getPharmacyName());
         p.setPharmacyPhone(dto.getPharmacyPhone());
         p.setPharmacyNpi(dto.getPharmacyNpi());
-        prescriptionRepository.save(p);
 
+        // Build items in memory first so CDS runs BEFORE persistence
+        // (Review III C1/H2 — previously the save happened first and warnings
+        // were only logged after the fact).
+        List<PrescriptionItem> items = new java.util.ArrayList<>();
         if (dto.getItems() != null) {
-            dto.getItems().forEach(itemDTO -> {
-                PrescriptionItem item = itemDTO.toEntity();
-                item.setPrescriptionId(p.getId());
-                prescriptionItemRepository.save(item);
-            });
+            for (var itemDTO : dto.getItems()) {
+                items.add(itemDTO.toEntity());
+            }
         }
 
-        List<PrescriptionItem> items = prescriptionItemRepository.findByPrescriptionId(p.getId());
         List<com.example.medical.module.prescription.dto.CdsWarning> warnings
                 = new java.util.ArrayList<>();
         warnings.addAll(cdsService.checkDrugInteractions(items));
+        warnings.addAll(cdsService.checkActiveMedicationInteractions(p.getPatientId(), items));
         warnings.addAll(cdsService.checkAllergyContraindications(p.getPatientId(), items));
-        if (!warnings.isEmpty()) {
-            log.warn("CDS warnings for prescription {}: {} warning(s)", p.getId(), warnings.size());
+
+        List<com.example.medical.module.prescription.dto.CdsWarning> blocking = warnings.stream()
+                .filter(w -> "severe".equalsIgnoreCase(w.getSeverity())
+                        || "contraindicated".equalsIgnoreCase(w.getSeverity()))
+                .toList();
+        if (!blocking.isEmpty()) {
+            String summary = blocking.stream()
+                    .map(w -> w.getType() + "[" + w.getSeverity() + "]: " + w.getDrugsInvolved())
+                    .collect(java.util.stream.Collectors.joining("; "));
+            if (dto.getOverrideReason() == null || dto.getOverrideReason().isBlank()) {
+                throw new BusinessException(ResultCode.CONFLICT,
+                        "Prescription blocked by clinical decision support (" + summary
+                        + "). Provide an override reason to proceed.");
+            }
+            log.warn("CDS override for prescription (patient={}): {}", p.getPatientId(), summary);
+        }
+
+        prescriptionRepository.save(p);
+        for (PrescriptionItem item : items) {
+            item.setPrescriptionId(p.getId());
+            prescriptionItemRepository.save(item);
+        }
+
+        // Persist the override audit trail (Review III C2) — dead code before.
+        for (com.example.medical.module.prescription.dto.CdsWarning w : blocking) {
+            com.example.medical.module.prescription.entity.CdsOverride co =
+                    new com.example.medical.module.prescription.entity.CdsOverride();
+            co.setPrescriptionId(p.getId());
+            co.setWarningType(w.getType());
+            co.setSeverity(w.getSeverity());
+            co.setDrugsInvolved(w.getDrugsInvolved() != null && w.getDrugsInvolved().length() > 200
+                    ? w.getDrugsInvolved().substring(0, 197) + "..." : w.getDrugsInvolved());
+            co.setOverrideReason(dto.getOverrideReason());
+            co.setOverriddenBy(loginUser.getUserId());
+            cdsOverrideRepository.save(co);
         }
     }
 

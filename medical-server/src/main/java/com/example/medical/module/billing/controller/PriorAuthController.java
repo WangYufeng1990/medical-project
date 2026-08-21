@@ -31,7 +31,7 @@ public class PriorAuthController {
 
     @GetMapping("/prior-auths")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<PriorAuthVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<PriorAuthVO>> list(@RequestParam(required = false) Long patientId, @Valid PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
         org.springframework.data.jpa.domain.Specification<PriorAuth> spec = null;
@@ -50,7 +50,7 @@ public class PriorAuthController {
     @PostMapping("/prior-auths")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "prior_auth", action = "CREATE")
+    @Auditable(module = "prior_auth", action = "CREATE", phiAccess = true)
     public Result<PriorAuthVO> create(@Valid @RequestBody PriorAuthForm form, @AuthenticationPrincipal LoginUser loginUser) {
         doctorPatientScope.requireAccess(form.getPatientId());
         PriorAuth pa = new PriorAuth();
@@ -69,9 +69,11 @@ public class PriorAuthController {
     @PutMapping("/prior-auths/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "prior_auth", action = "UPDATE")
+    @Auditable(module = "prior_auth", action = "UPDATE", phiAccess = true)
     public Result<PriorAuthVO> update(@PathVariable Long id, @Valid @RequestBody PriorAuthForm form) {
-        PriorAuth pa = priorAuthRepository.findById(id).orElseThrow();
+        PriorAuth pa = priorAuthRepository.findById(id)
+                .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
+                        com.example.medical.common.enums.ResultCode.NOT_FOUND, "Prior auth not found"));
         doctorPatientScope.requireAccess(pa.getPatientId());
         if (form.getStatus() != null) pa.setStatus(form.getStatus());
         if (form.getAuthNumber() != null) pa.setAuthNumber(form.getAuthNumber());

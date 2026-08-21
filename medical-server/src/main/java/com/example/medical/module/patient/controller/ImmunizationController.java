@@ -29,7 +29,7 @@ public class ImmunizationController {
 
     @GetMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<ImmunizationVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ImmunizationVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "administrationDate"));
@@ -42,7 +42,7 @@ public class ImmunizationController {
     @PostMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "immunization", action = "CREATE")
+    @Auditable(module = "immunization", action = "CREATE", phiAccess = true)
     public Result<ImmunizationVO> create(@PathVariable Long patientId, @Valid @RequestBody ImmunizationForm form) {
         doctorPatientScope.requireAccess(patientId);
         Immunization imm = new Immunization();

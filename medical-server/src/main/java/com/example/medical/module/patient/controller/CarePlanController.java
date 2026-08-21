@@ -29,7 +29,7 @@ public class CarePlanController {
 
     @GetMapping("/patients/{patientId}/care-plans")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<CarePlanVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<CarePlanVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "startDate"));
@@ -42,7 +42,7 @@ public class CarePlanController {
     @PostMapping("/patients/{patientId}/care-plans")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "care_plan", action = "CREATE")
+    @Auditable(module = "care_plan", action = "CREATE", phiAccess = true)
     public Result<CarePlanVO> create(@PathVariable Long patientId, @Valid @RequestBody CarePlanForm form) {
         doctorPatientScope.requireAccess(patientId);
         CarePlan cp = new CarePlan();
@@ -61,10 +61,23 @@ public class CarePlanController {
     @PutMapping("/patients/{patientId}/care-plans/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "care_plan", action = "UPDATE")
+    @Auditable(module = "care_plan", action = "UPDATE", phiAccess = true)
     public Result<CarePlanVO> update(@PathVariable Long patientId, @PathVariable Long id, @Valid @RequestBody CarePlanForm form) {
         doctorPatientScope.requireAccess(patientId);
-        CarePlan cp = carePlanRepository.findById(id).orElseThrow();
+        CarePlan cp = carePlanRepository.findById(id)
+                .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
+                        com.example.medical.common.enums.ResultCode.NOT_FOUND, "Care plan not found"));
+        // Cross-patient mutation guard (Review III C3): the resource must
+        // belong to the path patientId.
+        if (!cp.getPatientId().equals(patientId)) {
+            throw new com.example.medical.common.exception.BusinessException(
+                    com.example.medical.common.enums.ResultCode.FORBIDDEN, "Access denied");
+        }
+        if (form.getTitle() != null) cp.setTitle(form.getTitle());
+        if (form.getGoal() != null) cp.setGoal(form.getGoal());
+        if (form.getInterventions() != null) cp.setInterventions(form.getInterventions());
+        if (form.getStartDate() != null) cp.setStartDate(form.getStartDate());
+        if (form.getTargetDate() != null) cp.setTargetDate(form.getTargetDate());
         if (form.getStatus() != null) cp.setStatus(form.getStatus());
         if (form.getCompletedDate() != null) cp.setCompletedDate(form.getCompletedDate());
         if (form.getNotes() != null) cp.setNotes(form.getNotes());

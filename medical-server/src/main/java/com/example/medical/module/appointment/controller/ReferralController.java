@@ -32,7 +32,7 @@ public class ReferralController {
 
     @GetMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<ReferralVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ReferralVO>> list(@RequestParam(required = false) Long patientId, @Valid PageQuery pageQuery) {
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "referralDate"));
         org.springframework.data.jpa.domain.Specification<Referral> spec = null;
@@ -59,7 +59,7 @@ public class ReferralController {
     @PostMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "referral", action = "CREATE")
+    @Auditable(module = "referral", action = "CREATE", phiAccess = true)
     public Result<ReferralVO> create(@Valid @RequestBody ReferralForm form, @AuthenticationPrincipal LoginUser loginUser) {
         doctorPatientScope.requireAccess(form.getPatientId());
         Referral r = new Referral();
@@ -83,9 +83,11 @@ public class ReferralController {
     @PutMapping("/referrals/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "referral", action = "UPDATE")
+    @Auditable(module = "referral", action = "UPDATE", phiAccess = true)
     public Result<ReferralVO> update(@PathVariable Long id, @Valid @RequestBody ReferralForm form) {
-        Referral r = referralRepository.findById(id).orElseThrow();
+        Referral r = referralRepository.findById(id)
+                .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
+                        com.example.medical.common.enums.ResultCode.NOT_FOUND, "Referral not found"));
         doctorPatientScope.requireAccess(r.getPatientId());
         if (form.getStatus() != null) r.setStatus(form.getStatus());
         if (form.getAppointmentDate() != null) r.setAppointmentDate(form.getAppointmentDate());

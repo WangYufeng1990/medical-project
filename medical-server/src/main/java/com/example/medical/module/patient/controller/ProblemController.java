@@ -29,7 +29,7 @@ public class ProblemController {
 
     @GetMapping("/patients/{patientId}/problems")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<PageResult<ProblemVO>> list(@PathVariable Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ProblemVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "onsetDate"));
@@ -42,7 +42,7 @@ public class ProblemController {
     @PostMapping("/patients/{patientId}/problems")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "problem", action = "CREATE")
+    @Auditable(module = "problem", action = "CREATE", phiAccess = true)
     public Result<ProblemVO> create(@PathVariable Long patientId, @Valid @RequestBody ProblemForm form) {
         doctorPatientScope.requireAccess(patientId);
         Problem p = new Problem();
@@ -62,10 +62,21 @@ public class ProblemController {
     @PutMapping("/patients/{patientId}/problems/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @Auditable(module = "problem", action = "UPDATE")
+    @Auditable(module = "problem", action = "UPDATE", phiAccess = true)
     public Result<ProblemVO> update(@PathVariable Long patientId, @PathVariable Long id, @Valid @RequestBody ProblemForm form) {
         doctorPatientScope.requireAccess(patientId);
-        Problem p = problemRepository.findById(id).orElseThrow();
+        Problem p = problemRepository.findById(id)
+                .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
+                        com.example.medical.common.enums.ResultCode.NOT_FOUND, "Problem not found"));
+        // Cross-patient mutation guard (Review III C3).
+        if (!p.getPatientId().equals(patientId)) {
+            throw new com.example.medical.common.exception.BusinessException(
+                    com.example.medical.common.enums.ResultCode.FORBIDDEN, "Access denied");
+        }
+        if (form.getSnomedCode() != null) p.setSnomedCode(form.getSnomedCode());
+        if (form.getSnomedDisplay() != null) p.setSnomedDisplay(form.getSnomedDisplay());
+        if (form.getIcd10Code() != null) p.setIcd10Code(form.getIcd10Code());
+        if (form.getOnsetDate() != null) p.setOnsetDate(form.getOnsetDate());
         if (form.getResolutionDate() != null) p.setResolutionDate(form.getResolutionDate());
         if (form.getStatus() != null) p.setStatus(form.getStatus());
         if (form.getSeverity() != null) p.setSeverity(form.getSeverity());

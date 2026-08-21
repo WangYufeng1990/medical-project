@@ -28,6 +28,7 @@ import java.util.Set;
 public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
+    private final com.example.medical.module.appointment.repository.AppointmentLockRepository appointmentLockRepository;
     private final PatientRepository patientRepository;
     private final SysUserRepository sysUserRepository;
     private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
@@ -56,17 +57,19 @@ public class AppointmentService {
     }
 
     @Transactional
-    @Auditable(module = "appointment", action = "CREATE")
+    @Auditable(module = "appointment", action = "CREATE", phiAccess = true)
     public void create(AppointmentFormDTO dto) {
         if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
         }
+        doctorPatientScope.requireAccess(dto.getPatientId());
+        withDoctorLock(dto.getDoctorId());
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), null);
         appointmentRepository.save(dto.toEntity());
     }
 
     @Transactional
-    @Auditable(module = "appointment", action = "UPDATE")
+    @Auditable(module = "appointment", action = "UPDATE", phiAccess = true)
     public void update(Long id, AppointmentFormDTO dto) {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
@@ -77,6 +80,11 @@ public class AppointmentService {
         if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
         }
+        // Re-scope the target patient: applyTo overwrites patientId (Review III H5).
+        if (dto.getPatientId() != null && !dto.getPatientId().equals(a.getPatientId())) {
+            doctorPatientScope.requireAccess(dto.getPatientId());
+        }
+        withDoctorLock(dto.getDoctorId());
         checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
         Integer previousStatus = a.getStatus();
         dto.applyTo(a);
@@ -110,6 +118,13 @@ public class AppointmentService {
     @Transactional
     @Auditable(module = "appointment", action = "DELETE")
     public void delete(Long id) {
+        Appointment a = appointmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
+        doctorPatientScope.requireAccess(a.getPatientId());
+        if (a.getStatus() != null && java.util.Set.of(3, 4).contains(a.getStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "Completed/no-show appointments cannot be deleted");
+        }
         appointmentRepository.deleteById(id);
     }
 
@@ -129,6 +144,18 @@ public class AppointmentService {
             throw new BusinessException(ResultCode.CONFLICT,
                     "Doctor has a conflicting appointment within 30 minutes of this time");
         }
+    }
+
+    /**
+     * Serializes the conflict check + insert per doctor (Review III H4): the
+     * doctor's lock row is SELECT ... FOR UPDATE'd for the duration of this
+     * transaction, so two concurrent bookings for the same doctor cannot both
+     * pass the conflict check.
+     */
+    private void withDoctorLock(Long doctorId) {
+        if (doctorId == null) return;
+        appointmentLockRepository.upsertDoctor(doctorId);
+        appointmentLockRepository.lockDoctor(doctorId);
     }
 
     private AppointmentVO toVO(Appointment a) {

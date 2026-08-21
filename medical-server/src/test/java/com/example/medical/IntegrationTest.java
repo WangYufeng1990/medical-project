@@ -1459,9 +1459,11 @@ class IntegrationTest {
     void refillAndEmergency_encryptedFields_shouldRoundTrip() throws Exception {
         // Refill reason: patient-created free text round-trips through encryption.
         String refillReason = "Long refill reason (encrypted): lost the bottle, " + "y".repeat(200);
+        // Prescription 301 is active (300 is completed in the test fixture) —
+        // refill requires an active prescription (Review III C8).
         mockMvc.perform(post("/api/v1/patient/me/refill-requests")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("prescriptionId", 300, "reason", refillReason)))
+                        .content(objectMapper.writeValueAsString(Map.of("prescriptionId", 301, "reason", refillReason)))
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isOk());
         MvcResult mine = mockMvc.perform(get("/api/v1/patient/me/refill-requests")
@@ -1927,14 +1929,17 @@ class IntegrationTest {
     @Test
     @Order(100)
     void prescriptionTransmit_shouldGenerateNcpdp() throws Exception {
-        MvcResult result = mockMvc.perform(put("/api/v1/prescriptions/300/transmit")
+        // 301 is active in the fixture (300 is completed). Non-controlled →
+        // generates a draft NCPDP XML; no longer claims "transmitted"
+        // (Review III C4).
+        MvcResult result = mockMvc.perform(put("/api/v1/prescriptions/301/transmit")
                         .param("pharmacyId", "1")
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
         assertEquals(200, node.get("code").asInt());
-        assertEquals("transmitted", node.get("data").get("status").asText());
+        assertEquals("generated", node.get("data").get("status").asText());
     }
 
     // ──────────────────────────────────────────────────────

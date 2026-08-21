@@ -41,7 +41,9 @@ public class PatientController {
     public Result<PageResult<PatientVO>> page(@RequestParam(defaultValue = "1") long page,
                                               @RequestParam(defaultValue = "10") long size,
                                               @RequestParam(required = false) String keyword) {
-        Page<PatientVO> result = patientService.page(page, size, keyword);
+        // DOCTORs are scoped to patients they have appointments/prescriptions
+        // with (Review III C3); ADMIN sees all.
+        Page<PatientVO> result = patientService.page(page, size, keyword, doctorPatientScope.resolve());
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1, result.getContent()));
     }
@@ -50,6 +52,7 @@ public class PatientController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PatientVO> getById(@PathVariable Long id) {
         enforceEmergencyScope(id);
+        doctorPatientScope.requireAccess(id);
         return Result.ok(patientService.getById(id));
     }
 
@@ -76,6 +79,7 @@ public class PatientController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody PatientFormDTO dto) {
+        doctorPatientScope.requireAccess(id);
         patientService.update(id, dto);
         return Result.ok();
     }
@@ -89,6 +93,7 @@ public class PatientController {
 
     @GetMapping("/{patientId}/history")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "VIEW_HISTORY", phiAccess = true)
     public Result<List<MedicalHistoryEntry>> getHistory(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
         return Result.ok(historyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
@@ -97,7 +102,7 @@ public class PatientController {
     @PostMapping("/{patientId}/history")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_HISTORY")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_HISTORY", phiAccess = true)
     public Result<Void> addHistory(@PathVariable Long patientId,
                                     @Valid @RequestBody AddEntryRequest request) {
         doctorPatientScope.requireAccess(patientId);
@@ -111,6 +116,7 @@ public class PatientController {
 
     @GetMapping("/{patientId}/allergies")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "VIEW_ALLERGIES", phiAccess = true)
     public Result<List<AllergyEntry>> getAllergies(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
         return Result.ok(allergyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
@@ -119,7 +125,7 @@ public class PatientController {
     @PostMapping("/{patientId}/allergies")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_ALLERGY")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "ADD_ALLERGY", phiAccess = true)
     public Result<Void> addAllergy(@PathVariable Long patientId,
                                     @Valid @RequestBody AddAllergyRequest request) {
         doctorPatientScope.requireAccess(patientId);

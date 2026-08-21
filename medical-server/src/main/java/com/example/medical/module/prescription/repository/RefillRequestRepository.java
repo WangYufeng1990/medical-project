@@ -11,4 +11,5 @@ public interface RefillRequestRepository extends JpaRepository<RefillRequest, Lo
     List<RefillRequest> findByPatientIdOrderByRequestedAtDesc(Long patientId);
     List<RefillRequest> findByStatusOrderByRequestedAtDesc(String status);
     List<RefillRequest> findByStatusAndPatientIdInOrderByRequestedAtDesc(String status, Collection<Long> patientIds);
+    boolean existsByPrescriptionIdAndStatus(Long prescriptionId, String status);
 }
