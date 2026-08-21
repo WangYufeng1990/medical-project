@@ -33,12 +33,17 @@ public class SecurityConfig {
     @Value("${spring.profiles.active:}")
     private String activeProfiles;
 
+    @Value("${app.security.h2-console-enabled:false}")
+    private boolean h2ConsoleEnabledFlag;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // H2 console is only reachable when the h2 profile is active — never
-        // expose an empty-password DB console from the prod profile.
-        boolean h2ConsoleEnabled = java.util.Arrays.stream(activeProfiles.split(","))
-                .anyMatch("h2"::equals);
+        // H2 console is only reachable when the h2 profile is active AND the
+        // console was explicitly enabled — never expose an empty-password DB
+        // console by default (Review III C5).
+        boolean h2ConsoleEnabled = h2ConsoleEnabledFlag
+                && java.util.Arrays.stream(activeProfiles.split(","))
+                        .anyMatch("h2"::equals);
 
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

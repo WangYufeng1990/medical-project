@@ -3,6 +3,8 @@ app:
     key: h2-dev-key-for-local-testing-must-be-32-bytes
   security:
     dev-mode: true
+    dev-jwt-secret: h2-jwt-key-for-local-testing-must-be-32chr
+    h2-console-enabled: true
   integration:
     api-key: dev-integration-key
   rate-limit:

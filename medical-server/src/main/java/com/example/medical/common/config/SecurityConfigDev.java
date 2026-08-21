@@ -16,16 +16,17 @@ import java.security.NoSuchAlgorithmException;
 @Profile({"dev", "h2"})
 public class SecurityConfigDev {
 
-    private static final String H2_FALLBACK_KEY = "medical-dev-jwt-secret-key-for-local-development-only";
-
-    @org.springframework.beans.factory.annotation.Value("${app.security.dev-jwt-secret:#{null}}")
+    @org.springframework.beans.factory.annotation.Value("${app.security.dev-jwt-secret:}")
     private String configuredKey;
 
     private String getRawKey() {
         if (configuredKey != null && !configuredKey.isBlank()) {
             return configuredKey;
         }
-        return H2_FALLBACK_KEY;
+        // No hardcoded fallback (Review III C5) — dev/h2 must opt in explicitly.
+        throw new IllegalStateException(
+                "app.security.dev-jwt-secret is required when the dev/h2 profile is active "
+                + "(Review III C5: no hardcoded fallback key).");
     }
 
     private byte[] derive256BitKey() {

@@ -1,6 +1,8 @@
 spring:
+  # No default active profile — startup fails fast unless SPRING_PROFILES_ACTIVE
+  # is explicitly set to prod / dev / h2 (Review III C5). See ProdGuard.
   profiles:
-    active: h2
+    active: ${SPRING_PROFILES_ACTIVE:}
 
   cache:
     type: redis
@@ -9,9 +11,9 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/medical?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Chicago&useSSL=true&requireSSL=true&verifyServerCertificate=true&sslMode=VERIFY_CA
-    username: root
-    password: root
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/medical?useUnicode=true&characterEncoding=utf-8&serverTimezone=America/Chicago&useSSL=true&requireSSL=true&verifyServerCertificate=true&sslMode=VERIFY_CA
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
 
   data:
     redis:

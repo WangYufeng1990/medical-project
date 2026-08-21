@@ -3,6 +3,7 @@ package com.example.medical.common.config;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 
 @Slf4j
 @Component
+@Profile({"dev", "h2"})
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
@@ -250,50 +252,62 @@ public class DataInitializer implements CommandLineRunner {
 
         // Prescription 300
         jdbcTemplate.update(rxSql,
-                300L, 100L, 2L, "Upper respiratory infection", "J06.9",
+                300L, 100L, 2L, AesCryptoUtil.encrypt("Upper respiratory infection"),
+                AesCryptoUtil.encrypt("J06.9"),
                 LocalDate.of(2026, 5, 20), "MEDICATION", "completed",
-                "1234567890", AesCryptoUtil.encrypt("SM1234567"), "Walgreens #1234", "312-555-0400", now, now);
+                "1234567890", AesCryptoUtil.encrypt("SM1234567"),
+                AesCryptoUtil.encrypt("Walgreens #1234"), AesCryptoUtil.encrypt("312-555-0400"), now, now);
 
         jdbcTemplate.update(itemSql,
-                400L, 300L, "Amoxicillin", "65862-0017-01", "308191", "500mg", "500mg",
-                "PO", "TID", "Take one capsule three times daily with food",
+                400L, 300L, AesCryptoUtil.encrypt("Amoxicillin"), "65862-0017-01", "308191", "500mg",
+                AesCryptoUtil.encrypt("500mg"),
+                "PO", "TID", AesCryptoUtil.encrypt("Take one capsule three times daily with food"),
                 7, 7, 21, 0, 0, 0.85, now, now);
 
         jdbcTemplate.update(itemSql,
-                401L, 300L, "Ibuprofen", "49035-0323-50", "5640", "200mg", "200mg",
-                "PO", "BID", "Take one tablet twice daily as needed for pain",
+                401L, 300L, AesCryptoUtil.encrypt("Ibuprofen"), "49035-0323-50", "5640", "200mg",
+                AesCryptoUtil.encrypt("200mg"),
+                "PO", "BID", AesCryptoUtil.encrypt("Take one tablet twice daily as needed for pain"),
                 3, 3, 6, 0, 0, 0.50, now, now);
 
         // Prescription 301
         jdbcTemplate.update(rxSql,
-                301L, 100L, 2L, "Allergic rhinitis; Type 2 diabetes mellitus", "J30.9;E11.9",
+                301L, 100L, 2L, AesCryptoUtil.encrypt("Allergic rhinitis; Type 2 diabetes mellitus"),
+                AesCryptoUtil.encrypt("J30.9;E11.9"),
                 LocalDate.of(2026, 5, 28), "MEDICATION", "active",
-                "1234567890", AesCryptoUtil.encrypt("SM1234567"), "Walgreens #1234", "312-555-0400", now, now);
+                "1234567890", AesCryptoUtil.encrypt("SM1234567"),
+                AesCryptoUtil.encrypt("Walgreens #1234"), AesCryptoUtil.encrypt("312-555-0400"), now, now);
 
         jdbcTemplate.update(itemSql,
-                402L, 301L, "Cetirizine", "55111-0183-01", "23642", "10mg", "10mg",
-                "PO", "QD", "Take one tablet daily for allergy symptoms",
+                402L, 301L, AesCryptoUtil.encrypt("Cetirizine"), "55111-0183-01", "23642", "10mg",
+                AesCryptoUtil.encrypt("10mg"),
+                "PO", "QD", AesCryptoUtil.encrypt("Take one tablet daily for allergy symptoms"),
                 14, 14, 14, 0, 0, 1.20, now, now);
 
         jdbcTemplate.update(itemSql,
-                403L, 301L, "Metformin HCl", "65862-0109-01", "6809", "850mg", "850mg",
-                "PO", "BID", "Take one tablet twice daily with meals",
+                403L, 301L, AesCryptoUtil.encrypt("Metformin HCl"), "65862-0109-01", "6809", "850mg",
+                AesCryptoUtil.encrypt("850mg"),
+                "PO", "BID", AesCryptoUtil.encrypt("Take one tablet twice daily with meals"),
                 30, 30, 60, 2, 0, 0.35, now, now);
 
         // Prescription 302
         jdbcTemplate.update(rxSql,
-                302L, 101L, 2L, "Seasonal allergic asthma", "J45.30",
+                302L, 101L, 2L, AesCryptoUtil.encrypt("Seasonal allergic asthma"),
+                AesCryptoUtil.encrypt("J45.30"),
                 LocalDate.of(2026, 5, 22), "MEDICATION", "active",
-                "1234567890", AesCryptoUtil.encrypt("SM1234567"), "CVS Pharmacy #5678", "312-555-0500", now, now);
+                "1234567890", AesCryptoUtil.encrypt("SM1234567"),
+                AesCryptoUtil.encrypt("CVS Pharmacy #5678"), AesCryptoUtil.encrypt("312-555-0500"), now, now);
 
         jdbcTemplate.update(itemSql,
-                404L, 302L, "Montelukast", "00006-1715-31", "64479", "5mg", "5mg",
-                "PO", "QD", "Take one tablet daily at bedtime for asthma prevention",
+                404L, 302L, AesCryptoUtil.encrypt("Montelukast"), "00006-1715-31", "64479", "5mg",
+                AesCryptoUtil.encrypt("5mg"),
+                "PO", "QD", AesCryptoUtil.encrypt("Take one tablet daily at bedtime for asthma prevention"),
                 30, 30, 30, 2, 0, 2.50, now, now);
 
         jdbcTemplate.update(itemSql,
-                405L, 302L, "Albuterol HFA Inhaler", "59310-0579-22", "435", "100mcg", "100mcg",
-                "INH", "PRN", "Inhale 1-2 puffs every 4-6 hours as needed for wheezing or shortness of breath",
+                405L, 302L, AesCryptoUtil.encrypt("Albuterol HFA Inhaler"), "59310-0579-22", "435", "100mcg",
+                AesCryptoUtil.encrypt("100mcg"),
+                "INH", "PRN", AesCryptoUtil.encrypt("Inhale 1-2 puffs every 4-6 hours as needed for wheezing or shortness of breath"),
                 30, 30, 1, 0, 1, 25.00, now, now);
     }
 

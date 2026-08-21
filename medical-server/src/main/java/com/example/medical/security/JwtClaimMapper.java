@@ -24,6 +24,17 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
     @Override
     @SuppressWarnings("unchecked")
     public UsernamePasswordAuthenticationToken convert(Jwt jwt) {
+        // Refresh tokens are signed with the same local key as access tokens —
+        // reject any token that carries the "refresh" scope as an access token
+        // (Review III C6).
+        List<String> refreshCheck = jwt.getClaimAsStringList("scp");
+        if (refreshCheck == null) refreshCheck = jwt.getClaimAsStringList("scope");
+        if (refreshCheck != null && refreshCheck.contains("refresh")) {
+            throw new JwtValidationException("Refresh token cannot be used as an access token",
+                    List.of(new org.springframework.security.oauth2.core.OAuth2Error(
+                            "invalid_token", "Refresh tokens are not valid access tokens", null)));
+        }
+
         String username = jwt.getClaimAsString("sub");
 
         List<String> groups = jwt.getClaimAsStringList("groups");
