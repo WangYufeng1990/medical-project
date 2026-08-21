@@ -4,6 +4,7 @@ import { http } from '../../../api/patientRequest'
 import { PageResult } from '../../../types/common'
 import { ObservationVO, LoincEntry } from '../../../types/entities'
 import styles from '../../shared.module.css'
+import { readPatientInfo } from '../../../utils/auth'
 
 const FLAG_COLOR: Record<string, string> = {
   N: '#67C23A', H: '#E6A23C', L: '#E6A23C', HH: '#F56C6C', LL: '#F56C6C', A: '#F56C6C',
@@ -12,7 +13,7 @@ const FLAG_COLOR: Record<string, string> = {
 const LAB_PAGE_SIZE = 20
 
 export default function PatientLab() {
-  const info = JSON.parse(localStorage.getItem('patientInfo') || '{}') as { name?: string }
+  const info = readPatientInfo()
   const [loincFilter, setLoincFilter] = useState('')
   const [page, setPage] = useState(1)
 

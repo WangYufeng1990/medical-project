@@ -4,6 +4,7 @@ import { http } from '../../../api/patientRequest'
 import { PageResult } from '../../../types/common'
 import { PatientProfileVO } from '../../../types/entities'
 import styles from '../../dashboard/style.module.css'
+import { readPatientInfo } from '../../../utils/auth'
 
 const overviewCards: { label: string; key: 'apt' | 'rx' | 'bill'; path: string; color: string }[] = [
   { label: 'Appointments', key: 'apt', path: '/patient/appointments', color: '#10b981' },
@@ -28,7 +29,7 @@ const accountCards = [
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
-  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}') as { name?: string }
+  const cachedInfo = readPatientInfo()
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
     queryFn: () => http.get<PatientProfileVO>('/patient/me'),

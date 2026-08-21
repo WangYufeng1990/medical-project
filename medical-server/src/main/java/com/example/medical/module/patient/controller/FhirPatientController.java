@@ -64,6 +64,7 @@ public class FhirPatientController {
 
     @GetMapping("/Patient/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "FHIR_VIEW", phiAccess = true)
     public ResponseEntity<String> getPatient(@PathVariable Long id) {
         enforceEmergencyScope(id);
         doctorPatientScope.requireAccess(id);

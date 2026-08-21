@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { getConversations, getMessages, sendMessage, getSseTicket, PartyType } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
+import { tokenStore } from '../../utils/auth'
 import { MessageVO, ConversationVO } from '../../types/entities'
 import styles from './style.module.css'
 
@@ -17,7 +18,7 @@ export default function Chat() {
   const [sendError, setSendError] = useState('')
   const messageListRef = useRef<HTMLDivElement>(null)
 
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   const raw = token ? parseJwt(token) : {}
   const currentUserId = Number(raw.uid ?? raw.jti ?? 0)
 

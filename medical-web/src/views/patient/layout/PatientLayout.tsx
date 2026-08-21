@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import patientRequest, { http } from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 import SessionWarningModal from '../../../layout/SessionWarningModal'
+import { readPatientInfo, tokenStore } from '../../../utils/auth'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -18,15 +19,14 @@ const items = [
 export default function PatientLayout() {
   const navigate = useNavigate()
   const loc = useLocation()
-  const cachedInfo = JSON.parse(localStorage.getItem('patientInfo') || '{}')
+  const cachedInfo = readPatientInfo()
   const [unread, setUnread] = useState(0)
   const { data: profile } = useQuery({
     queryKey: ['me', 'profile'],
-    queryFn: () => patientRequest.get('/patient/me').then(r => r),
+    queryFn: () => patientRequest.get<{ name?: string }>('/patient/me').then(r => r as { name?: string }),
     staleTime: 60_000,
   })
-  const info = profile || cachedInfo
-
+  const info: { name?: string } = (profile as { name?: string } | undefined) || cachedInfo
   // Unread badge: refresh on every route change + poll every 30s. SSE stays
   // page-local (chat view), so the sidebar uses lightweight polling instead.
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function PatientLayout() {
     return () => { cancelled = true; clearInterval(timer) }
   }, [loc.pathname])
 
-  const handleLogout = () => { localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }
+  const handleLogout = () => { tokenStore.remove('patientToken'); tokenStore.remove('patientRefreshToken'); tokenStore.remove('patientInfo'); navigate('/patient/login') }
   const { warningVisible, reset } = useIdleTimeout(handleLogout)
 
   return (
@@ -65,7 +65,7 @@ export default function PatientLayout() {
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
-        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch {}; localStorage.removeItem('patientToken'); localStorage.removeItem('patientRefreshToken'); localStorage.removeItem('patientInfo'); navigate('/patient/login') }}>
+        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch {}; tokenStore.remove('patientToken'); tokenStore.remove('patientRefreshToken'); tokenStore.remove('patientInfo'); navigate('/patient/login') }}>
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>

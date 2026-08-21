@@ -28,6 +28,7 @@ public class FhirObservationController {
 
     @GetMapping("/Observation/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @com.example.medical.common.audit.Auditable(module = "observation", action = "FHIR_VIEW", phiAccess = true)
     public ResponseEntity<String> getObservation(@PathVariable Long id) {
         Observation o = observationRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Observation not found"));

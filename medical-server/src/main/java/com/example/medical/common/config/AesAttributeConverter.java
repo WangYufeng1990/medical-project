@@ -17,8 +17,18 @@ import jakarta.persistence.Converter;
 @Converter
 public class AesAttributeConverter implements AttributeConverter<String, String> {
 
+    /** Literal placeholder returned by {@link AesCryptoUtil#decrypt} on failure. */
+    private static final String DECRYPT_FAILED = "[DECRYPT_FAILED]";
+
     @Override
     public String convertToDatabaseColumn(String attribute) {
+        // Review III M5: never re-encrypt the failure placeholder back over
+        // real ciphertext — that would permanently destroy the PHI.
+        if (attribute != null && attribute.startsWith(DECRYPT_FAILED)) {
+            throw new IllegalStateException(
+                    "Refusing to persist a decrypt-failure placeholder (" + DECRYPT_FAILED
+                    + ") — the source ciphertext is unreadable. Investigate key rotation/corruption before writing.");
+        }
         return AesCryptoUtil.encrypt(attribute);
     }
 

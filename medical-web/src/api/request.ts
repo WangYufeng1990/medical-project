@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { scheduleDelayMs } from '../utils/auth'
+import { scheduleDelayMs, tokenStore } from '../utils/auth'
 import { Result } from '../types/common'
 import { LoginResponse } from '../types/entities'
 
@@ -14,7 +14,7 @@ declare module 'axios' {
 const request = axios.create({ baseURL: '/api/v1', timeout: 15000 })
 
 request.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -65,9 +65,9 @@ request.interceptors.response.use(
           try {
             const res = await axios.post<Result<LoginResponse>>('/api/v1/auth/refresh', { refreshToken })
             const newToken = res.data.data?.accessToken || res.data.data?.token || ''
-            localStorage.setItem('token', newToken)
+            tokenStore.set('token', newToken)
             if (res.data.data?.refreshToken) {
-              localStorage.setItem('refreshToken', res.data.data.refreshToken)
+              tokenStore.set('refreshToken', res.data.data.refreshToken)
             }
             scheduleProactiveRefresh()
             onRefreshed(newToken)
@@ -77,8 +77,8 @@ request.interceptors.response.use(
           } catch {
             isRefreshing = false
             refreshSubscribers = []
-            localStorage.removeItem('token')
-            localStorage.removeItem('refreshToken')
+            tokenStore.remove('token')
+            tokenStore.remove('refreshToken')
             if (!originalRequest.silent) window.location.href = '/login'
             return Promise.reject(err)
           }
@@ -91,7 +91,7 @@ request.interceptors.response.use(
           })
         }
       }
-      localStorage.removeItem('token')
+      tokenStore.remove('token')
       if (!originalRequest.silent) window.location.href = '/login'
     }
     if (err.response?.status === 429) {
@@ -110,7 +110,7 @@ let proactiveTimer: ReturnType<typeof setTimeout> | null = null
 // visible 401. Tokens are re-read at fire time to survive rotation.
 export function scheduleProactiveRefresh() {
   if (proactiveTimer) clearTimeout(proactiveTimer)
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   if (!token) return
   proactiveTimer = setTimeout(async () => {
     const refreshToken = localStorage.getItem('refreshToken')
@@ -118,9 +118,9 @@ export function scheduleProactiveRefresh() {
       try {
         const res = await axios.post<Result<LoginResponse>>('/api/v1/auth/refresh', { refreshToken })
         const newToken = res.data.data?.accessToken || res.data.data?.token || ''
-        localStorage.setItem('token', newToken)
+        tokenStore.set('token', newToken)
         if (res.data.data?.refreshToken) {
-          localStorage.setItem('refreshToken', res.data.data.refreshToken)
+          tokenStore.set('refreshToken', res.data.data.refreshToken)
         }
       } catch { /* leave tokens; the 401 chain handles stale sessions */ }
     }

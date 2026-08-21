@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { login } from '../../api/auth'
 import { scheduleProactiveRefresh } from '../../api/request'
 import styles from './style.module.css'
+import { tokenStore } from '../../utils/auth'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -14,11 +15,11 @@ export default function Login() {
     e.preventDefault(); setError('')
     try {
       const data = await login({ username, password })
-      localStorage.setItem('token', data.token || '')
-      localStorage.setItem('refreshToken', data.refreshToken || '')
-      localStorage.setItem('username', data.username || '')
-      localStorage.setItem('realName', data.realName || data.username || '')
-      localStorage.setItem('userId', String(data.userId ?? ''))
+      tokenStore.set('token', data.token || '')
+      tokenStore.set('refreshToken', data.refreshToken || '')
+      tokenStore.set('username', data.username || '')
+      tokenStore.set('realName', data.realName || data.username || '')
+      tokenStore.set('userId', String(data.userId ?? ''))
       scheduleProactiveRefresh()
       navigate('/dashboard')
     } catch (err: unknown) {

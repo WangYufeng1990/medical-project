@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { http } from '../../../api/patientRequest'
 import { useChatSse } from '../../../hooks/useChatSse'
 import { parseJwt } from '../../../utils/auth'
+import { tokenStore } from '../../../utils/auth'
 import { PageResult } from '../../../types/common'
 import { MessageVO, ConversationVO, SseTicketVO } from '../../../types/entities'
 import chatStyles from '../../chat/style.module.css'
@@ -15,7 +16,7 @@ export default function PatientChat() {
   const [input, setInput] = useState('')
   const messageListRef = useRef<HTMLDivElement>(null)
 
-  const token = localStorage.getItem('patientToken')
+  const token = tokenStore.get('patientToken')
   const raw = token ? parseJwt(token) : {}
   const currentUserId = Number(raw.uid ?? raw.jti ?? 0)
 

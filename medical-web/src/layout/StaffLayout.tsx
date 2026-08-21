@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { hasAnyRole, getUserRoles } from '../utils/auth'
+import { tokenStore } from '../utils/auth'
 import { logout } from '../api/auth'
 import { downloadPatientsCsv, downloadBillsCsv } from '../api/export'
 import { getUnreadCount } from '../api/chat'
@@ -49,14 +50,14 @@ export default function StaffLayout() {
 
   const handleLogout = async () => {
     try { await logout() } catch {} // best-effort: trigger audit trail
-    localStorage.removeItem('token')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('userId')
-    localStorage.removeItem('username')
-    localStorage.removeItem('realName')
-    localStorage.removeItem('patientToken')
-    localStorage.removeItem('patientRefreshToken')
-    localStorage.removeItem('patientInfo')
+    tokenStore.remove('token')
+    tokenStore.remove('refreshToken')
+    tokenStore.remove('userId')
+    tokenStore.remove('username')
+    tokenStore.remove('realName')
+    tokenStore.remove('patientToken')
+    tokenStore.remove('patientRefreshToken')
+    tokenStore.remove('patientInfo')
     // Emergency break-glass tokens must not survive into the next user's session.
     sessionStorage.removeItem('emergencyToken')
     sessionStorage.removeItem('emergencyPatientId')
@@ -70,7 +71,7 @@ export default function StaffLayout() {
       <aside className={styles.sidebar}>
         <div className={styles.logo}>Medical System</div>
         <div style={{ padding: '0 16px 8px', fontSize: 12, color: '#9ca3af' }}>
-          {localStorage.getItem('realName') || localStorage.getItem('username') || 'Staff'}
+          {tokenStore.get('realName') || tokenStore.get('username') || 'Staff'}
         </div>
         <nav>
           {visibleItems.map((item, i) => {

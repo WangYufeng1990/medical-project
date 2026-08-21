@@ -48,6 +48,29 @@ public class GlobalExceptionHandler {
         return Result.fail(400, e.getMessage());
     }
 
+    /** @Valid on @ModelAttribute params (PageQuery etc., Spring 6.1+) → 400. */
+    @ExceptionHandler(org.springframework.web.method.annotation.HandlerMethodValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleHandlerMethodValidation(
+            org.springframework.web.method.annotation.HandlerMethodValidationException e) {
+        String msg = e.getAllValidationResults().stream()
+                .flatMap(r -> r.getResolvableErrors().stream())
+                .map(er -> er.getDefaultMessage())
+                .filter(m -> m != null && !m.isBlank())
+                .collect(java.util.stream.Collectors.joining("; "));
+        return Result.fail(400, msg.isEmpty() ? "Invalid request parameter" : msg);
+    }
+
+    /**
+     * Bounds/format violations that Spring surfaces as IllegalArgumentException
+     * (e.g. PageRequest.of with page=0) — 400, not 500 (Review III M10/L1).
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleIllegalArgument(IllegalArgumentException e) {
+        return Result.fail(400, e.getMessage() != null ? e.getMessage() : "Invalid request argument");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleUnknown(Exception e) {

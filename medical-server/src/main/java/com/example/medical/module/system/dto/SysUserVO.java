@@ -18,6 +18,7 @@ public class SysUserVO {
     private String realName;
     @PhiField
     private String phone;
+    @PhiField
     private String email;
     private Integer gender;
     private Integer status;

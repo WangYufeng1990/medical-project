@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getUserPage, getUserById, createUser, updateUser, deleteUser, unlockUser } from '../../../api/user'
 import { SysUserForm, SysUserVO } from '../../../types/entities'
 import { PAGE_SIZE } from '../../../utils/labels'
+import { tokenStore } from '../../../utils/auth'
 import { useConfirm } from '../../../utils/ConfirmDialog'
 import styles from '../../shared.module.css'
 const emptyForm: SysUserForm = { username: '', password: '', realName: '', phone: '', email: '', gender: 1, status: 1, npi: '', stateLicenseNumber: '', licenseState: '', deaNumber: '', taxonomyCode: '', credentials: '', specialty: '' }
@@ -11,7 +12,7 @@ const USER_FIELDS = ['username','password','realName','phone','email','npi','sta
 export default function Users() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
-  const currentUserId = Number(localStorage.getItem('userId') || '0')
+  const currentUserId = Number(tokenStore.get('userId') || '0')
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)

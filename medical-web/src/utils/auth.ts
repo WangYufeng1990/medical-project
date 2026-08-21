@@ -1,5 +1,25 @@
 import { JwtPayload } from '../types/common'
 
+// Session-scoped credential storage (Review III C1-frontend): JWTs, refresh
+// tokens and cached PHI no longer persist in localStorage — closing the tab
+// ends the session and shrinks the XSS-exfiltration surface. Reads fall back
+// to localStorage once so existing sessions survive the migration.
+const STORAGE_KEYS = ['token', 'refreshToken', 'patientToken', 'patientRefreshToken',
+  'userId', 'username', 'realName', 'patientInfo'] as const
+
+export const tokenStore = {
+  get: (k: string): string | null => sessionStorage.getItem(k) ?? localStorage.getItem(k),
+  set: (k: string, v: string) => sessionStorage.setItem(k, v),
+  remove: (k: string) => { sessionStorage.removeItem(k); localStorage.removeItem(k) },
+  clearAll: () => STORAGE_KEYS.forEach(k => { sessionStorage.removeItem(k); localStorage.removeItem(k) }),
+}
+
+export function readPatientInfo(): { name?: string; patientId?: number; username?: string } {
+  try {
+    return JSON.parse(tokenStore.get('patientInfo') ?? '{}')
+  } catch { return {} }
+}
+
 export function parseJwt(token: string): JwtPayload {
   try {
     const base64Url = token.split('.')[1]
@@ -23,7 +43,7 @@ export function scheduleDelayMs(token: string): number {
 }
 
 export function getUserRoles(): string[] {
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   if (!token) return []
   const payload = parseJwt(token)
   const authorities: string[] = payload.groups || payload.roles || []

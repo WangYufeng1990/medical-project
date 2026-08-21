@@ -4,6 +4,7 @@ import axios, { AxiosError } from 'axios'
 import { scheduleProactiveRefresh } from '../../../api/patientRequest'
 import { Result } from '../../../types/common'
 import { PatientLoginResponse } from '../../../types/entities'
+import { tokenStore } from '../../../utils/auth'
 import styles from '../../login/style.module.css'
 
 export default function PatientLogin() {
@@ -17,9 +18,9 @@ export default function PatientLogin() {
     try {
       const res = await axios.post<Result<PatientLoginResponse>>('/api/v1/patient/login', { username, password })
       const data = res.data.data!
-      localStorage.setItem('patientToken', data.token)
-      if (data.refreshToken) localStorage.setItem('patientRefreshToken', data.refreshToken)
-      localStorage.setItem('patientInfo', JSON.stringify({ patientId: data.patientId, name: data.name, username: data.username }))
+      tokenStore.set('patientToken', data.token)
+      if (data.refreshToken) tokenStore.set('patientRefreshToken', data.refreshToken)
+      tokenStore.set('patientInfo', JSON.stringify({ patientId: data.patientId, name: data.name, username: data.username }))
       scheduleProactiveRefresh()
       navigate('/patient/dashboard')
     } catch (err: unknown) {

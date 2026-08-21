@@ -21,7 +21,7 @@ public class ChargeController {
     private final ChargeService chargeService;
 
     @GetMapping
-    public Result<PageResult<ChargeVO>> list(@RequestParam(required = false) Long patientId, PageQuery pageQuery) {
+    public Result<PageResult<ChargeVO>> list(@RequestParam(required = false) Long patientId, @Valid PageQuery pageQuery) {
         var page = chargeService.list(patientId, pageQuery);
         return Result.ok(PageResult.of(page.getTotalElements(), page.getSize(),
                 page.getNumber() + 1, page.getContent()));

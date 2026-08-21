@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { getUserRoles } from './utils/auth'
+import { tokenStore } from './utils/auth'
 import Login from './views/login'
 import StaffLayout from './layout/StaffLayout'
 import Dashboard from './views/dashboard'
@@ -92,13 +93,13 @@ export default function App() {
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   if (!token) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('token')
+  const token = tokenStore.get('token')
   if (!token) return <Navigate to="/login" replace />
   const roles = getUserRoles()
   if (!roles.includes('ADMIN')) {
@@ -111,7 +112,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 }
 
 function PatientAuthGuard({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('patientToken')
+  const token = tokenStore.get('patientToken')
   if (!token) return <Navigate to="/patient/login" replace />
   return <>{children}</>
 }

@@ -13,7 +13,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Language | Java | 17 (LTS) |
 | Framework | Spring Boot | 3.x (latest stable) |
 | Build Tool | Maven | wrapper included |
-| ORM | Spring Data JPA + Querydsl | Hibernate 6.x provider |
+| ORM | Spring Data JPA | Hibernate 6.x provider |
 | Database | MySQL | 8.0+ |
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
 | Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
