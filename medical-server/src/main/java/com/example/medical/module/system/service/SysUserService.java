@@ -27,6 +27,7 @@ public class SysUserService {
 
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.example.medical.module.system.repository.PasswordHistoryRepository passwordHistoryRepository;
 
     public Page<SysUserVO> page(long page, long size, String keyword) {
         Specification<SysUser> spec = (root, query, cb) -> {
@@ -52,7 +53,7 @@ public class SysUserService {
     }
 
     @Transactional
-    @Auditable(module = "system", action = "CREATE_USER")
+    @Auditable(module = "system", action = "CREATE_USER", phiAccess = true)
     @CacheEvict(value = "users", allEntries = true)
     public void create(SysUserFormDTO dto) {
         if (sysUserRepository.existsByUsername(dto.getUsername())) {
@@ -64,13 +65,27 @@ public class SysUserService {
     }
 
     @Transactional
-    @Auditable(module = "system", action = "UPDATE_USER")
+    @Auditable(module = "system", action = "UPDATE_USER", phiAccess = true)
     @CacheEvict(value = "users", key = "#id")
-    public void update(Long id, SysUserFormDTO dto) {
+    public void update(Long id, com.example.medical.module.system.dto.SysUserUpdateFormDTO dto) {
         SysUser user = sysUserRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "User not found"));
         Integer oldStatus = user.getStatus();
         dto.applyTo(user);
+        // Optional password reset by admin (Review III H4): record the replaced
+        // hash so the password-history check still works, then set the new one.
+        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            com.example.medical.module.system.entity.PasswordHistory history =
+                    new com.example.medical.module.system.entity.PasswordHistory();
+            history.setUserType("SYS_USER");
+            history.setUserId(user.getId());
+            history.setPasswordHash(user.getPassword());
+            history.setChangedAt(user.getPasswordChangedAt());
+            passwordHistoryRepository.save(history);
+
+            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+            user.setPasswordChangedAt(LocalDateTime.now());
+        }
         if (oldStatus != null && oldStatus == 1 && user.getStatus() != null && user.getStatus() == 0) {
             user.setForceLogoutAfter(LocalDateTime.now());
         }

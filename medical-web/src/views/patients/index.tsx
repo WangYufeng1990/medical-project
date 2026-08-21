@@ -14,7 +14,7 @@ import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labe
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: PatientForm = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active' }
+const emptyForm: PatientForm = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active', medicalHistory: '', allergies: '' }
 
 const READONLY_FIELDS = ['name','mrn','ssn','dateOfBirth','sexAtBirth'] as const
 const EDITABLE_FIELDS = ['genderIdentity','race','ethnicity','preferredLanguage','maritalStatus',
@@ -132,7 +132,10 @@ export default function Patients() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    saveMutation.mutate(editId != null ? { id: editId, data: form } : { data: form })
+    // Empty DOB must be sent as null, not "" — the backend binds LocalDate
+    // (Review III H8).
+    const payload = { ...form, dateOfBirth: form.dateOfBirth || null } as PatientForm
+    saveMutation.mutate(editId != null ? { id: editId, data: payload } : { data: payload })
   }
 
   const handleDelete = async (id: number) => {
@@ -313,7 +316,7 @@ export default function Patients() {
               {READONLY_FIELDS.map(f => (
                 <div key={f} className={styles.formGroup}>
                   <label>{f}</label>
-                  <input value={form[f] ?? ''} disabled={!!editId || viewOnly} style={{ background: (editId || viewOnly) ? '#f5f7fa' : undefined }} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as PatientForm)} />
+                  <input type={f === 'dateOfBirth' ? 'date' : 'text'} value={form[f] ?? ''} disabled={!!editId || viewOnly} style={{ background: (editId || viewOnly) ? '#f5f7fa' : undefined }} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as PatientForm)} />
                 </div>
               ))}
               {EDITABLE_FIELDS.map(f => (
@@ -322,6 +325,14 @@ export default function Patients() {
                   <input value={form[f] ?? ''} disabled={viewOnly} onChange={e => setForm(prev => ({ ...prev, [f]: e.target.value }) as PatientForm)} />
                 </div>
               ))}
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>medicalHistory</label>
+                <textarea rows={3} value={form.medicalHistory ?? ''} disabled={viewOnly} style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, resize: 'vertical' }} onChange={e => setForm(prev => ({ ...prev, medicalHistory: e.target.value }) as PatientForm)} />
+              </div>
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>allergies</label>
+                <textarea rows={2} value={form.allergies ?? ''} disabled={viewOnly} style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, resize: 'vertical' }} onChange={e => setForm(prev => ({ ...prev, allergies: e.target.value }) as PatientForm)} />
+              </div>
               {emergencyPrescriptions != null && (
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid #f56c6c', paddingTop: 16, marginTop: 8 }}>
                   <h4 style={{ color: '#f56c6c', marginBottom: 12 }}>Emergency Access — Active Prescriptions</h4>
@@ -453,12 +464,18 @@ export default function Patients() {
                       <input value={newVital.notes} onChange={e => setNewVital({ ...newVital, notes: e.target.value })} placeholder="Notes" style={{ width: 120, padding: '4px 6px', fontSize: 11, border: '1px solid #dcdfe6', borderRadius: 4 }} />
                       <button type="button" className={styles.btnSm} disabled={!newVital.systolicBp && !newVital.diastolicBp && !newVital.heartRate && !newVital.temperature} onClick={async () => {
                         if (!editId) return
+                        // Numeric guard (Review III H7): non-empty fields must parse as numbers,
+                        // otherwise NaN would silently serialize to null in the record.
+                        const num = (v: string) => v !== '' ? Number(v) : null
+                        for (const [k, v] of Object.entries({ systolicBp: newVital.systolicBp, diastolicBp: newVital.diastolicBp, heartRate: newVital.heartRate, temperature: newVital.temperature, oxygenSaturation: newVital.oxygenSaturation })) {
+                          if (v !== '' && Number.isNaN(Number(v))) { alert(`Invalid value for ${k}: "${v}"`); return }
+                        }
                         await createVitalSign(editId, {
-                          systolicBp: newVital.systolicBp !== '' ? Number(newVital.systolicBp) : null,
-                          diastolicBp: newVital.diastolicBp !== '' ? Number(newVital.diastolicBp) : null,
-                          heartRate: newVital.heartRate !== '' ? Number(newVital.heartRate) : null,
-                          temperature: newVital.temperature !== '' ? Number(newVital.temperature) : null,
-                          oxygenSaturation: newVital.oxygenSaturation !== '' ? Number(newVital.oxygenSaturation) : null,
+                          systolicBp: num(newVital.systolicBp),
+                          diastolicBp: num(newVital.diastolicBp),
+                          heartRate: num(newVital.heartRate),
+                          temperature: num(newVital.temperature),
+                          oxygenSaturation: num(newVital.oxygenSaturation),
                           notes: newVital.notes || null,
                         })
                         setVitalSigns((await getVitalSigns(editId, { page: 1, size: 100 }))?.records ?? [])

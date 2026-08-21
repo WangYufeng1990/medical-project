@@ -36,7 +36,7 @@ public class AuditLog {
     @Column(name = "target_id")
     private String targetId;
 
-    @Column(name = "detail")
+    @Column(name = "detail", length = 2000)
     private String detail;
 
     @Column(name = "ip")
@@ -48,6 +48,9 @@ public class AuditLog {
     @Column(name = "row_hash", length = 64)
     private String rowHash;
 
+    @Column(name = "prev_hash", length = 64)
+    private String prevHash;
+
     @Column(name = "archived")
     private Integer archived;
 
@@ -58,10 +61,15 @@ public class AuditLog {
         this.rowHash = computeRowHash();
     }
 
-    private String computeRowHash() {
+    /**
+     * SHA-256 over prevHash + this row's content (Review III M2): rows are
+     * chained, so tampering with any row invalidates its hash and every
+     * subsequent row's prevHash link.
+     */
+    public String computeRowHash() {
         try {
-            String data = String.format("%s|%s|%s|%s|%s|%s|%s|%s|%s",
-                    userId, username, patientId, module, action,
+            String data = String.format("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s",
+                    prevHash, userId, username, patientId, module, action,
                     targetId, detail, ip, createTime);
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
             byte[] hash = sha256.digest(data.getBytes(StandardCharsets.UTF_8));

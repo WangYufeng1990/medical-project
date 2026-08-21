@@ -40,6 +40,10 @@ public class AuditLogWriter {
             entry.setDetail(detail);
             entry.setIp(ip);
             entry.setCreateTime(LocalDateTime.ofInstant(eventTime, ZoneOffset.UTC));
+            // Hash chaining (Review III M2): link to the previous row so any
+            // tampering breaks the chain.
+            auditLogRepository.findTopByOrderByIdDesc()
+                    .ifPresent(last -> entry.setPrevHash(last.getRowHash()));
             auditLogRepository.save(entry);
         } catch (Exception e) {
             log.error("Async audit write failed — action={} module={} targetId={}. "

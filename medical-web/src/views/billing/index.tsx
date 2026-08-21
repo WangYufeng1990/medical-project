@@ -28,6 +28,8 @@ export default function Billing() {
   const [formError, setFormError] = useState('')
   const { confirm } = useConfirm()
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: pageData } = useQuery({
     queryKey: ['billing', 'list', { page, size: PAGE_SIZE, patientId: filterPatientId ? Number(filterPatientId) : undefined }],
     queryFn: () => getBillPage({ page, size: PAGE_SIZE, ...(filterPatientId ? { patientId: Number(filterPatientId) } : {}) }),
@@ -75,36 +77,43 @@ export default function Billing() {
   const createMutation = useMutation({
     mutationFn: (d: BillCreatePayload) => createBill(d),
     onSuccess: () => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+    onError,
   })
 
   const convertMutation = useMutation({
     mutationFn: (id: number) => convertCharge(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['charges'] }); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+    onError,
   })
 
   const submitMutation = useMutation({
     mutationFn: (id: number) => submitBill(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+    onError,
   })
 
   const adjudicateMutation = useMutation({
     mutationFn: (params: { id: number; data: { insurancePayment: number; adjustment: number; claimNumber?: string; adjudicationDate?: string } }) => adjudicateBill(params.id, params.data),
     onSuccess: () => { setAdjudicateId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+    onError,
   })
 
   const payMutation = useMutation({
     mutationFn: (params: { id: number; data: { paymentAmount: number; paymentMethod: string } }) => payBill(params.id, params.data),
     onSuccess: () => { setPayBillId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+    onError,
   })
 
   const denyMutation = useMutation({
     mutationFn: (params: { id: number; reason: string }) => denyBill(params.id, params.reason),
     onSuccess: () => { setDenyBillId(null); queryClient.invalidateQueries({ queryKey: ['billing'] }) },
+    onError,
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteBill(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing'] }),
+    onError,
   })
 
   const handleCreate = (e: FormEvent) => {

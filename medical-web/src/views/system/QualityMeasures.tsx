@@ -8,6 +8,8 @@ export default function QualityMeasures() {
   const queryClient = useQueryClient()
   const [selectedCmsId, setSelectedCmsId] = useState<string | null>(null)
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: measures, isLoading } = useQuery({
     queryKey: ['quality', 'measures'],
     queryFn: () => getMeasures(),
@@ -31,6 +33,7 @@ export default function QualityMeasures() {
       queryClient.invalidateQueries({ queryKey: ['quality', 'report', selectedCmsId] })
       queryClient.invalidateQueries({ queryKey: ['quality', 'history', selectedCmsId] })
     },
+    onError,
   })
 
   return (

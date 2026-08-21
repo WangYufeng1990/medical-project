@@ -64,7 +64,7 @@ public class PatientAuthController {
 
     @PostMapping("/login")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGIN_SUCCESS")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_LOGIN_SUCCESS", phiAccess = true)
     public Result<PatientLoginResponse> login(@Valid @RequestBody PatientLoginRequest request) {
         PatientAuth auth = patientAuthRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> {
@@ -134,7 +134,7 @@ public class PatientAuthController {
 
     @PostMapping("/reset-password")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_RESET")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_RESET", phiAccess = true)
     public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         ResetToken rt = RESET_TOKENS.remove(request.getToken());
         if (rt == null || rt.expiresAt().isBefore(LocalDateTime.now())) {
@@ -151,7 +151,7 @@ public class PatientAuthController {
     }
 
     @PostMapping("/refresh")
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_TOKEN_REFRESH", phiAccess = true)
     public Result<PatientLoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         if (request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Refresh token is required");

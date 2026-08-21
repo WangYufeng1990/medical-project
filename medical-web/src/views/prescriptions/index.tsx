@@ -21,6 +21,7 @@ export default function Prescriptions() {
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
   const [form, setForm] = useState<PrescriptionForm>({ ...emptyForm })
   const [transmitId, setTransmitId] = useState<number | null>(null)
   const [pharmacies, setPharmacies] = useState<PharmacyVO[]>([])
@@ -32,6 +33,8 @@ export default function Prescriptions() {
   const [rxLookupError, setRxLookupError] = useState('')
   const [cdsChecking, setCdsChecking] = useState(false)
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: refillRequests } = useQuery({
     queryKey: ['prescriptions', 'refill-requests'],
     queryFn: () => getPendingRefillRequests().then(r => r ?? []),
@@ -40,11 +43,13 @@ export default function Prescriptions() {
   const approveRefill = useMutation({
     mutationFn: (id: number) => approveRefillRequest(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions', 'refill-requests'] }),
+    onError,
   })
 
   const denyRefill = useMutation({
     mutationFn: (params: { id: number; notes?: string }) => denyRefillRequest(params.id, params.notes),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions', 'refill-requests'] }),
+    onError,
   })
 
   const { data: pageData } = useQuery({
@@ -70,6 +75,7 @@ export default function Prescriptions() {
       setShowForm(false)
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
     },
+    onError,
   })
 
   const transmitMutation = useMutation({
@@ -78,16 +84,19 @@ export default function Prescriptions() {
       setTransmitId(null)
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
     },
+    onError,
   })
 
   const cancelMutation = useMutation({
     mutationFn: (id: number) => cancelPrescription(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
+    onError,
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deletePrescription(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
+    onError,
   })
 
   const openTransmit = async (id: number) => {
@@ -104,7 +113,10 @@ export default function Prescriptions() {
 
   const openForm = async (row?: PrescriptionVO) => {
     if (row) {
+      // Prescriptions are immutable clinical records — opening an existing one
+      // is view-only (previously "Edit" silently POSTed a duplicate, Review III H3).
       setEditId(row.id)
+      setViewOnly(true)
       const detail = await getPrescriptionById(row.id)
       setForm({
         patientId: String(detail.patientId ?? ''),
@@ -122,6 +134,7 @@ export default function Prescriptions() {
       })
     } else {
       setEditId(null)
+      setViewOnly(false)
       setForm({ ...emptyForm })
     }
     setShowForm(true)
@@ -238,7 +251,7 @@ export default function Prescriptions() {
       <table className={styles.table}>
         <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Diagnosis</th><th>ICD-10</th><th>Date</th><th>Status</th><th></th></tr></thead>
         <tbody>{data.map(r => (
-          <tr key={r.id} className={styles.clickableRow}>
+          <tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}>
             <td>{r.id}</td><td>{r.patientName}</td><td>{r.doctorName}</td><td>{r.diagnosis}</td><td>{r.icd10Codes}</td><td>{r.prescriptionDate}</td><td>{r.rxStatus}</td>
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
@@ -250,33 +263,33 @@ export default function Prescriptions() {
       <div className={styles.pagination}><span>Total: {total}</span><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Prev</button><span>Page {page}</span><button disabled={page*PAGE_SIZE>=total} onClick={()=>setPage(p=>p+1)}>Next</button></div>
 
       {showForm && <div className={styles.modalOverlay} onClick={() => setShowForm(false)}><div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
-        <h3>{editId ? 'Edit' : 'Add'} Prescription</h3>
+        <h3>{editId ? 'View' : 'Add'} Prescription</h3>
         <form onSubmit={handleSubmit}>
           <div className={styles.formGrid}>
             <div className={styles.formGroup}>
               <label>Patient</label>
-              <select value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
+              <select disabled={viewOnly} value={form.patientId} onChange={e => setForm({ ...form, patientId: e.target.value })}>
                 <option value="">-- Select Patient --</option>
                 {(patients ?? []).map(p => <option key={p.id} value={p.id}>{p.name} (ID:{p.id})</option>)}
               </select>
             </div>
             <div className={styles.formGroup}><label>Doctor</label>
-              <select value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
+              <select disabled={viewOnly} value={form.doctorId} onChange={e => setForm({ ...form, doctorId: e.target.value })}>
                 <option value="">-- Select --</option>
                 {(doctors ?? []).map(d => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
               </select></div>
-            <div className={styles.formGroup}><label>Diagnosis</label><input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} /></div>
-            <div className={styles.formGroup}><label>ICD-10 Codes</label><input value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
-            <div className={styles.formGroup}><label>Date</label><input type="date" value={form.prescriptionDate} onChange={e => setForm({ ...form, prescriptionDate: e.target.value })} /></div>
+            <div className={styles.formGroup}><label>Diagnosis</label><input disabled={viewOnly} value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} /></div>
+            <div className={styles.formGroup}><label>ICD-10 Codes</label><input disabled={viewOnly} value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} placeholder="e.g. E11.9,I10" /></div>
+            <div className={styles.formGroup}><label>Date</label><input disabled={viewOnly} type="date" value={form.prescriptionDate} onChange={e => setForm({ ...form, prescriptionDate: e.target.value })} /></div>
             <div className={styles.formGroup}>
               <label>Type</label>
-              <select value={form.prescriptionType} onChange={e => setForm({ ...form, prescriptionType: e.target.value })}>
+              <select disabled={viewOnly} value={form.prescriptionType} onChange={e => setForm({ ...form, prescriptionType: e.target.value })}>
                 <option value="MEDICATION">Medication</option><option value="CONTROLLED">Controlled</option><option value="COMPOUND">Compound</option>
               </select>
             </div>
             {editId && <div className={styles.formGroup}>
               <label>Status</label>
-              <select value={form.rxStatus} onChange={e => setForm({ ...form, rxStatus: e.target.value })}>
+              <select disabled value={form.rxStatus} onChange={e => setForm({ ...form, rxStatus: e.target.value })}>
                 <option value="active">Active</option><option value="transmitted">Transmitted</option><option value="dispensed">Dispensed</option><option value="cancelled">Cancelled</option>
               </select>
             </div>}
@@ -285,23 +298,23 @@ export default function Prescriptions() {
           <h4 style={{ marginTop: 20, marginBottom: 8 }}>Items</h4>
           {form.items.map((it, idx: number) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 80px 80px 80px 60px', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-              <div className={styles.formGroup}><label>Drug</label><input value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
-              <div className={styles.formGroup}><label>RxNorm</label><input value={it.rxnormCode} onChange={e => handleRxnormChange(idx, e.target.value)} placeholder="e.g. 6809" /></div>
-              <div className={styles.formGroup}><label>Dosage</label><input value={it.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} placeholder="e.g. 500mg" /></div>
-              <div className={styles.formGroup}><label>Frequency</label><input value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
-              <div className={styles.formGroup}><label>Duration</label><input value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="days" /></div>
-              <div className={styles.formGroup}><label>Qty</label><input value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="30" /></div>
-              <div className={styles.formGroup}><label>Refills</label><input type="number" min="0" max={form.prescriptionType === 'CONTROLLED' ? 0 : 11} value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
+              <div className={styles.formGroup}><label>Drug</label><input disabled={viewOnly} value={it.drugName} onChange={e => updateItem(idx, 'drugName', e.target.value)} placeholder="Drug name" /></div>
+              <div className={styles.formGroup}><label>RxNorm</label><input disabled={viewOnly} value={it.rxnormCode} onChange={e => handleRxnormChange(idx, e.target.value)} placeholder="e.g. 6809" /></div>
+              <div className={styles.formGroup}><label>Dosage</label><input disabled={viewOnly} value={it.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} placeholder="e.g. 500mg" /></div>
+              <div className={styles.formGroup}><label>Frequency</label><input disabled={viewOnly} value={it.frequency} onChange={e => updateItem(idx, 'frequency', e.target.value)} placeholder="e.g. BID" /></div>
+              <div className={styles.formGroup}><label>Duration</label><input disabled={viewOnly} value={it.duration} onChange={e => updateItem(idx, 'duration', e.target.value)} placeholder="days" /></div>
+              <div className={styles.formGroup}><label>Qty</label><input disabled={viewOnly} value={it.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} placeholder="30" /></div>
+              <div className={styles.formGroup}><label>Refills</label><input disabled={viewOnly} type="number" min="0" max={form.prescriptionType === 'CONTROLLED' ? 0 : 11} value={it.refills} onChange={e => updateItem(idx, 'refills', e.target.value)} placeholder="0" /></div>
               <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 2 }}>
-                {form.items.length > 1 && <button type="button" className={styles.btnSmDanger} style={{ margin: 0 }} onClick={() => removeItem(idx)}>✕</button>}
+                {!viewOnly && form.items.length > 1 && <button type="button" className={styles.btnSmDanger} style={{ margin: 0 }} onClick={() => removeItem(idx)}>✕</button>}
               </div>
             </div>
           ))}
           {rxLookupError && <div style={{ color: '#E6A23C', fontSize: 12, marginBottom: 8 }}>⚠️ {rxLookupError}</div>}
-          <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>
+          {!viewOnly && <button type="button" className={styles.btnSm} onClick={addItem} style={{ marginBottom: 16 }}>+ Add Item</button>}
 
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}
-          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={cdsChecking}>{cdsChecking ? 'Checking...' : 'Save'}</button></div>
+          <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => { setShowForm(false); setFormError('') }}>Close</button>{!viewOnly && <button type="submit" className={styles.btnPrimary} disabled={cdsChecking}>{cdsChecking ? 'Checking...' : 'Save'}</button>}</div>
         </form>
       </div></div>}
 

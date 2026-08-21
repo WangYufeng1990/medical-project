@@ -19,13 +19,13 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    @Auditable(module = "auth", action = "LOGIN_SUCCESS")
+    @Auditable(module = "auth", action = "LOGIN_SUCCESS", phiAccess = true)
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return Result.ok(authService.login(request));
     }
 
     @PostMapping("/refresh")
-    @Auditable(module = "auth", action = "TOKEN_REFRESH")
+    @Auditable(module = "auth", action = "TOKEN_REFRESH", phiAccess = true)
     public Result<LoginResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return Result.ok(authService.refresh(request.getRefreshToken()));
     }

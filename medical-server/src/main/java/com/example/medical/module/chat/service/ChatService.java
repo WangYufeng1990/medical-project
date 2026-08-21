@@ -38,7 +38,7 @@ public class ChatService {
     }
 
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "chat", action = "SEND_MESSAGE")
+    @com.example.medical.common.audit.Auditable(module = "chat", action = "SEND_MESSAGE", phiAccess = true)
     public MessageVO sendMessage(Long senderId, String senderType,
                                  Long receiverId, String receiverType, String content) {
         Message msg = new Message();

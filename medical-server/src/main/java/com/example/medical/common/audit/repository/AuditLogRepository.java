@@ -27,4 +27,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
 
     @Query("SELECT DISTINCT a.module, a.action FROM AuditLog a WHERE a.module IS NOT NULL AND a.action IS NOT NULL")
     List<Object[]> findDistinctModulesAndActions();
+
+    List<AuditLog> findAllByOrderByIdAsc();
+
+    java.util.Optional<AuditLog> findTopByOrderByIdDesc();
 }

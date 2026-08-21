@@ -234,7 +234,7 @@ public class PatientPortalController {
 
     @PutMapping("/password")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_CHANGE")
+    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_CHANGE", phiAccess = true)
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PatientPasswordChangeRequest request) {
         PatientAuth auth = patientAuthRepository.findByPatientId(loginUser.getUserId())
@@ -310,31 +310,37 @@ public class PatientPortalController {
     }
 
     @GetMapping("/vitals")
+    @com.example.medical.common.audit.Auditable(module = "vital_sign", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.patient.entity.VitalSign>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/problems")
+    @com.example.medical.common.audit.Auditable(module = "problem", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.patient.entity.Problem>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/immunizations")
+    @com.example.medical.common.audit.Auditable(module = "immunization", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.patient.entity.Immunization>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/referrals")
+    @com.example.medical.common.audit.Auditable(module = "referral", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.appointment.entity.Referral>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/care-plans")
+    @com.example.medical.common.audit.Auditable(module = "care_plan", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.patient.entity.CarePlan>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId()));
     }
 
     @GetMapping("/prior-auths")
+    @com.example.medical.common.audit.Auditable(module = "prior_auth", action = "ACCESS", phiAccess = true)
     public Result<List<com.example.medical.module.billing.entity.PriorAuth>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.ok(priorAuthRepository.findByPatientIdOrderByRequestedAtDesc(loginUser.getUserId()));
     }

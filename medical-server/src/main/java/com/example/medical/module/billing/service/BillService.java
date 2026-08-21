@@ -63,7 +63,7 @@ public class BillService {
     }
 
     @Transactional
-    @Auditable(module = "billing", action = "CREATE")
+    @Auditable(module = "billing", action = "CREATE", phiAccess = true)
     public void create(BillFormDTO dto) {
         billRepository.save(dto.toEntity());
     }
@@ -83,7 +83,7 @@ public class BillService {
     }
 
     @Transactional
-    @Auditable(module = "billing", action = "ADJUDICATE")
+    @Auditable(module = "billing", action = "ADJUDICATE", phiAccess = true)
     public void adjudicate(Long id, BigDecimal adjustment, BigDecimal insurancePayment,
                            String claimNumber, LocalDate adjudicationDate) {
         Bill b = billRepository.findById(id)
@@ -108,7 +108,7 @@ public class BillService {
     }
 
     @Transactional
-    @Auditable(module = "billing", action = "PAY")
+    @Auditable(module = "billing", action = "PAY", phiAccess = true)
     public void pay(Long id, BigDecimal paymentAmount, String paymentMethod) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
@@ -131,7 +131,7 @@ public class BillService {
     }
 
     @Transactional
-    @Auditable(module = "billing", action = "DENY")
+    @Auditable(module = "billing", action = "DENY", phiAccess = true)
     public void denyClaim(Long id, String reason) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));

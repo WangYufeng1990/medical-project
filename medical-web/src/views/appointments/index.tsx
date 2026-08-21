@@ -8,7 +8,7 @@ import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR, T
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
-const emptyForm: AppointmentForm = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', status: 0 }
+const emptyForm: AppointmentForm = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', icd10Codes: '', notes: '', status: 0 }
 
 export default function Appointments() {
   const queryClient = useQueryClient()
@@ -73,6 +73,8 @@ export default function Appointments() {
         duration: d.duration ?? 30,
         cptCode: d.cptCode ?? '',
         description: d.description ?? '',
+        icd10Codes: d.icd10Codes ?? '',
+        notes: d.notes ?? '',
         status: d.status,
       })
     }
@@ -124,7 +126,9 @@ export default function Appointments() {
           <div className={styles.formGroup}><label>CPT Code</label><input disabled={viewOnly} value={form.cptCode} onChange={e => setForm({ ...form, cptCode: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Duration (min)</label><input disabled={viewOnly} type="number" value={form.duration} onChange={e => setForm({ ...form, duration: Number(e.target.value) })} /></div>
           <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>Chief Complaint</label><input disabled={viewOnly} value={form.chiefComplaint} onChange={e => setForm({ ...form, chiefComplaint: e.target.value })} /></div>
+          <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>ICD-10 Codes</label><input disabled={viewOnly} value={form.icd10Codes} onChange={e => setForm({ ...form, icd10Codes: e.target.value })} /></div>
           <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>Description</label><input disabled={viewOnly} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+          <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}><label>Notes</label><textarea rows={2} disabled={viewOnly} style={{ padding: '6px 10px', border: '1px solid #dcdfe6', borderRadius: 4, fontSize: 13, resize: 'vertical' }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
           {editId && <div className={styles.formGroup}><label>Status</label>
             <select disabled={viewOnly} value={form.status} onChange={e => setForm({ ...form, status: Number(e.target.value) })}>
               {Object.entries(APPOINTMENT_STATUS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div>}

@@ -77,4 +77,27 @@ public class AuditLogService {
         result.put("actions", actions);
         return result;
     }
+
+    /**
+     * Tamper-evidence check (Review III M2): verifies every row's hash and the
+     * prev_hash chain. Returns the first broken row id, or null when the chain
+     * is intact.
+     */
+    public Long verifyIntegrity() {
+        List<AuditLog> rows = auditLogRepository.findAllByOrderByIdAsc();
+        String previousRowHash = null;
+        for (AuditLog row : rows) {
+            if (previousRowHash != null
+                    && row.getPrevHash() != null
+                    && !row.getPrevHash().equals(previousRowHash)) {
+                return row.getId();
+            }
+            String computed = row.computeRowHash();
+            if (computed == null || !computed.equals(row.getRowHash())) {
+                return row.getId();
+            }
+            previousRowHash = row.getRowHash();
+        }
+        return null;
+    }
 }

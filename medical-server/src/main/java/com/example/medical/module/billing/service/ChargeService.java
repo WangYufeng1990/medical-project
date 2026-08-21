@@ -48,7 +48,7 @@ public class ChargeService {
     }
 
     @Transactional
-    @Auditable(module = "charge", action = "CREATE")
+    @Auditable(module = "charge", action = "CREATE", phiAccess = true)
     public ChargeVO create(ChargeForm form) {
         Charge c = form.toEntity();
         c.setStatus("DRAFT");

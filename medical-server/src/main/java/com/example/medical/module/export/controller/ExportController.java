@@ -130,6 +130,11 @@ public class ExportController {
     private static String csv(Object value) {
         if (value == null) return "";
         String s = value.toString();
+        // CSV formula injection guard (Review III M6): a leading = + - @ (or
+        // tab/CR) would execute as a formula in Excel/LibreOffice.
+        if (!s.isEmpty() && "+-=@\t\r".indexOf(s.charAt(0)) >= 0) {
+            s = "'" + s;
+        }
         if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
             return "\"" + s.replace("\"", "\"\"") + "\"";
         }

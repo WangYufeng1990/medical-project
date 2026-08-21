@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.system.dto.SysUserFormDTO;
+import com.example.medical.module.system.dto.SysUserUpdateFormDTO;
 import com.example.medical.module.system.dto.SysUserVO;
 import com.example.medical.module.system.service.SysUserService;
 import com.example.medical.security.LoginUser;
@@ -55,7 +56,7 @@ public class SysUserController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody SysUserFormDTO dto) {
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody SysUserUpdateFormDTO dto) {
         sysUserService.update(id, dto);
         return Result.ok();
     }

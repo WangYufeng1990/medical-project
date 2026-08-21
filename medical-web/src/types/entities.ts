@@ -67,6 +67,8 @@ export interface PatientForm {
   insuranceGroupNumber: string
   primaryCareProvider: string
   patientStatus: string
+  medicalHistory: string
+  allergies: string
 }
 
 export interface MedicalHistoryEntry {
@@ -102,6 +104,7 @@ export interface AppointmentVO {
   description?: string
   status: number
   icd10Codes?: string
+  notes?: string
   createTime?: string
 }
 
@@ -115,6 +118,8 @@ export interface AppointmentForm {
   duration: number
   cptCode: string
   description: string
+  icd10Codes: string
+  notes: string
   status: number
 }
 
@@ -628,12 +633,14 @@ export interface StaffProfileForm {
   realName: string
   phone: string
   email: string
-  gender: string
+  gender: string | number | null
   npi: string
   licenseState: string
   taxonomyCode: string
   credentials: string
   specialty: string
+  /** Required by the backend when professional credentials change (Review III H5). */
+  currentPassword?: string
 }
 
 export interface ChangePasswordForm {

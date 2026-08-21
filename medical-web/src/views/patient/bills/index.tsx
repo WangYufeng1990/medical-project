@@ -12,6 +12,8 @@ export default function PatientBills() {
   const [payId, setPayId] = useState<number | null>(null)
   const [payForm, setPayForm] = useState({ paymentAmount: '', paymentMethod: 'CREDIT_CARD' })
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: pageData } = useQuery({
     queryKey: ['me', 'bills', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => http.get<PageResult<BillVO>>(`/patient/me/bills?page=${page}&size=${PAGE_SIZE}`),
@@ -25,6 +27,7 @@ export default function PatientBills() {
       setPayId(null)
       queryClient.invalidateQueries({ queryKey: ['me', 'bills'] })
     },
+    onError,
   })
 
   const openPay = (bill: BillVO) => {

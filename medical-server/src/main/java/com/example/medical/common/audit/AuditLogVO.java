@@ -20,6 +20,8 @@ public class AuditLogVO {
     private String detail;
     private String ip;
     private LocalDateTime createTime;
+    private String rowHash;
+    private String prevHash;
 
     public static AuditLogVO fromEntity(AuditLog log) {
         return new AuditLogVO(
@@ -32,6 +34,8 @@ public class AuditLogVO {
                 log.getTargetId(),
                 log.getDetail(),
                 log.getIp(),
-                log.getCreateTime());
+                log.getCreateTime(),
+                log.getRowHash(),
+                log.getPrevHash());
     }
 }

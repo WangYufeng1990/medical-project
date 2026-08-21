@@ -34,7 +34,27 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       alert('Updated')
     },
+    onError: (err: Error) => alert(err?.message || 'Update failed'),
   })
+
+  const CREDENTIAL_FIELDS: (keyof StaffProfileForm)[] = ['npi', 'licenseState', 'taxonomyCode', 'credentials', 'specialty']
+
+  const handleUpdate = async () => {
+    // Professional credential changes require the current password on the
+    // backend — collect it up front instead of failing silently (Review III H5).
+    const credentialsChanged = CREDENTIAL_FIELDS.some(f => (form[f] ?? '') !== (profile?.[f as keyof StaffProfileVO] ?? ''))
+    let currentPassword: string | undefined
+    if (credentialsChanged) {
+      currentPassword = prompt('Enter your current password to update professional credentials:') || undefined
+      if (!currentPassword) return
+    }
+    const payload: StaffProfileForm = {
+      ...form,
+      gender: form.gender === '' ? null : Number(form.gender),
+      ...(currentPassword ? { currentPassword } : {}),
+    }
+    updateMutation.mutate(payload)
+  }
 
   const pwdMutation = useMutation({
     mutationFn: (data: ChangePasswordForm) => changePassword(data),
@@ -67,7 +87,7 @@ export default function Profile() {
             </div>
           ))}
         </div>
-        <button className={styles.btnPrimary} onClick={() => updateMutation.mutate(form)} style={{ marginTop: 16 }}>Update Profile</button>
+        <button className={styles.btnPrimary} onClick={handleUpdate} style={{ marginTop: 16 }}>Update Profile</button>
         <button className={styles.btnSm} onClick={() => setShowPwd(true)} style={{ marginLeft: 8, marginTop: 16 }}>Change Password</button>
       </div>
 

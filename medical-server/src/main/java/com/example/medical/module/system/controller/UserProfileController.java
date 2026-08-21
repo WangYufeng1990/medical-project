@@ -47,7 +47,7 @@ public class UserProfileController {
 
     @PutMapping
     @Transactional
-    @Auditable(module = "system", action = "UPDATE_PROFILE")
+    @Auditable(module = "system", action = "UPDATE_PROFILE", phiAccess = true)
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
                                       @Valid @RequestBody ProfileUpdateRequest request) {
         SysUser user = sysUserRepository.findById(loginUser.getUserId())
@@ -90,7 +90,7 @@ public class UserProfileController {
 
     @PutMapping("/password")
     @Transactional
-    @Auditable(module = "system", action = "CHANGE_PASSWORD")
+    @Auditable(module = "system", action = "CHANGE_PASSWORD", phiAccess = true)
     public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody PasswordChangeRequest request) {
         SysUser user = sysUserRepository.findById(loginUser.getUserId())

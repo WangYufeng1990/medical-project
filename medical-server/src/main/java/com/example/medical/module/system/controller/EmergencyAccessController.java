@@ -41,7 +41,7 @@ public class EmergencyAccessController {
 
     @PostMapping("/access/{patientId}")
     @Transactional
-    @com.example.medical.common.audit.Auditable(module = "emergency", action = "ACCESS")
+    @com.example.medical.common.audit.Auditable(module = "emergency", action = "ACCESS", phiAccess = true)
     public Result<Map<String, Object>> emergencyAccess(@AuthenticationPrincipal LoginUser loginUser,
                                                         @PathVariable Long patientId,
                                                         @Valid @RequestBody EmergencyAccessRequest request) {

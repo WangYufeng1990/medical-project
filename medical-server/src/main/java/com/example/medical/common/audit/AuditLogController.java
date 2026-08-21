@@ -36,4 +36,12 @@ public class AuditLogController {
         return Result.ok(auditLogService.search(page, size,
                 userId, patientId, module, action, fromDate, toDate));
     }
+
+    @GetMapping("/verify")
+    public Result<java.util.Map<String, Object>> verifyIntegrity() {
+        Long brokenRowId = auditLogService.verifyIntegrity();
+        return Result.ok(java.util.Map.of(
+                "intact", brokenRowId == null,
+                "brokenRowId", brokenRowId == null ? -1 : brokenRowId));
+    }
 }

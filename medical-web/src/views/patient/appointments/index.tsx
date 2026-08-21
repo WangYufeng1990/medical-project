@@ -12,6 +12,8 @@ export default function PatientAppointments() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: pageData } = useQuery({
     queryKey: ['me', 'appointments', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => http.get<PageResult<AppointmentVO>>(`/patient/me/appointments?page=${page}&size=${PAGE_SIZE}`),
@@ -25,6 +27,7 @@ export default function PatientAppointments() {
       setPage(1)
       queryClient.invalidateQueries({ queryKey: ['me', 'appointments'] })
     },
+    onError,
   })
 
   const canCancel = (s: number) => s !== 2 && s !== 3 && s !== 4

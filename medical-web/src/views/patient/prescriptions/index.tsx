@@ -12,6 +12,8 @@ export default function PatientPrescriptions() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
 
+  const onError = (err: Error) => alert(err?.message || 'Operation failed')
+
   const { data: pageData } = useQuery({
     queryKey: ['me', 'prescriptions', 'list', { page, size: PAGE_SIZE }],
     queryFn: () => http.get<PageResult<PrescriptionVO>>(`/patient/me/prescriptions?page=${page}&size=${PAGE_SIZE}`),
@@ -28,6 +30,7 @@ export default function PatientPrescriptions() {
     mutationFn: (data: { prescriptionId: number; reason?: string }) =>
       http.post('/patient/me/refill-requests', data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'refill-requests'] }),
+    onError,
   })
 
   const requestedIds = new Set((refillRequests ?? []).map(r => r.prescriptionId))
