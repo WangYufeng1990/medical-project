@@ -197,8 +197,9 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&patientId=` | Paginated list (DOCTOR scoped to own patients) |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Prescription detail with items |
 | GET | `/by-patient/{patientId}` | ADMIN,DOCTOR | path | All prescriptions for a patient (used by emergency break-glass) |
-| POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO | Create + items (CDS interaction/allergy check first) |
+| POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO (+optional `overrideReason`) | Create + items. CDS (drug-drug, active-medication, allergy incl. cross-reactive) runs BEFORE save; severe/contraindicated warnings block (409) unless `overrideReason` is provided (persisted to cds_override). Prescriber identity (doctorId/NPI/DEA) is server-derived from the authenticated user |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete + items (hidden for transmitted/dispensed/cancelled) |
+| PUT | `/{id}/transmit` | ADMIN,DOCTOR | `?pharmacyId=` | Generate draft NCPDP XML for active prescriptions (non-controlled only). Returns `status: "generated"` — controlled substances are rejected (409, EPCS fail-closed) and nothing is ever marked "transmitted" (Review III C4) |
 | PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409). Prescriptions are cancel-reissue — no in-place edit endpoint (Round 28/34) |
 
 ### Prescription Refill Requests — `/api/v1/prescriptions/refill-requests`
@@ -206,7 +207,7 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/` | ADMIN,DOCTOR | Pending refill requests (patient → doctor approval workflow) |
-| PUT | `/{id}/approve` | ADMIN,DOCTOR | Approve a refill request |
+| PUT | `/{id}/approve` | ADMIN,DOCTOR | Approve a refill request — consumes one refill from the prescription items (409 when none remain). POST create requires the prescription to belong to the patient, be active, and have no pending duplicate (Review III C8) |
 | PUT | `/{id}/deny` | ADMIN,DOCTOR | body: {notes?} — deny a refill request |
 
 ### Billing — `/api/v1/bills`
@@ -352,6 +353,7 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=20&userId=&patientId=&module=&action=&fromDate=&toDate=` | Search/filter audit logs |
 | GET | `/distinct-values` | — | Distinct module/action values for filter dropdowns |
+| GET | `/verify` | — | Tamper-evidence check: verifies row_hash chain, returns `{intact, brokenRowId}` (Review III M2) |
 
 ### FHIR — `/api/v1/fhir`
 
@@ -388,8 +390,8 @@ Requires `ADMIN`.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/history` | Key lifecycle audit trail (KEY_INIT / KEY_ROTATION events) |
-| POST | `/rotate` | Trigger runtime key rotation — body: {newKey, oldKey} |
-| GET | `/rotation-status` | Key rotation migration progress — per-table legacy row counts |
+| POST | `/rotate` | Trigger runtime key rotation — body: {newKey, oldKey}. Records the new key fingerprint in key_audit; **must** be followed by updating AES_KEY (new) and AES_KEY_PREVIOUS (old) in env before restart (Review III C2) |
+| GET | `/rotation-status` | Key rotation migration progress — per-table migrated row counts |
 
 ### CDS — `/api/v1/cds`
 
