@@ -13,6 +13,8 @@
 > **Full-System Review III (2026-08-20): independent external code review (backend 207 Java files + frontend 87 TS/TSX + all config). Verdict: Blocked — 8 CRITICAL, 24 HIGH, 16 MEDIUM, 12 LOW identified, NOT fixed (review only, no code changes per user instruction). See Full-System Review III section at the end.**
 >
 > **Fix progress (2026-08-20): Fix batches 1–6 + C2 key-rotation fix ALL COMPLETE — all 8 CRITICAL + 24 HIGH findings closed (audit credentials, deployment security, access control, prescriptions/CDS, data integrity, hardening, key rotation). 162 tests + tsc + prod build green.**
+>
+> **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 
 ---
 

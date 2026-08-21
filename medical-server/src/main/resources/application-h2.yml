@@ -13,7 +13,10 @@ app:
 spring:
   datasource:
     driver-class-name: org.h2.Driver
-    url: jdbc:h2:file:./data/medical_dev;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE
+    # Anchored to ${user.home} (CWD-independent) so the file lands in the same
+    # place no matter where the app is launched from — override with H2_DB_PATH
+    # to keep it inside the project (e.g. file:./data/medical_dev).
+    url: jdbc:h2:file:${H2_DB_PATH:${user.home}/.medical-dev/data/medical_dev};MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE
     username: sa
     password:
   h2:

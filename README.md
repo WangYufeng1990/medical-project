@@ -7,6 +7,7 @@ HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 +
 ```bash
 # 1. Start backend — an explicit profile is REQUIRED (no default; Review III C5)
 #    h2 = local file DB, no external dependencies
+#    DB file: ~/.medical-dev/data/medical_dev (CWD-independent; override with H2_DB_PATH)
 cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
 
 # 2. Start frontend
