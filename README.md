@@ -5,8 +5,9 @@ HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 +
 ## Quick Start
 
 ```bash
-# 1. Start backend (H2 file-based, no external DB needed)
-cd medical-server && mvn spring-boot:run
+# 1. Start backend — an explicit profile is REQUIRED (no default; Review III C5)
+#    h2 = local file DB, no external dependencies
+cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
 
 # 2. Start frontend
 cd medical-web && npm run dev
@@ -16,7 +17,11 @@ cd medical-web && npm run dev
 # API docs: http://localhost:8080/doc.html
 ```
 
-**Default accounts (dev/h2):**
+Profiles: `h2` / `dev` (local, seeded demo data) · `prod` (requires `AES_KEY`,
+`JWT_SIGNING_KEY` ≥32 chars and independent of `AES_KEY`, `DB_USER`, `DB_PASSWORD`;
+startup fails fast via `ProdGuard` if any are missing).
+
+**Default accounts (dev/h2 profiles only — seed data never runs in prod):**
 
 | Role | Username | Password |
 |------|----------|----------|
@@ -34,7 +39,7 @@ cd medical-web && npm run dev
 | Language | Java 17 |
 | Framework | Spring Boot 3.4 |
 | Frontend | React 18 + TypeScript + Vite 5 |
-| ORM | Spring Data JPA + Querydsl |
+| ORM | Spring Data JPA |
 | Database | MySQL 8.0 / H2 (dev) |
 | Cache | Redis 7 (Redisson + Spring Cache) |
 | Auth | Spring Boot OAuth2 Resource Server (Okta / dev JWT) |
@@ -46,7 +51,7 @@ cd medical-web && npm run dev
 | Standard | Implementation |
 |----------|---------------|
 | §164.312(a) Access Control | Okta OAuth2 + RBAC (ADMIN/DOCTOR/PATIENT) + account lockout (5 failures/15min) + password complexity policy + HSTS/security headers |
-| §164.312(b) Audit Controls | AOP `@Auditable` + async `REQUIRES_NEW` audit log + PHI masking + ADMIN query API (`/api/v1/audit-logs`) |
+| §164.312(b) Audit Controls | AOP `@Auditable` + async `REQUIRES_NEW` audit log + PHI/credential redaction + ADMIN query API (`/api/v1/audit-logs`) + tamper-evident SHA-256 hash chain + `GET /api/v1/audit-logs/verify` |
 | §164.312(d) Person Authentication | BCrypt + `@ValidPassword` (8+ chars, upper/lower/digit/special) + password history (last 3) |
 | §164.312(e) Transmission Security | TLS (MySQL SSL) + HSTS (1yr) + CORS whitelist |
 | §164.508 Consent | `consent` table + CRUD API + patient self-service view |
@@ -57,8 +62,8 @@ cd medical-web && npm run dev
 | Clinical Decision Support | Drug-Drug Interaction + Drug-Allergy contraindication check (`/api/v1/cds/check`) |
 | Integration Engine | Mirth Connect JSON API — ADT events + lab results with dedup |
 | LOINC Lab Coding | 29-code catalog + auto-flag (LL/L/N/H/HH) + trend analysis |
-| ePrescribing + EPCS | NCPDP SCRIPT NewRx XML generation + controlled substance audit |
-| eCQM Quality Measures | CMS122/125/165 SQL-based performance reports |
+| ePrescribing + EPCS | NCPDP SCRIPT draft XML generation — controlled substances fail-closed (never marked "transmitted" until a real 21 CFR Part 1311 channel exists) |
+| eCQM Quality Measures | CMS122/125/165 performance reports evaluated over decrypted data (in-memory) |
 | 21 CFR Part 11 Audit | Immutable audit log (SHA-256 hash chain + soft-delete) + login failure audit + role/menu change audit |
 | Encryption | AES-256-GCM + PBKDF2-HMAC-SHA256 (310k iterations) + versioned key rotation |
 | Anti-DoS | Pagination on FHIR/emergency/pharmacy endpoints + streaming CSV export + refresh rate limiting |
@@ -93,7 +98,7 @@ US Core compliant: OMB race/ethnicity Coding extensions. SMART on FHIR OAuth2 sc
 | Messages | `/api/v1/messages` | ADMIN,DOCTOR,PATIENT |
 | Dashboard | `/api/v1/dashboard` | ADMIN,DOCTOR |
 | Export | `/api/v1/export` | ADMIN,DOCTOR |
-| Audit Logs | `/api/v1/audit-logs` | ADMIN |
+| Audit Logs | `/api/v1/audit-logs` (+ `/verify` tamper check) | ADMIN |
 | FHIR | `/api/v1/fhir` | mixed |
 | Consent | `/api/v1/consent` | ADMIN,DOCTOR |
 | Emergency | `/api/v1/emergency` | ADMIN,DOCTOR |
@@ -155,24 +160,33 @@ medical-server/src/main/java/com/example/medical/
 Key properties in `application.yml`:
 
 ```yaml
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:}   # REQUIRED: prod | dev | h2 — no default (ProdGuard fails fast)
+
 app:
   aes:
-    key: ${AES_KEY}              # AES-256-GCM encryption key
-    key.previous:                 # optional — previous key for rotation
+    key: ${AES_KEY}              # AES-256-GCM encryption key (required)
+    key.previous:                 # optional — previous key during/after rotation
   security:
     access-token-expiry-seconds: 7200
-    dev-mode: true                # H2/dev profile — uses local JWT signing
+    dev-mode: false               # dev/h2 profiles explicitly enable local JWT signing
+    dev-jwt-secret:               # dev/h2 only — no hardcoded fallback
   retention:
     audit-log-days: 2190          # 6 years HIPAA minimum
   cors:
     allowed-origins: http://localhost:5173
   integration:
-    api-key: dev-integration-key # X-Integration-Key header for Mirth Connect
+    api-key:                      # X-Integration-Key header for Mirth Connect
+                                  # (fail-closed: unset ⇒ 403; h2/dev default dev-integration-key)
   rate-limit:
     enabled: true                 # Redisson login/refresh/export rate limiting
 
-# Production (prod profile):
-# JWT_SIGNING_KEY=...            # independent from AES_KEY for key separation
+# Production (prod profile) — all required, checked by ProdGuard:
+# SPRING_PROFILES_ACTIVE=prod
+# AES_KEY=...
+# JWT_SIGNING_KEY=...             # ≥32 chars, INDEPENDENT from AES_KEY (key separation)
+# DB_USER=... DB_PASSWORD=...
 ```
 
 ## Documentation

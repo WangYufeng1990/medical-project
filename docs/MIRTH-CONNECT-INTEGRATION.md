@@ -25,8 +25,8 @@ Value: <integration-api-key>
 ```
 
 - The JWT must belong to an account with `ADMIN` or `DOCTOR` role (class-level `@PreAuthorize` on `IntegrationController`).
-- The API key is validated against `app.integration.api-key` (dev default: `dev-integration-key`, from `application-h2.yml`). Requests without a matching key are rejected with 403.
-- In development, obtain a token via `POST /api/v1/auth/login` using the default `doctor1` account, then send it alongside the key.
+- The API key is validated against `app.integration.api-key` — **fail-closed**: when unset, every integration request is rejected with 403. dev/h2 profiles ship `dev-integration-key` (`application-h2.yml`); the prod profile has no default, so **set `app.integration.api-key` explicitly in the prod config** (e.g. from an env var) or Mirth integration stays disabled.
+- In development, obtain a token via `POST /api/v1/auth/login` using the default `doctor1` account (dev/h2 seed accounts only), then send it alongside the key.
 
 ---
 

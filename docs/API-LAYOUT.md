@@ -6,10 +6,10 @@
 |-------|-----------|
 | Language | Java 17 |
 | Framework | Spring Boot 3.4.1 |
-| ORM | Spring Data JPA (Hibernate 6.x) + Querydsl |
+| ORM | Spring Data JPA (Hibernate 6.x) |
 | Database | MySQL 8.0 / H2 (dev) |
 | Cache | Redis 7 (Redisson + Spring Cache) |
-| Auth | Spring Boot OAuth2 Resource Server (external IdP) |
+| Auth | Spring Boot OAuth2 Resource Server — issuer-routed: Okta JWKS (staff) + local HS256 (patient/emergency/refresh) |
 | FHIR | HAPI FHIR R4 7.x |
 | API Doc | Springdoc OpenAPI 2.7.0 |
 | Util | Lombok, Hutool 5.8.34 |

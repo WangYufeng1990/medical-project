@@ -197,33 +197,38 @@ Entity/DTO conversion logic is encapsulated in DTOs' internal `fromEntity()` / `
 
 ### 5.1 Authentication Architecture
 
-> **Operational status (as of 2026-08):** The Okta integration is implemented in code (password grant, refresh, userinfo) but **not actually deployed** — `okta.*` config holds placeholders in `application.yml` and is absent from `application-prod.yml`. Even the prod profile validates/issives locally-signed HS256 JWTs (`SecurityConfigProd` reads `AES_KEY`); Okta JWKS (RS256) is the target architecture for real production deployment, not the current state. The whole system currently runs in dev-mode with local BCrypt + local JWT.
+> **Operational status (as of 2026-08, after Review III fixes):** Production uses a **split trust model**. Staff tokens are validated against the external IdP JWKS (`okta.issuer-uri`, RS256) — the documented target architecture. Patient / emergency / refresh tokens are **always locally issued** (the patient portal has no external IdP) and validated against an independent local HS256 key. The two decoders are routed by issuer via `CompositeJwtDecoder`. `ProdGuard` fails startup unless an explicit `prod`/`dev`/`h2` profile is set, prod secrets exist, `dev-mode` is off in prod, and `JWT_SIGNING_KEY` is independent from `AES_KEY` (key separation). Dev/h2 profiles use `SecurityConfigDev` with an explicitly configured `app.security.dev-jwt-secret` — there is no hardcoded fallback.
 
 ```
-Production:                          Development (h2/dev profile):
-┌─────────┐                          ┌──────────────────┐
-│  Okta   │ ← JWKS endpoint          │ SecurityConfigDev │
-│  Issues  │    (RS256 public key)    │ Local JwtDecoder  │
-│  JWT     │                          │ + JwtEncoder      │
-│  MFA     │                          │ HMAC-SHA256       │
-└────┬────┘                          │ (key from config) │
-     │                               └──────────────────┘
-     ▼                                        │
-┌─────────────┐                               │  Prod profile:
-│ JwtDecoder  │ ← Spring Boot auto-           │  SecurityConfigProd
-│ Validates    │   configuration              │  key from AES_KEY
-│ sig + expiry │                              │  env var
-└──────┬──────┘                               │
-       ▼
-┌──────────────┐
+Production (prod profile):
+┌─────────┐        ┌───────────────────────────────┐
+│  Okta   │◀──JWKS─│  CompositeJwtDecoder          │
+│  Issues  │        │  iss = okta          → Okta    │
+│ staff JWT│        │  iss = medical-server → local  │
+└────┬────┘        │  iss = medical-server/patient  │
+     │             │  iss = medical-server/patient/refresh
+     │             └───────────────┬───────────────┘
+     ▼                             ▼
+┌─────────────┐            ┌──────────────────┐
+│ Okta JwtDecoder │         │ local HS256        │
+│ (JWKS, RS256)   │         │ JwtDecoder         │
+└──────┬──────┘            │ (JWT_SIGNING_KEY,  │
+       └─────────┬─────────┘  strict issuer      │
+                 ▼             validation)       │
+┌──────────────┐             └──────────────────┘
 │JwtClaimMapper│ ← claims → Spring Security
 │ roles→ROLE_* │   roles → ROLE_ADMIN/DOCTOR/PATIENT
 │ perm →auth   │   perm  → hasAuthority() permissions
 │ scp→SCOPE_*  │   uid   → userId
 │              │   iss   → staff: medical-server, patient: medical-server/patient
 │              │   forceLogoutAfter → token revocation for disabled accounts
+│              │   refresh-scoped tokens rejected as access tokens
 └──────────────┘
 ```
+
+Development (h2/dev profile): `SecurityConfigDev` — local HMAC-SHA256 decoder + encoder,
+key from `app.security.dev-jwt-secret` (explicit; no fallback). `JwtClaimMapper` maps
+claims exactly as in production.
 
 ### 5.2 Login Flow
 
@@ -231,12 +236,14 @@ Production:                          Development (h2/dev profile):
 
 ```
 1. POST /api/v1/auth/login { username, password }
-2. AuthService local BCrypt verifies user
-3. Calls Okta /v1/token (password grant, scope: openid profile email groups)
-4. Okta returns access_token + refresh_token
-5. Frontend stores token, subsequent requests: Authorization: Bearer <access_token>
-6. Spring Security validates token signature via Okta JWKS public key
-7. JwtClaimMapper extracts groups claim → ROLE_ADMIN / ROLE_DOCTOR
+2. AuthService looks up the local sys_user (lockout/status checks apply)
+3. dev-mode (dev/h2): local BCrypt verifies → DevJwtEncoder issues HS256 JWT
+   production:   Okta /v1/token password grant verifies → Okta JWT returned
+4. Frontend stores token in sessionStorage, subsequent requests:
+   Authorization: Bearer <access_token>
+5. Spring Security validates signature via CompositeJwtDecoder
+   (Okta JWKS for staff tokens in prod; local HS256 in dev)
+6. JwtClaimMapper extracts groups claim → ROLE_ADMIN / ROLE_DOCTOR
 ```
 
 **Patient:**
@@ -289,7 +296,7 @@ RBAC model: User → Role → Menu/Permission → API access control. Five table
 .headers(headers -> headers
     .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
     .contentTypeOptions(cfg -> {})
-    .frameOptions(frame -> frame.deny())
+    .frameOptions(frame -> frame.sameOrigin())  // sameOrigin: H2 console iframes (Round 48)
     .xssProtection(xss -> {})
     .cacheControl(cache -> {}))
 .authorizeHttpRequests(auth -> auth
@@ -332,7 +339,7 @@ RBAC model: User → Role → Menu/Permission → API access control. Five table
 
 ```
 application.yml
-  app.aes.key: ${AES_KEY:...}
+  app.aes.key: ${AES_KEY}   # required — no default (AesCryptoUtil fails startup)
        │ @Value
        ▼
 AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
@@ -356,7 +363,11 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 | SysUser | `phone`, `email`, `stateLicenseNumber`, `deaNumber` | 4 |
 | Message | `content` (chat records) | 1 |
 | Bill | `insuranceClaimNumber` | 1 |
-| Prescription | `deaNumber` | 1 |
+| Prescription | `deaNumber`, `diagnosis`, `icd10Codes`, `pharmacyName`, `pharmacyPhone` (Batch 4) | 5 |
+| PrescriptionItem | `drugName`, `dosage`, `sig`, `notes` (Batch 4) | 4 |
+| CdsOverride | `overrideReason` | 1 |
+| RefillRequest | `reason`, `reviewNotes` | 2 |
+| EmergencyAccess | `reason` | 1 |
 | Appointment | `chiefComplaint`, `description`, `notes` (free-text clinical — Round 48) | 3 |
 | Charge | `notes` | 1 |
 | Referral | `notes`, `diagnosis`, `reason` | 3 |
@@ -366,7 +377,11 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 | Problem | `notes` (Round 49) | 1 |
 | CarePlan | `goal`, `interventions`, `notes` (Round 49) | 3 |
 | PriorAuth | `notes` (Round 49) | 1 |
-| **Total** | | **42+1** |
+| **Total** | | **57** |
+
+> The full list of encrypted DB columns (snake_case) is mirrored in
+> `KeyRotationService.ENCRYPTED_COLUMNS` — every column here must be listed
+> there or rotation would leave it unreadable (Review III C2).
 
 ### 6.3 Encryption Algorithm
 
@@ -374,26 +389,45 @@ AesCryptoUtil (@Component)              AesAttributeConverter (@Converter)
 
 ### 6.4 Key Versioning & Rotation
 
-Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:12B][ciphertext+tag]`, supporting key rotation:
+Ciphertext format upgraded from `[IV:12B][ciphertext+tag]` to `[version:1B][IV:12B][ciphertext+tag]`:
 
 | Version Byte | Key | Description |
 |-------------|-----|-------------|
 | `0x01` | `app.aes.key` (current) | All new encryptions use this version |
 | No prefix | `app.aes.key.previous` → fallback to `app.aes.key` | Legacy data backward-compatible decryption |
 
+**Versioned-row decryption (Review III C2):** v1 rows do not carry a key id, so `decrypt()`
+tries `CURRENT_KEY` first and falls back to `PREVIOUS_KEY` on GCM auth failure — rows written
+before a rotation stay readable, and new writes use the current key.
+
 **Rotation Process (zero-downtime API):**
 1. Admin generates a new key externally (e.g. `openssl rand -base64 32`)
 2. `POST /api/v1/admin/keys/rotate { "newKey": "<new key>", "oldKey": "<current app.aes.key>" }`
-3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates rotation
-4. `KeyRotationService` starts async background migration — scans all 43 encrypted columns for rows whose ciphertext does NOT start with `01` (legacy key), decrypts with previous key, re-encrypts with current key
+3. `AesCryptoUtil.rotate()` installs the new key as CURRENT, old key as PREVIOUS, activates
+   rotation, and records the new key's SHA-256 fingerprint in `key_audit`
+4. `KeyRotationService` starts async background migration — full `ORDER BY id LIMIT/OFFSET`
+   scan of all 57 encrypted columns; only rows still encrypted with the PREVIOUS key
+   (`AesCryptoUtil.isEncryptedWithPreviousKey`) are decrypted and re-encrypted
 5. Monitor progress via `GET /api/v1/admin/keys/rotation-status`
-6. Once `rotationActive=false` and `complete=true`, update `application.yml` (`app.aes.key` → new value, `app.aes.key.previous` → old value) to survive restarts
+6. **Update `application.yml`/env BEFORE restart** — `app.aes.key` → new value,
+   `app.aes.key.previous` → old value. On startup `init()` compares the configured key's
+   fingerprint against the recorded rotation fingerprint and logs a loud
+   `KEY ROTATION CONFIG MISMATCH` error if the env was not updated (prevents silent
+   unreadability of post-rotation ciphertext)
 
-On restart with `app.aes.key.previous` still set, `@PostConstruct` triggers an idempotent scan — no rows match, completes in under a second.
+On restart with `app.aes.key.previous` still set, `@PostConstruct` triggers an idempotent
+scan — rows already migrated to the current key are skipped, so it completes quickly.
 
 A daily 3 AM cron safety check idempotently resumes any incomplete migration.
 
-**Key Audit:** `AesCryptoUtil.init()` auto-writes `KEY_INIT` / `KEY_ROTATION` events to the `key_audit` table. `KeyRotationService` writes `ROTATION_COMPLETE` on successful migration. ADMIN can view key lifecycle via `GET /api/v1/admin/keys/history` and migration progress via `GET /api/v1/admin/keys/rotation-status`.
+**Key Audit:** `AesCryptoUtil.init()` auto-writes `KEY_INIT` / `KEY_ROTATION` events to the
+`key_audit` table; `KeyRotationService` writes `ROTATION_COMPLETE` on success. ADMIN views the
+key lifecycle via `GET /api/v1/admin/keys/history` and progress via
+`GET /api/v1/admin/keys/rotation-status`.
+
+> **Write-path guard:** `AesAttributeConverter.convertToDatabaseColumn` refuses to persist the
+> `[DECRYPT_FAILED]` placeholder — a decrypt failure can never silently overwrite real
+> ciphertext (Review III M5).
 
 ### 6.5 Encryption Algorithm & Key Rotation Details
 
@@ -430,7 +464,12 @@ AuditLogAspect.audit()                  auditLogRepository.save()
 |-----------|---------|
 | `module` | Business module (patient/appointment/prescription/billing/system/export) |
 | `action` | Operation type (CREATE/UPDATE/DELETE/EXPORT_PATIENTS/PAY/ADJUDICATE...) |
-| `phiAccess` | When true, parameter values are replaced with `[PHI]` in audit log, preventing ePHI secondary disclosure |
+| `phiAccess` | When true, parameter values are replaced with `[PHI]` in audit log, preventing ePHI secondary disclosure. Applied to every method carrying credentials or ePHI (login/refresh/password changes, clinical CUD, chat, billing) |
+
+**Defense in depth (Review III C1):** even for methods without `phiAccess`, `buildDetail()`
+never calls `toString()` on request DTOs — complex args are reflected field-by-field with a
+sensitive-name blacklist (`password`, `token`, `refreshToken`, `content`, `diagnosis`,
+`reason`, `notes`, `ssn`, `email`, …) redacted as `[REDACTED]`.
 
 ### 7.3 Thread Pool Config
 
@@ -454,6 +493,11 @@ public Executor auditExecutor() {
 | `page` / `size` | Pagination (default 1/20) |
 
 Backed by `JpaSpecificationExecutor` + dynamic `Predicate` composition.
+
+**Tamper evidence (Review III M2):** every row stores `row_hash` = SHA-256 over
+`prev_hash | userId | username | patientId | module | action | targetId | detail | ip | createTime`.
+`AuditLogWriter` links each row to the previous row's hash (hash chaining). ADMIN can verify
+the whole chain via `GET /api/v1/audit-logs/verify` → `{intact, brokenRowId}`.
 
 ### 7.5 Audit Coverage
 
@@ -721,10 +765,12 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.9 Testing
 
-151 tests across 5 files:
-- `IntegrationTest` — 126 integration tests covering the API surface (run on isolated in-memory H2, no MySQL required) + 25 unit tests
+162 tests across 7 files:
+- `IntegrationTest` — 128 integration tests covering the API surface (run on isolated H2, no MySQL required)
 - `PatientAuthControllerTest` — 12 tests: login success/disabled/locked/bad-password/patient-orphaned, token expiry config, audit resilience, user enumeration prevention
-- `AesAttributeConverterTest` — 8 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases)
+- `AesAttributeConverterTest` — 9 tests: encrypt/decrypt roundtrip, null handling, random IV, corrupt data degradation, reencrypt (legacy upgrade + edge cases), **key-rotation versioned-row readability + migration targeting (Review III C2)**
+- `AuditLogAspectTest` — 3 tests: sensitive-field redaction, simple-value/null preservation, truncation (Review III C1)
+- `ProdGuardTest` — 5 tests: no-profile fail, unsupported-profile fail, prod-missing-secrets fail, AES==JWT key reuse fail, dev/h2 pass (Review III C5/C6)
 - `GlobalExceptionHandlerTest` — 3 tests: 401/404/409 status code mapping
 - `BaseEntityTest` — 2 tests: `@Version` field + `@PrePersist` callback
 
