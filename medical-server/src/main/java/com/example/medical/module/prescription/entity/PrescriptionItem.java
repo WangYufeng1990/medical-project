@@ -1,6 +1,7 @@
 package com.example.medical.module.prescription.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -20,7 +21,8 @@ public class PrescriptionItem extends BaseEntity {
     @Column(name = "prescription_id")
     private Long prescriptionId;
 
-    @Column(name = "drug_name")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "drug_name", length = 1000)
     private String drugName;
 
     @Column(name = "ndc_code", length = 20)
@@ -32,7 +34,8 @@ public class PrescriptionItem extends BaseEntity {
     @Column(name = "specification")
     private String specification;
 
-    @Column(name = "dosage")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "dosage", length = 1000)
     private String dosage;
 
     @Column(name = "route", length = 10)
@@ -41,7 +44,8 @@ public class PrescriptionItem extends BaseEntity {
     @Column(name = "frequency")
     private String frequency;
 
-    @Column(name = "sig")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "sig", length = 1000)
     private String sig;
 
     @Column(name = "duration")
@@ -62,6 +66,7 @@ public class PrescriptionItem extends BaseEntity {
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
 
-    @Column(name = "notes")
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "notes", length = 1000)
     private String notes;
 }

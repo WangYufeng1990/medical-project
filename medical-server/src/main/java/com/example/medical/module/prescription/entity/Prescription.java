@@ -24,10 +24,12 @@ public class Prescription extends BaseEntity {
     @Column(name = "doctor_id")
     private Long doctorId;
 
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "diagnosis")
     private String diagnosis;
 
-    @Column(name = "icd10_codes", length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "icd10_codes", length = 2000)
     private String icd10Codes;
 
     @Column(name = "prescription_date")
@@ -49,10 +51,12 @@ public class Prescription extends BaseEntity {
     @Column(name = "controlled_schedule", length = 5)
     private String controlledSchedule;
 
-    @Column(name = "pharmacy_name", length = 100)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "pharmacy_name", length = 1000)
     private String pharmacyName;
 
-    @Column(name = "pharmacy_phone", length = 20)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "pharmacy_phone", length = 1000)
     private String pharmacyPhone;
 
     @Column(name = "pharmacy_npi", length = 10)

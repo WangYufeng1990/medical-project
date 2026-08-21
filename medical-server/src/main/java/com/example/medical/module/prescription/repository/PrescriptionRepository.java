@@ -12,4 +12,6 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, Long
 
     @Query("SELECT DISTINCT p.patientId FROM Prescription p WHERE p.doctorId = :doctorId")
     List<Long> findDistinctPatientIdsByDoctor(@Param("doctorId") Long doctorId);
+
+    List<Prescription> findByPatientIdAndRxStatus(Long patientId, String rxStatus);
 }

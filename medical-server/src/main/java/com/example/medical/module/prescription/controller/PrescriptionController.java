@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,6 +33,7 @@ public class PrescriptionController {
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final NcpdpScriptService ncpdpScriptService;
     private final EpcsService epcsService;
+    private final com.example.medical.common.security.DoctorPatientScope doctorPatientScope;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
@@ -56,8 +58,9 @@ public class PrescriptionController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<Void> create(@Valid @RequestBody PrescriptionFormDTO dto) {
-        prescriptionService.create(dto);
+    public Result<Void> create(@Valid @RequestBody PrescriptionFormDTO dto,
+                               @AuthenticationPrincipal LoginUser loginUser) {
+        prescriptionService.create(dto, loginUser);
         return Result.ok();
     }
 
@@ -70,22 +73,33 @@ public class PrescriptionController {
 
     @PutMapping("/{id}/transmit")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Transactional
+    @com.example.medical.common.audit.Auditable(module = "prescription", action = "TRANSMIT", phiAccess = true)
     public Result<Map<String, Object>> transmit(@PathVariable Long id,
-                                                @RequestParam Long pharmacyId,
-                                                @AuthenticationPrincipal LoginUser loginUser) {
+                                                @RequestParam Long pharmacyId) {
         Prescription p = prescriptionRepository.findById(id)
                 .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
                         com.example.medical.common.enums.ResultCode.NOT_FOUND, "Prescription not found"));
+        doctorPatientScope.requireAccess(p.getPatientId());
+        if (!"active".equals(p.getRxStatus())) {
+            throw new com.example.medical.common.exception.BusinessException(
+                    com.example.medical.common.enums.ResultCode.CONFLICT,
+                    "Only active prescriptions can be transmitted");
+        }
         List<PrescriptionItem> items = prescriptionItemRepository.findByPrescriptionId(id);
 
-        epcsService.auditEpcsTransmission(p, loginUser.getUserId());
+        // Fail-closed EPCS gate (Review III C4): controlled substances are
+        // rejected until a real EPCS channel exists.
+        epcsService.assertTransmissionSupported(p, pharmacyId);
 
         String xml = ncpdpScriptService.generateNewRxXml(p, items, pharmacyId);
 
-        p.setRxStatus("transmitted");
+        // Do NOT claim "transmitted" — there is no transmission channel yet.
+        // "generated" keeps rx_status honest (draft XML ready for review).
+        p.setRxStatus("generated");
         prescriptionRepository.save(p);
 
-        return Result.ok(Map.of("status", "transmitted", "format", "NCPDP SCRIPT 10.6",
+        return Result.ok(Map.of("status", "generated", "format", "NCPDP SCRIPT (draft)",
                 "messageId", "RX-" + id, "xml", xml));
     }
 
