@@ -12,7 +12,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
+import java.time.temporal.Temporal;
+import java.util.Date;
+import java.util.Locale;
+import java.util.Set;
 import java.util.StringJoiner;
 
 /**
@@ -23,6 +29,13 @@ import java.util.StringJoiner;
  * write is delegated to {@link AuditLogWriter} which runs on the
  * {@code auditExecutor} thread pool — a failure there will never roll back
  * the already-committed business transaction.
+ * <p>
+ * Detail serialization never persists secrets or ePHI: on {@code phiAccess}
+ * methods every parameter value is masked as {@code [PHI]}, and for other
+ * methods complex arguments are reflected field-by-field with a
+ * {@link #SENSITIVE_FIELD_NAMES} blacklist (passwords, tokens, chat content,
+ * clinical text, identifiers) redacted — {@code toString()} of request DTOs
+ * is never used (Full-System Review III C1).
  */
 @Slf4j
 @Aspect
@@ -33,9 +46,24 @@ public class AuditLogAspect {
     private static final String[] TARGET_PARAM_NAMES = {
             "id", "patientId", "prescriptionId", "appointmentId"
     };
-    private static final String[] PATIENT_ID_PARAM_NAMES = {
-            "patientId"
-    };
+    private static final int VALUE_MAX_LEN = 50;
+    private static final int DETAIL_MAX_LEN = 1500;
+
+    /**
+     * Field names that must never land in the audit detail even when the
+     * method is not flagged phiAccess. Matched case-insensitively with
+     * separators stripped (refreshToken / refresh_token → refreshtoken).
+     */
+    private static final Set<String> SENSITIVE_FIELD_NAMES = Set.of(
+            "password", "oldpassword", "newpassword", "currentpassword",
+            "confirmpassword", "pwd",
+            "token", "accesstoken", "refreshtoken", "resettoken", "authtoken", "idtoken",
+            "secret", "apikey", "clientsecret", "clientid", "authorization", "bearer",
+            "content", "diagnosis", "reason", "notes", "note", "chiefcomplaint",
+            "description", "medicalhistory", "allergies", "ssn",
+            "deanuumber", "dea", "insurancememberid", "insurancegroupnumber",
+            "claimnumber", "phonenumber", "email"
+    );
 
     private final HttpServletRequest request;
     private final AuditLogWriter auditLogWriter;
@@ -45,8 +73,8 @@ public class AuditLogAspect {
         Object result = joinPoint.proceed();
 
         try {
-            Long patientId = resolvePatientId(joinPoint, auditable.module());
-            Long userId = resolveUserId(joinPoint);
+            Long patientId = resolvePatientId(joinPoint, result, auditable.module());
+            Long userId = resolveUserId(joinPoint, result);
             String username = resolveUsername(joinPoint);
 
             String targetId = resolveTargetId(joinPoint);
@@ -82,7 +110,7 @@ public class AuditLogAspect {
         return null;
     }
 
-    private Long resolvePatientId(ProceedingJoinPoint joinPoint, String module) {
+    private Long resolvePatientId(ProceedingJoinPoint joinPoint, Object result, String module) {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         String[] paramNames = signature.getParameterNames();
         Object[] args = joinPoint.getArgs();
@@ -100,15 +128,18 @@ public class AuditLogAspect {
                 }
             }
         }
-        return null;
+        // 3. Fall back to the method result (e.g. patient login returns the id)
+        return extractId(unwrapResult(result), "patientId");
     }
 
-    private Long resolveUserId(ProceedingJoinPoint joinPoint) {
+    private Long resolveUserId(ProceedingJoinPoint joinPoint, Object result) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof LoginUser lu) {
             return lu.getUserId();
         }
-        return null;
+        // permitAll endpoints (login/refresh) have no Authentication yet — the
+        // authenticated id comes back in the response envelope.
+        return extractId(unwrapResult(result), "userId");
     }
 
     private String resolveUsername(ProceedingJoinPoint joinPoint) {
@@ -145,15 +176,100 @@ public class AuditLogAspect {
         for (int i = 0; i < paramNames.length; i++) {
             if (phiAccess) {
                 sj.add(paramNames[i] + "=[PHI]");
-            } else if (args[i] == null) {
-                sj.add(paramNames[i] + "=null");
             } else {
-                String str = args[i].toString();
-                sj.add(paramNames[i] + "=" + (str.length() > 100
-                        ? str.substring(0, 97) + "..."
-                        : str));
+                sj.add(paramNames[i] + "=" + describeArg(args[i]));
+            }
+        }
+        String detail = sj.toString();
+        if (detail.length() > DETAIL_MAX_LEN) {
+            detail = detail.substring(0, DETAIL_MAX_LEN - 3) + "...";
+        }
+        return detail;
+    }
+
+    static String describeArg(Object arg) {
+        if (arg == null) return "null";
+        if (isSimpleValue(arg)) {
+            return truncate(arg.toString(), VALUE_MAX_LEN);
+        }
+        if (arg instanceof Iterable<?> iterable) {
+            return "[Collection size=" + iterableSize(iterable) + "]";
+        }
+        return "{" + describeFields(arg) + "}";
+    }
+
+    private static String describeFields(Object arg) {
+        StringJoiner sj = new StringJoiner(", ", "", "");
+        for (Field f : arg.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+            f.setAccessible(true);
+            try {
+                Object value = f.get(arg);
+                String normalized = normalize(f.getName());
+                if (SENSITIVE_FIELD_NAMES.contains(normalized)) {
+                    sj.add(f.getName() + "=[REDACTED]");
+                } else if (value == null) {
+                    sj.add(f.getName() + "=null");
+                } else if (isSimpleValue(value)) {
+                    sj.add(f.getName() + "=" + truncate(value.toString(), VALUE_MAX_LEN));
+                } else if (value instanceof Iterable<?> iterable) {
+                    sj.add(f.getName() + "=[Collection size=" + iterableSize(iterable) + "]");
+                } else {
+                    sj.add(f.getName() + "=[" + value.getClass().getSimpleName() + "]");
+                }
+            } catch (IllegalAccessException e) {
+                sj.add(f.getName() + "=?");
             }
         }
         return sj.toString();
+    }
+
+    private static int iterableSize(Iterable<?> iterable) {
+        int size = 0;
+        for (Object ignored : iterable) {
+            size++;
+            if (size > 20) break;
+        }
+        return size;
+    }
+
+    private static boolean isSimpleValue(Object value) {
+        return value instanceof CharSequence || value instanceof Number
+                || value instanceof Boolean || value instanceof Character
+                || value instanceof Enum<?> || value instanceof Temporal
+                || value instanceof Date;
+    }
+
+    private static String normalize(String name) {
+        return name.toLowerCase(Locale.ROOT).replace("_", "").replace("-", "");
+    }
+
+    private static String truncate(String value, int max) {
+        return value.length() > max ? value.substring(0, max - 3) + "..." : value;
+    }
+
+    /**
+     * Peels the {@code Result<T>} envelope (getData) so id extraction can see
+     * the payload returned by permitAll endpoints.
+     */
+    private static Object unwrapResult(Object result) {
+        if (result == null) return null;
+        try {
+            Object data = result.getClass().getMethod("getData").invoke(result);
+            return data != null ? data : result;
+        } catch (Exception ignored) {
+            return result;
+        }
+    }
+
+    private static Long extractId(Object obj, String field) {
+        if (obj == null) return null;
+        String getter = "get" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
+        try {
+            Object value = obj.getClass().getMethod(getter).invoke(obj);
+            return value instanceof Number n ? n.longValue() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }
