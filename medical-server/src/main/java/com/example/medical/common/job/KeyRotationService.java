@@ -25,9 +25,16 @@ public class KeyRotationService {
     private static final int BATCH_SIZE = 500;
     private static final long SLEEP_MS = 500;
 
+    /**
+     * Every column encrypted via AesAttributeConverter (incl. the Round 48/49
+     * free-text fields and the Batch 4 prescription fields) — all must be
+     * migrated on key rotation or their ciphertext becomes unreadable
+     * (Review III C2).
+     */
     private static final List<TableColumn> ENCRYPTED_COLUMNS = List.of(
             new TableColumn("patient", "ssn"),
             new TableColumn("patient", "name"),
+            new TableColumn("patient", "date_of_birth"),
             new TableColumn("patient", "primary_care_provider"),
             new TableColumn("patient", "phone_mobile"),
             new TableColumn("patient", "phone_home"),
@@ -45,14 +52,42 @@ public class KeyRotationService {
             new TableColumn("patient", "insurance_group_number"),
             new TableColumn("patient", "medical_history"),
             new TableColumn("patient", "allergies"),
-            new TableColumn("patient", "date_of_birth"),
             new TableColumn("sys_user", "phone"),
             new TableColumn("sys_user", "email"),
             new TableColumn("sys_user", "state_license_number"),
             new TableColumn("sys_user", "dea_number"),
             new TableColumn("message", "content"),
             new TableColumn("bill", "insurance_claim_number"),
-            new TableColumn("prescription", "dea_number")
+            new TableColumn("prescription", "diagnosis"),
+            new TableColumn("prescription", "icd10_codes"),
+            new TableColumn("prescription", "dea_number"),
+            new TableColumn("prescription", "pharmacy_name"),
+            new TableColumn("prescription", "pharmacy_phone"),
+            new TableColumn("prescription_item", "drug_name"),
+            new TableColumn("prescription_item", "dosage"),
+            new TableColumn("prescription_item", "sig"),
+            new TableColumn("prescription_item", "notes"),
+            new TableColumn("appointment", "chief_complaint"),
+            new TableColumn("appointment", "description"),
+            new TableColumn("appointment", "notes"),
+            new TableColumn("referral", "diagnosis"),
+            new TableColumn("referral", "reason"),
+            new TableColumn("referral", "notes"),
+            new TableColumn("charge", "notes"),
+            new TableColumn("prior_auth", "notes"),
+            new TableColumn("allergy_entry", "allergen"),
+            new TableColumn("allergy_entry", "reaction"),
+            new TableColumn("care_plan", "goal"),
+            new TableColumn("care_plan", "interventions"),
+            new TableColumn("care_plan", "notes"),
+            new TableColumn("immunization", "notes"),
+            new TableColumn("medical_history_entry", "description"),
+            new TableColumn("problem", "notes"),
+            new TableColumn("vital_sign", "notes"),
+            new TableColumn("cds_override", "override_reason"),
+            new TableColumn("refill_request", "reason"),
+            new TableColumn("refill_request", "review_notes"),
+            new TableColumn("emergency_access", "reason")
     );
 
     private final JdbcTemplate jdbc;
@@ -125,13 +160,18 @@ public class KeyRotationService {
         String table = tc.table;
         String column = tc.column;
         int totalMigrated = 0;
+        int offset = 0;
 
+        // Full scan with OFFSET paging (Review III C2): the old predicate
+        // `NOT LIKE '01%'` excluded every v1 row, so nothing was ever
+        // re-encrypted after a rotation. Now every non-null row is examined
+        // and only rows still encrypted with the PREVIOUS key are rewritten.
         while (true) {
+            final int off = offset;
             Integer batchCount = transactionTemplate.execute(status -> {
                 String sql = "SELECT id, " + column + " FROM " + table
                            + " WHERE " + column + " IS NOT NULL"
-                           + " AND " + column + " NOT LIKE '01%'"
-                           + " LIMIT " + BATCH_SIZE;
+                           + " ORDER BY id LIMIT " + BATCH_SIZE + " OFFSET " + off;
                 List<RowData> rows = jdbc.query(sql,
                         (rs, i) -> new RowData(rs.getLong("id"), rs.getString(column)));
 
@@ -139,6 +179,7 @@ public class KeyRotationService {
 
                 int count = 0;
                 for (RowData row : rows) {
+                    if (!AesCryptoUtil.isEncryptedWithPreviousKey(row.ciphertext)) continue;
                     String newCipher = AesCryptoUtil.reencrypt(row.ciphertext);
                     if (newCipher != null) {
                         jdbc.update("UPDATE " + table + " SET " + column + " = ? WHERE id = ?",
@@ -153,8 +194,9 @@ public class KeyRotationService {
 
             if (batchCount == null || batchCount == 0) break;
 
+            offset += BATCH_SIZE;
             totalMigrated += batchCount;
-            remainingByTable.put(table + "." + column, countLegacyRows(table, column));
+            remainingByTable.put(table + "." + column, totalMigrated);
             log.info("Rotation: migrated {} rows in {}.{} (total so far: {})", batchCount, table, column, totalMigrated);
 
             try {
@@ -164,20 +206,7 @@ public class KeyRotationService {
                 break;
             }
         }
-    }
-
-    private int countLegacyRows(String table, String column) {
-        try {
-            Integer count = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM " + table
-                    + " WHERE " + column + " IS NOT NULL"
-                    + " AND " + column + " NOT LIKE '01%'",
-                    Integer.class);
-            return count != null ? count : 0;
-        } catch (Exception e) {
-            log.warn("Rotation: failed to count legacy rows in {}.{} — {}", table, column, e.getMessage());
-            return -1;
-        }
+        remainingByTable.put(table + "." + column, 0);
     }
 
     private void writeAudit(String eventType, String detail) {

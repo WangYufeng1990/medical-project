@@ -110,6 +110,49 @@ class AesAttributeConverterTest {
         AesCryptoUtil.initializeForTest("test-aes-key-for-unit-tests-32bytes!");
     }
 
+    @Test
+    void rotation_shouldKeepVersionedRowsReadableAndMigratable() {
+        // Review III C2: v1 rows were previously unreadable after rotation
+        // (decrypt only tried CURRENT_KEY) and the migration predicate
+        // excluded them. This test pins the fixed behaviour end-to-end.
+        String keyA = "rotation-key-a-for-unit-tests-32bytes!";
+        String keyB = "rotation-key-b-for-unit-tests-32bytes!";
+
+        // Phase 1: single key A — write a v1 ciphertext
+        AesCryptoUtil.initializeForTest(keyA);
+        String oldCipher = AesCryptoUtil.encrypt("hipaa-phrase");
+        assertTrue(oldCipher.startsWith("01"));
+
+        // Phase 2: rotate to B (A becomes previous) — old v1 rows must still decrypt
+        AesCryptoUtil.rotate(keyB, keyA);
+        assertTrue(AesCryptoUtil.isRotationActive());
+        assertEquals("hipaa-phrase", AesCryptoUtil.decrypt(oldCipher),
+                "v1 row encrypted with the previous key must decrypt via fallback");
+
+        String newCipher = AesCryptoUtil.encrypt("fresh-write");
+        assertEquals("fresh-write", AesCryptoUtil.decrypt(newCipher),
+                "new writes must decrypt with the current key");
+
+        // Migration targeting: only the old-key row needs re-encryption
+        assertTrue(AesCryptoUtil.isEncryptedWithPreviousKey(oldCipher));
+        assertFalse(AesCryptoUtil.isEncryptedWithPreviousKey(newCipher));
+
+        // reencrypt() must succeed for old-key v1 rows (previously null → skipped)
+        String migrated = AesCryptoUtil.reencrypt(oldCipher);
+        assertNotNull(migrated, "reencrypt of a previous-key v1 row must not be null");
+        assertEquals("hipaa-phrase", AesCryptoUtil.decrypt(migrated));
+        assertFalse(AesCryptoUtil.isEncryptedWithPreviousKey(migrated),
+                "after migration the row is encrypted with the current key");
+
+        // Phase 3: simulate restart with updated config (AES_KEY=B, AES_KEY_PREVIOUS=A)
+        AesCryptoUtil.initializeForTest(keyB, keyA);
+        assertEquals("hipaa-phrase", AesCryptoUtil.decrypt(oldCipher));
+        assertEquals("fresh-write", AesCryptoUtil.decrypt(newCipher));
+
+        // Reset to the test key for other tests
+        AesCryptoUtil.initializeForTest("test-aes-key-for-unit-tests-32bytes!");
+    }
+
     private static javax.crypto.SecretKey deriveTestKey(String raw) throws Exception {
         var factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
         byte[] salt = "medical-aes-v2-salt".getBytes(java.nio.charset.StandardCharsets.UTF_8);

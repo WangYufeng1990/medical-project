@@ -81,9 +81,39 @@ public class AesCryptoUtil {
                 audit.setKeyVersion(wasRotated ? "v1+v0" : "v1");
                 audit.setDetail(wasRotated ? "Key rotation detected on startup" : "Single key initialized on startup");
                 keyAuditRepo.save(audit);
+                warnIfStaleConfigAfterRuntimeRotation();
             }
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize AES encryption key", e);
+        }
+    }
+
+    /**
+     * Detects the Review III C2 operational hazard: a runtime rotation
+     * (rotate()) whose env config (AES_KEY / AES_KEY_PREVIOUS) was never
+     * updated. After restart the configured key would not match the rotated
+     * key, making post-rotation ciphertext unreadable. Warns loudly instead
+     * of silently corrupting.
+     */
+    private void warnIfStaleConfigAfterRuntimeRotation() {
+        try {
+            keyAuditRepo.findTopByEventTypeOrderByIdDesc("KEY_ROTATION").ifPresent(last -> {
+                String detail = last.getDetail();
+                if (detail == null || !detail.contains("newKey fingerprint=")) return;
+                String recorded = detail.substring(detail.indexOf("newKey fingerprint=") + "newKey fingerprint=".length());
+                int end = recorded.indexOf('.');
+                if (end > 0) recorded = recorded.substring(0, end);
+                String configured = fingerprint(configuredKey);
+                if (!recorded.equals(configured)) {
+                    log.error("KEY ROTATION CONFIG MISMATCH: key_audit records a runtime rotation with newKey "
+                            + "fingerprint={} but the configured app.aes.key has fingerprint={}. Ciphertext written "
+                            + "after that rotation is UNREADABLE unless AES_KEY is set to the rotated key and "
+                            + "AES_KEY_PREVIOUS to the previous key. Update the environment now.",
+                            recorded, configured);
+                }
+            });
+        } catch (Exception e) {
+            log.warn("Failed to check key rotation config consistency", e);
         }
     }
 
@@ -116,8 +146,11 @@ public class AesCryptoUtil {
 
     /**
      * Decrypt data that may be either versioned (v1 prefix) or unversioned (legacy).
-     * Unversioned data is tried against PREVIOUS_KEY first (if rotation is active),
-     * then CURRENT_KEY as fallback.
+     * v1 rows are tried with CURRENT_KEY first, then PREVIOUS_KEY — after a
+     * rotation, existing rows are still encrypted with the old key while new
+     * writes use the new one, and both carry the 0x01 version byte
+     * (Review III C2). Unversioned data is tried against PREVIOUS_KEY first
+     * (if rotation is active), then CURRENT_KEY.
      */
     public static String decrypt(String cipherHex) {
         if (cipherHex == null) return null;
@@ -130,7 +163,22 @@ public class AesCryptoUtil {
 
             byte version = combined[0];
             if (version == VERSION_CURRENT) {
-                return decryptWithKey(combined, 1, CURRENT_KEY);
+                try {
+                    return decryptWithKey(combined, 1, CURRENT_KEY);
+                } catch (Exception currentFailure) {
+                    if (PREVIOUS_KEY != null) {
+                        try {
+                            return decryptWithKey(combined, 1, PREVIOUS_KEY);
+                        } catch (Exception previousFailure) {
+                            log.error("AES-GCM decryption failed with both current and previous keys — "
+                                    + "returning placeholder. Key mismatch or data corruption.", previousFailure);
+                            return "[DECRYPT_FAILED]";
+                        }
+                    }
+                    log.error("AES-GCM decryption failed — returning placeholder. "
+                            + "This may indicate key rotation or data corruption.", currentFailure);
+                    return "[DECRYPT_FAILED]";
+                }
             }
 
             // Legacy unversioned data — first byte is part of the IV
@@ -191,10 +239,33 @@ public class AesCryptoUtil {
     }
 
     /**
+     * True when the ciphertext was encrypted with the PREVIOUS key (versioned
+     * or legacy) — i.e. the row still needs migration after a rotation.
+     * Used by {@code KeyRotationService} (Review III C2).
+     */
+    public static boolean isEncryptedWithPreviousKey(String cipherHex) {
+        if (cipherHex == null || PREVIOUS_KEY == null) return false;
+        try {
+            byte[] combined = hexToBytes(cipherHex);
+            if (combined.length < GCM_IV_LENGTH + 1) return false;
+            if (combined[0] == VERSION_CURRENT) {
+                decryptWithKey(combined, 1, PREVIOUS_KEY);
+            } else {
+                decryptWithKey(combined, 0, PREVIOUS_KEY);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Runtime key rotation — callable from the admin API without restart.
      * Swaps the current key to a new value, sets the old key as previous,
      * and activates rotation mode. The caller is responsible for triggering
-     * the background re-encryption job.
+     * the background re-encryption job AND for persisting the new key to
+     * app.aes.key (and the old key to app.aes.key.previous) so a restart
+     * keeps both readable (Review III C2).
      */
     public static synchronized void rotate(String newKey, String oldKey) {
         SecretKey newCurrent = deriveKey(newKey);
@@ -202,7 +273,36 @@ public class AesCryptoUtil {
         CURRENT_KEY = newCurrent;
         PREVIOUS_KEY = newPrevious;
         rotationActive = true;
-        log.info("AES key rotated at runtime — current=v1, previous=v0");
+        log.info("AES key rotated at runtime — current=v1, previous=v0. "
+                + "IMPORTANT: update AES_KEY (new key) and AES_KEY_PREVIOUS (old key) in env before restart.");
+        recordRuntimeRotation(newKey);
+    }
+
+    private static void recordRuntimeRotation(String newKey) {
+        if (keyAuditRepo == null) return;
+        try {
+            KeyAudit audit = new KeyAudit();
+            audit.setEventType("KEY_ROTATION");
+            audit.setKeyVersion("v1+v0");
+            audit.setDetail("Runtime rotation. newKey fingerprint=" + fingerprint(newKey)
+                    + ". Update AES_KEY/AES_KEY_PREVIOUS in env before restart.");
+            keyAuditRepo.save(audit);
+        } catch (Exception e) {
+            log.error("Failed to record key rotation audit", e);
+        }
+    }
+
+    /** Short SHA-256 fingerprint of a raw key, for config-consistency checks. */
+    public static String fingerprint(String rawKey) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(rawKey.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) sb.append(String.format("%02x", digest[i]));
+            return sb.toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     /**
