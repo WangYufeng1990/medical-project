@@ -15,6 +15,10 @@
 > **Fix progress (2026-08-20): Fix batches 1–6 + C2 key-rotation fix ALL COMPLETE — all 8 CRITICAL + 24 HIGH findings closed (audit credentials, deployment security, access control, prescriptions/CDS, data integrity, hardening, key rotation). 162 tests + tsc + prod build green.**
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
+>
+> **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
+>
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 14 findings (4 🟡 HIGH, 9 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 1 of 9 batches done (M1). Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2768,3 +2772,329 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 ## Operational note
 
 - Runtime rotation via `POST /api/v1/admin/keys/rotate` requires the operator to update `AES_KEY` (new) and `AES_KEY_PREVIOUS` (old) **before restart** — the fingerprint guard now detects a missed update instead of silently corrupting. Preferred flow: update env first, restart (init picks up previous-key + rotation auto-runs via `startIfNeeded`), then monitor `/rotation-status` until complete.
+
+---
+
+# Round 50: Maintainability Pass ⬜ Planned (2026-09-11)
+
+> Independent code-quality review (backend 212 main + 7 test Java files / 13,916 LOC main + 2,782 LOC test; frontend 81 TS/TSX / 6,360 LOC + 6 CSS / 175 LOC; schema, pom and all config). **Ranked for code quality and long-term maintainability, not compliance.**
+>
+> **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
+>
+> Status: **M1 ✅ complete (2026-09-11); M2–M9 ⬜ planned.** Each batch below flips to ✅ individually when it lands.
+
+## Summary
+
+The project's *reviewed* surfaces are in good shape: 26/26 `BaseEntity` subclasses carry `@SQLDelete` + `@SQLRestriction` + `@Version` (the 7 reference-table exceptions match CLAUDE.md exactly), all 55 `@Convert(converter = AesAttributeConverter.class)` annotations are applied consistently, and DTO factories are used throughout. What this round targets is the **uncovered systematic dimension** the 49 previous rounds never swept: duplicated implementations that drift, magic-value domain state, silent failure paths, unreviewed test ergonomics, and the total absence of mechanical guards (no lint, no CI, no static analysis, no `@Size` anywhere). These cannot be closed by another manual review round — they need extraction and tooling.
+
+## Findings (review input)
+
+| ID | Sev | Finding | Key evidence | Batch |
+|----|-----|---------|--------------|-------|
+| F1 | 🟡 | UI CSV export bypasses the backend streaming export entirely — two implementations, already diverged (rate limit, audit trail, PHI masking, formula-injection guard all lost on the path the UI actually uses) | `medical-web/src/layout/StaffLayout.tsx:5,91,94` → `api/export.ts:20,34` (`?page=1&size=9999`) vs `module/export/controller/ExportController.java:36,82` + `common/config/RateLimiterConfig.java:101` (`/api/v1/export/*`) | M2 |
+| F2 | 🟡 | Refresh failure leaves queued requests **hanging forever** (neither resolved nor rejected) | `medical-web/src/api/request.ts` + `patientRequest.ts` — failure branch does `refreshSubscribers = []`, dropping the pending `subscribeTokenRefresh` callbacks | M3 |
+| F3 | 🟡 | Test suite is a single order-dependent class with shared static state; no test can run standalone or in parallel, and the crypto test mutates a JVM-global key | `src/test/.../IntegrationTest.java` (2,109 lines, 128 tests, `@TestMethodOrder(OrderAnnotation)`, `static adminToken/doctorToken/patientToken` at :55-57, `@Sql` only `BEFORE_TEST_CLASS`); `AesAttributeConverterTest` → `AesCryptoUtil.initializeForTest` | M4 |
+| F4 | 🟠 | Domain status is bare `int`/`String` everywhere (no enums in the codebase), and that has already produced 4 real defects | status 6 does not exist + no-show(4)→`CANCELLED` in `PatientCaseService.buildEncounter`; dead/incorrect `ethnicityToOmbCode` ordering (`contains("hispanic")` before `contains("not hispanic")`); `LANGUAGE_EXT_URL` (:46) points at `us-core-birthsex` and is used for preferred language (:208); bare `orElseThrow()` in `ChargeService.convert:61` → 500 not 404 | M5 |
+| F5 | 🟠 | `request.ts` / `patientRequest.ts` are ~95% copy-paste (refresh queue, proactive refresh, `http` facade) and have already drifted (blob handling exists in one only) | `medical-web/src/api/request.ts` (140 lines) vs `api/patientRequest.ts` (122 lines) | M3 |
+| F6 | 🟠 | Systematic silent-failure paths: encryption failure stores `NULL` PHI, and a catch-all handler disguises programming errors as client errors | `AesCryptoUtil.encrypt:141-144` returns `null` on failure; `GlobalExceptionHandler:68-72` maps **every** `IllegalArgumentException` to 400 without logging; 7 backend `catch (Exception ignored)`, 20 frontend `catch {}` | M6 |
+| F7 | 🟠 | 11+ endpoints return raw JPA entities (against CLAUDE.md §4); one endpoint takes `Map<String,Object>` with unchecked casts and no validation; TS types are a superset of the real contract | `PatientPortalController:314-359`, `ConsentController:31,64`, `QualityController:23,39`, `PharmacyController:21`, `FormularyController:40`; `PatientPortalController:107-127`; `types/entities.ts:886` declares `accessToken/expiresIn/user` that `LoginResponse.java` never sends | M8 |
+| F8 | 🟠 | Two coexisting pagination mechanisms: 7 endpoints use validated `PageQuery` (≤200), 19 raw `@RequestParam page/size` sites in 11 files have **no upper bound at all** | `common/base/PageQuery.java` vs `PatientController:51`, `BillController:31`, `PrescriptionController`, `AuditLogController`, …; `size=9999` accepted today | M7 |
+| F9 | 🟠 | 4 module dependency cycles (`patient↔system`, `↔appointment`, `↔prescription`, `↔billing`) and `common → module` reverse dependencies; the epicentre is an 18-dependency controller | `PatientPortalController` (18 injected deps, business logic + `@Transactional` in the controller); `patient/dto/PatientDataExport.java` importing 3 modules; `common/security/DoctorPatientScope`, `common/job/*` importing module repositories | M8 |
+| F10 | 🟠 | Crypto utility is a static global holder wired by a separate bean's `@PostConstruct`, with a production-visible test backdoor, and derives an audit fingerprint by parsing its own log text | `AesCryptoUtil` `static CURRENT_KEY/PREVIOUS_KEY/rotationActive/keyAuditRepo`; `KeyAuditBridge`; `initializeForTest`; `warnIfStaleConfigAfterRuntimeRotation:98-118` (`substring`/`indexOf` on a human-readable `detail`) | M6 |
+| F11 | 🟠 | Encrypted-column capacity is silently halved (hex = `2 × (plaintext + 29)`) while schema/entity widths claim the full size, and there is **no `@Size` anywhere** (0 occurrences) | `resources/sql/schema.sql` `medical_history VARCHAR(4000)` ≈ 1,971 chars usable, `allergies VARCHAR(2000)` ≈ 971, `name VARCHAR(200)` ≈ 71; `Patient.java:122,126` `@Column(length=4000/2000)` | M7 |
+| F12 | ⚪ | Dead code, dead config, doc drift and missing mechanical guards | dead: `util/CsvUtil` (0 callers, and it lacks the formula-injection guard `ExportController.csv` has), `tokenStore.clearAll()` (0 callers while logout hand-removes 9 keys), empty `com/martin/medical/` dir, unused `springdoc.version` property (`pom.xml:25` vs hardcoded `2.7.0` at :92), `hutool` pulled in for 3 `StrUtil.isBlank`; no ESLint/CI/`typecheck` script, `@types/react@19` against `react@18.3.0`; doc drift: CLAUDE.md claims `patientRequest` does **not** unwrap (it does, `patientRequest.ts:35`), API-LAYOUT.md:222 grants `DOCTOR` on `PUT /bills/{id}/pay` (code is `hasRole('ADMIN')`), API-LAYOUT.md:42 still lists dead `CsvUtil` | M9 |
+| F13 | 🟡 | **The documented H2 quick start cannot boot without Redis** — README says `h2 = local file DB, no external dependencies`, but the h2 profile keeps the rate limiters enabled, so `RedissonClient` connects eagerly and aborts startup | verified by booting `SPRING_PROFILES_ACTIVE=h2` against an unreachable Redis: `Error creating bean 'loginRateLimiter' … 'redisson' … RedisConnectionException`; `application-h2.yml` sets only `app.rate-limit.export-per-hour: 100`, while `application-dev.yml` sets `rate-limit.enabled: false` (so **dev** boots without Redis and **h2** does not) | M1 |
+| F14 | 🟠 | H2 file DB is never versioned, and schema drift fails silently instead of loudly | `schema.sql` is 37/37 `CREATE TABLE IF NOT EXISTS` with **zero** ALTER/DROP/ADD; combined with a persistent `~/.medical-dev/data/medical_dev` + `DataInitializer` early-return on `COUNT(*)>0`, a schema change leaves missing columns that only surface on first touch (this is the already-documented `audit_log.prev_hash` incident, header block 2026-08-20); README documents the path but not the reset step | M1 |
+
+## Non-goals (explicitly out of scope this round)
+
+- **DB migration tooling / schema evolution** (user decision) — no Flyway, no Liquibase, no MySQL work. F14 is addressed only as H2-file hygiene + documentation.
+- Prod deployment hardening, `SecurityConfigProd`/`ProdGuard`/`CompositeJwtDecoder` redesign — unreachable under H2-only and left as-is (they remain useful learning material; note they are the least-exercised code in the repo).
+- Any new runtime dependency. M9 only *removes* one (`hutool`).
+- Rewriting the 49 completed rounds' accepted trade-offs (key rotation design, audit hash chaining, EPCS fail-closed).
+
+## Execution order
+
+Batches are independent except where noted; each is small enough to land and verify on its own.
+
+| Order | Batch | Findings | Depends on |
+|-------|-------|----------|------------|
+| 1 | M1 — H2 quick-start correctness | F13, F14 | — |
+| 2 | M2 — Export path unification | F1 | M7 (only for the `size=9999` bound) |
+| 3 | M3 — API client consolidation + auth contract | F2, F5 | — |
+| 4 | M4 — Test-suite decomposability | F3 | — |
+| 5 | M5 — Domain status enums + mapping fixes | F4 | M8 (if VOs change status types, coordinate) |
+| 6 | M6 — Crypto & error-handling contract | F6, F10 | M4 (test isolation first, since M6 changes static state) |
+| 7 | M7 — Pagination unification + input bounds | F8, F11 | M3 (frontend `size` call sites) |
+| 8 | M8 — Layering: VO/DTO extraction + controller split | F7, F9 | M5, M7 |
+| 9 | M9 — Tooling guardrails, dead code, doc sync | F12 | after M2/M3/M7 (tooling then guards the new shape) |
+
+## Data Contract Trace
+
+Every batch that touches a request or response payload, traced field-by-field (CLAUDE.md Plan rule: never assume empty defaults are safe).
+
+| Batch | Contract | Fields / source of truth | Notes |
+|-------|----------|--------------------------|-------|
+| M2 | `GET /api/v1/export/patients`, `/export/bills` → `Blob` + `Content-Disposition` | No request body. Response is `text/csv; charset=UTF-8`; the UI currently never calls it. Filename must come from the header, not be hardcoded | `request.ts` already special-cases `responseType === 'blob'`; reuse that path. Errors arrive as a JSON body inside a Blob — must parse it to surface 429/403 messages |
+| M3 | `POST /auth/refresh` `{refreshToken}` → `LoginResponse{token, refreshToken, userId, username, realName, roles, permissions}`; `POST /patient/refresh` `{refreshToken}` → `PatientLoginResponse{token, refreshToken, patientId, name, username}` | Both responses use **`token`**, never `accessToken`. The patient refresh path returns `patientId`/`name` as `null` (`PatientAuthController` refresh branch) — the client must not depend on them | Fix `types/entities.ts:886` (drop fictitious `accessToken`/`expiresIn`/`user`) and the `accessToken \|\| token` guess in `request.ts`. Correct CLAUDE.md's "does NOT unwrap" claim — patient views must use the unwrapped value (`patientRequest.ts:35`) |
+| M5 | Appointment `status` stays `INT` in the DB | enum is the single source of truth: `0 SCHEDULED, 1 ARRIVED, 2 CANCELLED, 3 COMPLETED, 4 NO_SHOW` (4 confirmed by `AppointmentScheduler:46`; 2 by `AppointmentRepository` JPQL `status <> 2`) | If `AppointmentVO.status` changes from `Integer` to an enum name, the only frontend numeric coupling is the form default (`views/appointments/index.tsx:11 status: 0`) — audit that plus `types/entities.ts` `AppointmentVO/AppointmentForm` before changing the wire type |
+| M8 | `PUT /api/v1/patient/me` body | Backend allow-list (12 editable fields, `PatientPortalController:112-123`): `phoneMobile, phoneHome, phoneWork, email, addressLine1, addressLine2, city, state, zipCode, emergencyContactName, emergencyContactPhone, emergencyContactRelation`. The UI (`views/patient/profile/index.tsx:44,73`) sends the **whole** `PatientProfileVO` (incl. readonly `name/mrn/dateOfBirth/sexAtBirth/insurancePayer/allergies`) and the backend silently ignores the extras | New `PatientSelfUpdateFormDTO` must contain exactly those 12 + `@Size`; the frontend must send only `FIELDS.filter(f => !f.readonly)`. `PUT /patient/me/password` sends `{oldPassword, newPassword, confirmPassword}` while the DTO reads only the first two — decide and document (strip client-side or accept+verify server-side) |
+| M7 | `GET /patients`, `/bills`, `/appointments`, `/prescriptions`, `/audit-logs`, … `?page&size` | Adding a bound changes behaviour: `size > 200` → 400. Callers to fix first: `api/export.ts` (disappears in M2), `views/lab/LabResults.tsx:23` (`size: 999`), `views/referrals/index.tsx:30` (`200`), `views/patients/index.tsx` (`100` ×5) | `PAGE_SIZE = 10` (`utils/labels.ts:45`) is the norm. CLAUDE.md's "`size: 999`" guidance must change to the real cap |
+
+## Docs to Update
+
+| Doc | Change | Batch |
+|-----|--------|-------|
+| `README.md` | ✅ M1: prerequisites, "h2 needs no Redis", H2 reset procedure, `DevSchemaGuard` / `SCHEMA_VERSION` bump rule, `H2_DB_PATH` examples, rate-limit re-enable steps | M1 |
+| `docs/API-LAYOUT.md` | :222 `PUT /bills/{id}/pay` role ADMIN (not ADMIN,DOCTOR); :42 remove dead `CsvUtil`; M7 records the new `size` bound as a breaking behaviour change; M8 records VO/`PatientSelfUpdateFormDTO` payloads | M7, M8, M9 |
+| `CLAUDE.md` | ✅ M1: test row updated 162 → 166 (128 integration + 38 unit). Still open: fix the `patientRequest` unwrapping claim (M3); update the `size: 999` pagination guidance to the real cap (M7); refresh the ORM/test rows after M9 tooling lands | M1, M3, M7, M9 |
+| `docs/ROADMAP.md` | This section (round summary + files changed + verification per batch, per CLAUDE.md §11) | each batch |
+| `docs/backend-architecture-explained.md` | Refresh the layer diagram after M8 removes the `common → module` edges and splits the portal controller | M8 |
+
+## Risks / Trade-offs
+
+| Risk | Mitigation |
+|------|-----------|
+| M3 merges two clients that have 28 `api/*` importers + 18 patient-view importers | Keep both public entry points (`request` default, `patientRequest` default, `http`) and change only the internals; the factory is internal. `npx tsc --noEmit` is the safety net |
+| M4 removing `@Order` may surface pre-existing hidden coupling (tests that only passed because an earlier test seeded state) | Land the cleanup and the isolation in the same batch and fix fallout there — a test that cannot run alone was not measuring anything |
+| M4/M6 changing `AesCryptoUtil` static state can invalidate the existing `AesAttributeConverterTest` fixtures | Keep the static bridge (JPA instantiates converters outside Spring — this cannot be injected away) but make the test restore the previous key in `@AfterEach` and add an explicit "key state" assertion; do not let a test leave a global key behind |
+| M5 enum migration touches DB values, seeds, VOs and the frontend | Keep the DB column `INT` and introduce the enum as a code-level single source of truth first (no schema/seed change); a full `@Enumerated` migration is a follow-up only if it earns its keep |
+| M6 making `encrypt()` throw changes failure semantics from "silently null PHI" to "fail the write" | Intentional: a failed PHI write must be loud. Consistent with `AesAttributeConverter` already throwing on `[DECRYPT_FAILED]`. Document it as a behaviour change |
+| M7 adding `@Max(200)` breaks any client sending a larger size | Deliberate, documented breaking change; fix the 3 known call sites in the same batch (`api/export.ts` is gone by M2) |
+| M8 is the largest batch (layer reshuffle) and touches the portal + FHIR export paths | Split by sub-item: VOs first (mechanical, low risk), then the `Map` → DTO swap, then the controller split; each sub-item independently verifiable |
+| Scope creep into prod/compliance work (already excluded by the user) | Non-goals above are binding; any batch that needs a schema change or a prod-path change stops and asks |
+
+## Batch M1 — H2 quick-start correctness 🟡 ✅ Complete (2026-09-11)
+
+**Goal:** the documented H2 quick start works on a clean machine, and schema drift fails loudly instead of silently.
+
+> Investigated first: disabling the limiters is **not** sufficient. With `app.rate-limit.enabled=false` and an unreachable Redis the context still dies at `redisTemplate → redissonConnectionFactory → redisson` (`RedissonAutoConfigurationV2` builds its client eagerly). Excluding that auto-configuration is what actually makes h2 dependency-free.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M1.1 | h2 is now genuinely zero-dependency: `app.rate-limit.enabled: false` **plus** `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` (Boot's own Lettuce config stays and connects lazily). Both commented in place with the reason, since "just disable the flag" looks sufficient but is not | `resources/application-h2.yml` |
+| M1.2 | README Quick Start rewritten: real prerequisites (JDK 17+ / Maven / Node 18+), explicit "h2 needs no Redis", new **Local database (h2 profile)** section (reset procedure + `DevSchemaGuard` behaviour + `H2_DB_PATH` examples) and **Rate limiting** section (how to re-enable, actual limits per endpoint) | `README.md` |
+| M1.3 | New `DevSchemaGuard` (`@Profile({"dev","h2"})`, `@Order(HIGHEST_PRECEDENCE)`): records the schema version the file was built with and refuses to start on a mismatch. Backed by a new `schema_version` table plus a header block in `schema.sql` explaining that `IF NOT EXISTS` + `mode: always` never alters an existing file, and the encrypted-column capacity rule. README documents "bump `SCHEMA_VERSION` in the same commit as a schema change" | `common/config/DevSchemaGuard.java` (new); `resources/sql/schema.sql`; `README.md` |
+| M1.4 | Tests for the guard (fresh DB records baseline / matching version is idempotent / older schema fails fast without stamping the DB / newer schema fails) — runs the real `sql/schema.sql`, so it also proves that file defines `schema_version` | `src/test/.../config/DevSchemaGuardTest.java` (new) |
+
+### Verification
+
+- **No Redis, committed config (only ports overridden), temp file DB:** `Started MedicalApplication in 7.388 seconds` + `Deployment guard passed for profile(s): h2` + `DevSchemaGuard - Local schema version recorded: v1`. Before this batch the same command aborted with `RedisConnectionException`.
+- **Drift path end-to-end:** bumped `SCHEMA_VERSION` to 2 against the existing v1 database → boot aborts with exit code 1 and `IllegalStateException: Local database schema is v1 but this build expects v2 (jdbc:h2:file:…). spring.sql.init never alters existing tables, so the new columns are missing. Delete the local database file (default: ~/.medical-dev/data/, or the path in H2_DB_PATH)…` (version reverted to 1 afterwards).
+- `cd medical-server && mvn test` → **166 tests, 0 failures** (162 prior + 4 new). The new test caught a real bug during development: H2's `rs.getInt()` maps SQL `NULL` to `0`, so a *fresh* database was rejected as "version 0" — the guard now reads `getObject()`.
+- Debug pass on the in-mem check DB deliberately skipped: the app binds no port and touches no datasource (fails during runner phase), so no local data is mutated.
+- **Transition from an existing database verified** against a copy of the real `~/.medical-dev/data/medical_dev.mv.db`: it boots, gets the (new) `schema_version` table stamped v1, and seeds normally. That copy turned out to be **schema-only with 0 rows** in `sys_user`/`patient`/`appointment` (37 tables, no data) — a separate pre-existing observation: the local demo DB had never completed a seed, so `admin`/`doctor1`/`patient1` could not log in.
+- **Local DB reseeded as an ops follow-up (2026-09-11):** stale empty file deleted, fresh boot rebuilt schema + seed — `schema_version=1`, 2 `sys_user` (admin, doctor1), 4 patients / 4 `patient_auth` logins, 3 roles, 9 menus, 5 appointments, 3 prescriptions, 3 bills, 74 observations, 30 LOINC entries. Login verified end-to-end against a byte-identical copy (no Redis): `admin/admin123`, `doctor1/doctor123`, `patient1/patient123` → all HTTP 200 with a JWT.
+- `H2_DB_PATH` takes a **plain path**, not a URL (`jdbc:h2:file:` is already in the template). The old comment suggesting `file:./data/medical_dev` produced `jdbc:h2:file:file:./data/...` — H2 tolerated it, but both the YAML comment and the README example now use the plain-path form.
+
+### Notes
+
+- Behaviour change: local h2 no longer depends on Redis, and rate limiting is off there by default. Redis enforcement is unchanged in `dev`/`prod`.
+- The guard runs as a `CommandLineRunner`, so it fails **after** the context refresh (`Started MedicalApplication` appears just before the abort) rather than before Tomcat binds. Deliberate: running earlier would require depending on Boot's internal `dataSourceScriptDatabaseInitializer` bean name, which is more brittle than the cosmetic log ordering it would fix. Non-zero exit and a clear message are preserved either way.
+- `dev` still requires Redis at boot even though it too sets `rate-limit.enabled: false` (same eager-Redisson mechanism, no exclusion there). Left as-is deliberately — `dev` is the MySQL profile; one-line follow-up if that ever matters: add the same exclusion to `application-dev.yml`.
+- The guard's baseline is v1 *now*: a pre-existing local file that predates this batch gets the (empty) `schema_version` table created and stamped v1 on first boot, so it cannot detect drift that already happened. Recommend a one-time reset for a clean baseline.
+
+## Batch M2 — Export path unification 🟡
+
+**Goal:** one CSV export implementation, the one that already exists on the server, so rate limiting, the audit trail and PHI masking apply to what the user actually clicks.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M2.1 | Rewrite `downloadPatientsCsv`/`downloadBillsCsv` to fetch `/export/patients` and `/export/bills` as blobs and save them using the `Content-Disposition` filename. Parse the JSON error body inside a Blob so 429/403 surface as messages | `medical-web/src/api/export.ts` |
+| M2.2 | Delete the client-side row assembly, the second `csv()` escaper and the `size=9999` requests (they are the drift source) | `medical-web/src/api/export.ts` |
+| M2.3 | Keep the button wiring; make failures visible instead of a bare `alert('Export failed')` where practical | `medical-web/src/layout/StaffLayout.tsx:91,94` |
+
+### Verification
+
+- Clicking Export in the sidebar hits `GET /api/v1/export/patients` (network tab) and downloads a CSV with masked phone (`****1234`) / email (`j***@domain`).
+- `audit_log` gains one `EXPORT_PATIENTS` / `EXPORT_BILLS` row per click (query via `GET /api/v1/audit-logs`).
+- The 101st export within an hour in the h2 profile (`app.rate-limit.export-per-hour: 100`) returns 429 and the UI shows the rate-limit message rather than a blank/failed download.
+- `npx tsc --noEmit` + `npm run build` clean.
+
+### Notes
+
+- Removes the last caller of the frontend-side CSV logic; `api/export.ts` shrinks by ~40 lines and stops duplicating export semantics.
+
+## Batch M3 — API client consolidation + auth contract 🟡
+
+**Goal:** one HTTP client implementation, no request can hang forever, and the auth types match what the server sends.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M3.1 | Extract the shared logic (token injection, 401 → single-flight refresh, proactive refresh at 80% TTL, `http` facade, blob branch) into one factory parameterised by `{tokenKey, refreshTokenKey, refreshUrl, unauthPath, label}`; keep `request` / `patientRequest` as thin instances so the 46 importing files do not change | `medical-web/src/api/request.ts`; `api/patientRequest.ts`; new `api/createClient.ts` |
+| M3.2 | Fix the hang: queue `{resolve, reject}` pairs and **reject every queued request** when the refresh fails, instead of `refreshSubscribers = []` | `api/createClient.ts` |
+| M3.3 | Read `token` (never `accessToken`) and drop the `\|\|` field guessing; correct the `LoginResponse` type to the real payload | `api/createClient.ts`; `types/entities.ts:886` |
+| M3.4 | Correct CLAUDE.md's `patientRequest` guidance ("does NOT unwrap" is wrong — the interceptor returns `res.data.data`; `r.data.data.x` only appears in raw-axios emergency paths) | `CLAUDE.md` |
+
+### Verification
+
+- Induce a refresh failure (expire the refresh token in sessionStorage, then trigger a request): the UI shows an error and the spinner clears — no permanently pending request. Before the fix, at least one queued request never settles.
+- Two concurrent 401s produce exactly one `POST /auth/refresh` (single-flight preserved).
+- `npx tsc --noEmit` clean with the corrected `LoginResponse` (any remaining `accessToken` usage becomes a compile error).
+- Patient portal and staff app both still log in / refresh / log out.
+
+### Notes
+
+- The emergency-token raw-axios calls in `views/patients/index.tsx:107-111` are a legitimate second credential; leave them, or route them through a third tiny client instance in a follow-up.
+
+## Batch M4 — Test-suite decomposability 🟡
+
+**Goal:** any single test can be run alone, tests do not depend on declaration order, and no test leaks global crypto state.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M4.1 | Split `IntegrationTest` (2,109 lines / 128 tests) into per-module classes (`AuthIntegrationTest`, `PatientIntegrationTest`, `PrescriptionIntegrationTest`, `BillingIntegrationTest`, `SystemIntegrationTest`, `PortalIntegrationTest`, …), reusing the existing `// ── N. SECTION ──` blocks as the seams | `src/test/java/com/example/medical/...` |
+| M4.2 | Remove `@TestMethodOrder(OrderAnnotation)` and the `static adminToken/doctorToken/patientToken`; obtain tokens per class (`@BeforeAll` / a small `TestTokens` helper) so no test depends on an earlier test having run | same |
+| M4.3 | Give each class its own cleanup (`@Sql` per class or `@Transactional` rollback) so state does not leak across classes | `src/test/resources/cleanup-test-data.sql` + test classes |
+| M4.4 | `AesAttributeConverterTest`: capture the current key in `@BeforeEach` and restore it in `@AfterEach` so a test cannot leave the JVM-global key pointing at test material | `src/test/.../AesAttributeConverterTest.java` |
+
+### Verification
+
+- `mvn test` → 162 tests, 0 failures (adjust the doc figure if the split changes the count, e.g. via `@Nested`).
+- A single method runs standalone and passes: `mvn test -Dtest=PatientAuthControllerTest#login_withWrongPassword_shouldReturn401`.
+- A single class runs standalone: `mvn test -Dtest=PrescriptionIntegrationTest`.
+- Running classes in reverse order (`@TestMethodOrder` removed; verified by `-Dtest=A,B` in both orders) gives the same result.
+- `AesCryptoUtil` key state is identical before/after each crypto test (assert in `@AfterEach`).
+
+### Notes
+
+- Deliberately **not** doing `reuseForks=false`: it would mask the static-state problem instead of removing it, at a large startup cost.
+
+## Batch M5 — Domain status enums + mapping fixes 🟠
+
+**Goal:** status values stop being magic numbers, and the four confirmed mapping defects are fixed.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M5.1 | Add `AppointmentStatus` (0 SCHEDULED, 1 ARRIVED, 2 CANCELLED, 3 COMPLETED, 4 NO_SHOW) with `code`/`fromCode`, and replace the ~10 magic comparisons (`Set.of(2,3,4)`, `Set.of(3,4)`, `Integer.valueOf(3)`, `setStatus(4)`, JPQL `status <> 2`) | new `module/appointment/entity/AppointmentStatus.java`; `module/appointment/service/AppointmentService.java`; `module/appointment/repository/AppointmentRepository.java`; `common/job/AppointmentScheduler.java`; `module/patient/controller/PatientPortalController.java:154,160` |
+| M5.2 | `buildEncounter`: delete the nonexistent `case 6`; stop mapping no-show to `CANCELLED` (a no-show encounter never happened — omit it from the bundle, or map explicitly with a comment) | `module/patient/service/PatientCaseService.java:272-278` |
+| M5.3 | `ethnicityToOmbCode`: check "not hispanic"/"not latino" **before** the hispanic branch and drop the unanchored `contains("not")` | `module/patient/service/PatientCaseService.java:234-240` |
+| M5.4 | Fix the mislabelled extension: preferred language belongs in `Patient.communication.language` (FHIR R4), not a `us-core-birthsex` URL; remove/rename the constant accordingly | `module/patient/service/PatientCaseService.java:46,206-210` |
+| M5.5 | Bare `orElseThrow()` → 404 `BusinessException` (the only occurrence in the codebase) | `module/billing/service/ChargeService.java:61` |
+
+### Verification
+
+- `GET /api/v1/fhir/patients/{id}/$everything` (or the case endpoint) on a no-show fixture: no encounter is emitted with `CANCELLED`; on a completed fixture: `FINISHED`. Existing status round-trips unchanged.
+- Ethnicity "Not Hispanic or Latino" → OMB `2186-5`; "Hispanic or Latino" → `2135-2`. Assert both.
+- Preferred language appears under `Patient.communication` with `preferred: true`.
+- `PUT /api/v1/charges/{missing}/convert` → 404 (was 500).
+- `mvn test` green.
+
+### Notes
+
+- DB column stays `INT` — no schema or seed change, so this batch is reversible and does not touch the frontend wire type.
+
+## Batch M6 — Crypto & error-handling contract 🟠
+
+**Goal:** no silent data loss, no disguised programming errors, and crypto state that is not a JVM-wide singleton wired by side effect.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M6.1 | `encrypt()` must not return `null` for a failed PHI write — throw, so the transaction fails loudly (consistent with the existing `[DECRYPT_FAILED]` write guard) | `common/config/AesCryptoUtil.java:141-144` |
+| M6.2 | Narrow the catch-all `IllegalArgumentException` → 400 mapping (it currently swallows every programming error with no log); put real page/size bounds at the call sites (M7) and let genuine IAEs surface as logged 500s | `common/exception/GlobalExceptionHandler.java:68-72` |
+| M6.3 | Replace the 7 backend `catch (Exception ignored)` with logged catches where failure is not genuinely irrelevant (audit-aspect reflection paths, `JwtClaimMapper` claim parse, `auditLoginFailure`); keep them only with an explicit one-line justification | `common/audit/AuditLogAspect.java:157,164,260,271`; `security/JwtClaimMapper.java:71`; `module/system/service/AuthService.java:112`; `module/patient/controller/PatientAuthController.java:245` |
+| M6.4 | Store the rotation fingerprint in a column instead of `substring`-parsing the human-readable `detail` text; make the startup consistency check read the column | `common/config/AesCryptoUtil.java:98-118`; `common/audit/KeyAudit.java`; `resources/sql/schema.sql` (new column — acceptable: H2-only, reset documented in M1) |
+| M6.5 | Remove the production-visible `initializeForTest` backdoor in favour of an explicit, documented test seam (e.g. a package-private `replaceKeysForTest` used only by the crypto test, or restoring keys in `@AfterEach` per M4.4) | `common/config/AesCryptoUtil.java`; `src/test/.../AesAttributeConverterTest.java` |
+
+### Verification
+
+- Forcing an encryption failure (e.g. a test that nulls the key) fails the write with an exception and leaves the column unchanged — no `NULL` PHI row.
+- A deliberately thrown `IllegalArgumentException` from business code logs a stack trace and returns 500, while an out-of-bounds page still returns 400 (page bounds now enforced at the call site per M7).
+- Key rotation still works end-to-end: `POST /api/v1/admin/keys/rotate` → `/rotation-status` → rows migrated, and the stale-config mismatch is still detected (now via the column, not the log text).
+- `mvn test` green.
+
+### Notes
+
+- M6.1 is a deliberately visible behaviour change: PHI writes fail instead of silently dropping data.
+
+## Batch M7 — Pagination unification + input bounds 🟠
+
+**Goal:** one pagination contract with a real bound, and encrypted columns that cannot be overflowed at runtime.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M7.1 | Single entry point for building pageables (e.g. `common/base/Pages.of(page, size)` enforcing `1..200`), or migrate the remaining endpoints to `@Valid PageQuery`; replace the 19 raw `@RequestParam page/size` sites in 11 files | `common/base/PageQuery.java`; new `common/base/Pages.java` (or equivalent); `PatientController`, `BillController`, `AppointmentController`, `PrescriptionController`, `ChatController`, `PatientChatController`, `SysUserController`, `SysRoleController`, `AuditLogController`, `LabResultController`, `PatientPortalController` |
+| M7.2 | Frontend: drop `size: 9999` (gone in M2) and `size: 999` (`views/lab/LabResults.tsx:23`) to the norm; update CLAUDE.md's pagination guidance | `views/lab/LabResults.tsx`; `CLAUDE.md` |
+| M7.3 | Document the encrypted-capacity rule in `schema.sql` next to the affected columns and add `@Size` bounds that fit (`2 × (n + 29) ≤ declared width`) on the free-text PHI fields | `resources/sql/schema.sql`; `module/patient/dto/PatientFormDTO.java`; `module/prescription/dto/PrescriptionItemDTO.java`; other PHI-bearing form DTOs |
+
+### Verification
+
+- `GET /api/v1/patients?size=9999` → 400 with a clear message; `?size=200` works; `?page=0` → 400.
+- Creating a patient with a 3,000-character `medicalHistory` → 400 validation error, not a 500 database error.
+- `mvn test` green; `npx tsc --noEmit` clean.
+
+### Notes
+
+- API-visible behaviour change (`size > 200` now rejected) — record in `docs/API-LAYOUT.md`.
+
+## Batch M8 — Layering: VO/DTO extraction + controller split 🟠
+
+**Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M8.1 | Add VOs (+ `fromEntity`) for the endpoints currently returning entities: portal `vitals/problems/immunizations/referrals/care-plans/prior-auths/disclosures`, `ConsentController`, `QualityController`, `PharmacyController`, `FormularyController` | new DTOs under each module's `dto/`; `PatientPortalController:314-359`; `ConsentController:31,64`; `QualityController:23,39`; `PharmacyController:21`; `FormularyController:40` |
+| M8.2 | `PUT /api/v1/patient/me`: `Map<String,Object>` → `PatientSelfUpdateFormDTO` (the 12 allowed fields + `@Size`); frontend sends only the editable fields | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController:103-127`; `medical-web/src/views/patient/profile/index.tsx:44,73` |
+| M8.3 | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services; breaks `patient↔system`, `patient↔appointment`, `patient↔billing` cycles | `PatientPortalController`; `module/patient/service/*`; reuse `AuthService`'s password-history pattern |
+| M8.4 | Split `PatientPortalController` (18 deps) by resource: profile / observations / appointments / prescriptions / bills (+ chat untouched) | `module/patient/controller/PatientPortal*Controller.java` |
+| M8.5 | Remove `common → module` reverse deps: relocate `common/job/AppointmentScheduler`, `QualityScheduler` into their modules (and `DataRetentionJob` into a dedicated retention component that owns its cross-module queries); reassess `DoctorPatientScope`'s location | `common/job/*`; affected module packages |
+| M8.6 | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → move assembly to a service or a `common`-level DTO to break the cycle | `module/patient/dto/PatientDataExport.java`; `PatientPortalController.exportMyData` |
+
+### Verification
+
+- Every changed endpoint returns the same JSON field names as before (compare one response per endpoint before/after) — this batch must be contract-preserving except for `PUT /patient/me` extras.
+- A dependency check shows no `common → module` imports and no `patient↔{system,appointment,prescription,billing}` cycle.
+- Patient portal flows still work: profile read/update, password change, cancel appointment, pay bill, export.
+- `mvn test` green; `npx tsc --noEmit` clean.
+
+### Notes
+
+- Largest batch — land M8.1 → M8.2 → M8.3/8.4 → M8.5/8.6 as separate commits, each independently green.
+
+## Batch M9 — Tooling guardrails, dead code, doc sync ⚪
+
+**Goal:** the CLAUDE.md review checklist becomes executable, and the docs stop contradicting the code.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M9.1 | Add ESLint (flat config) + `typescript-eslint` + `react-hooks`; npm scripts `lint`, `typecheck`, `check` (`lint && tsc --noEmit`). Encode the documented recurring patterns as rules where possible (floating promises, `catch {}`, exhaustive deps) | `medical-web/eslint.config.js` (new); `medical-web/package.json` |
+| M9.2 | Align `@types/react`/`@types/react-dom` with React 18 | `medical-web/package.json` |
+| M9.3 | Backend mechanical guards: `maven-enforcer-plugin` (banned/unused dependency convergence) and optionally SpotBugs; wire into `mvn verify` | `medical-server/pom.xml` |
+| M9.4 | Dead code: delete `util/CsvUtil`, use `tokenStore.clearAll()` in both logout paths (removing the 9-key duplication), delete the empty `com/martin/medical/` directory, remove or reference the unused `springdoc.version` property, drop `hutool` in favour of `StringUtils.hasText` | `util/CsvUtil.java`; `medical-web/src/{utils/auth.ts,layout/StaffLayout.tsx,views/patient/layout/PatientLayout.tsx}`; `com/martin/`; `pom.xml`; `SysRoleService`, `SysUserService`, `PatientService` |
+| M9.5 | Doc sync: API-LAYOUT.md:222 role fix, :42 `CsvUtil` removal; CLAUDE.md `patientRequest` + pagination + test-count rows; README h2 prerequisites (shared with M1) | `docs/API-LAYOUT.md`; `CLAUDE.md`; `README.md` |
+
+### Verification
+
+- `npm run check` passes; intentionally introducing a `catch {}` / floating promise in a scratch file makes it fail.
+- `mvn verify` passes with the enforcer active.
+- `grep -rn "CsvUtil"` → no hits outside git history; logout still clears every key (`sessionStorage`/`localStorage` inspected after logout).
+- Doc grep: no remaining occurrence of the withdrawn claims (`does NOT unwrap`, `ADMIN,DOCTOR` on `PUT /bills/{id}/pay`).
+
+### Notes
+
+- CI is **not** added (local demo); the `check` script is the reusable seam if that changes.
+
+## Round completion criteria
+
+1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.
+2. `docs/API-LAYOUT.md`, `CLAUDE.md`, `README.md` refreshed for every behaviour change in this round (M1 Redis optionality + H2 reset, M2 export path, M7 size bound, M8 payloads).
+3. No new runtime dependency; one removed (`hutool`).
+4. Re-run of the review checklist: the F1–F14 items above closed or explicitly deferred with a reason.

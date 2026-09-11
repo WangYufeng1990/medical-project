@@ -7,15 +7,28 @@ app:
     h2-console-enabled: true
   integration:
     api-key: dev-integration-key
+  # The h2 profile is the zero-dependency local profile: rate limiting (which
+  # needs Redis) is off by default.
   rate-limit:
+    enabled: false
     export-per-hour: 100
 
 spring:
+  # Redisson's auto-configuration builds its client EAGERLY, so an unreachable
+  # Redis aborts startup with RedisConnectionException even when
+  # app.rate-limit.enabled=false (verified — disabling the flag alone is not
+  # enough). This exclusion is what makes h2 truly dependency-free; Boot's own
+  # Lettuce auto-configuration stays and connects lazily. To exercise rate
+  # limiting locally: drop this exclusion, set app.rate-limit.enabled=true and
+  # run a Redis (see spring.data.redis below).
+  autoconfigure:
+    exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2
   datasource:
     driver-class-name: org.h2.Driver
     # Anchored to ${user.home} (CWD-independent) so the file lands in the same
     # place no matter where the app is launched from — override with H2_DB_PATH
-    # to keep it inside the project (e.g. file:./data/medical_dev).
+    # (a plain path, not a URL: the template already adds jdbc:h2:file:),
+    # e.g. H2_DB_PATH=./data/medical_dev to keep it inside the project.
     url: jdbc:h2:file:${H2_DB_PATH:${user.home}/.medical-dev/data/medical_dev};MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE
     username: sa
     password:
@@ -35,6 +48,7 @@ spring:
   cache:
     type: none
 
+  # Only consulted if the Redisson exclusion above is removed (rate limiting on).
   data:
     redis:
       host: ${REDIS_HOST:localhost}

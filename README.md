@@ -6,7 +6,7 @@ HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 +
 
 ```bash
 # 1. Start backend — an explicit profile is REQUIRED (no default; Review III C5)
-#    h2 = local file DB, no external dependencies
+#    h2 = local file DB, no external services (no MySQL, no Redis, no Okta)
 #    DB file: ~/.medical-dev/data/medical_dev (CWD-independent; override with H2_DB_PATH)
 cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
 
@@ -18,9 +18,60 @@ cd medical-web && npm run dev
 # API docs: http://localhost:8080/doc.html
 ```
 
-Profiles: `h2` / `dev` (local, seeded demo data) · `prod` (requires `AES_KEY`,
-`JWT_SIGNING_KEY` ≥32 chars and independent of `AES_KEY`, `DB_USER`, `DB_PASSWORD`;
-startup fails fast via `ProdGuard` if any are missing).
+Prerequisites: JDK 17+ and Maven for the backend, Node 18+ for the frontend. The
+`h2` profile needs nothing else — Redis is only required by the `dev` and `prod`
+profiles.
+
+### Local database (h2 profile)
+
+The schema lives in `medical-server/src/main/resources/sql/schema.sql` and is
+applied on every boot with `spring.sql.init.mode=always`. Every statement is
+`CREATE TABLE IF NOT EXISTS`, so it **never alters a database that already
+exists**.
+
+> **After changing `schema.sql` you must rebuild the local database** — delete
+> `~/.medical-dev/data/` (or point `H2_DB_PATH` at a new file) and restart:
+>
+> ```bash
+> rm -rf ~/.medical-dev/data && cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
+> ```
+
+Forgetting this is now a loud failure rather than a mysterious one:
+`DevSchemaGuard` records the schema version the file was built with and refuses
+to start on a mismatch, telling you which version the file is and how to reset.
+When you edit `schema.sql`, bump `SCHEMA_VERSION` in
+`common/config/DevSchemaGuard.java` in the same commit.
+
+`H2_DB_PATH` overrides the database location — a plain path, not a JDBC URL
+(the URL template already supplies `jdbc:h2:file:`):
+
+```bash
+H2_DB_PATH=./data/medical_dev SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run   # relative to CWD
+H2_DB_PATH=/absolute/path/to/db SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
+# default: ${user.home}/.medical-dev/data/medical_dev
+```
+
+### Rate limiting
+
+The `h2` profile disables rate limiting so it stays dependency-free (Redisson's
+auto-configuration is excluded for that profile — it connects eagerly and would
+otherwise abort startup without a Redis). To exercise the limiters locally:
+
+```bash
+# 1. remove `spring.autoconfigure.exclude` from application-h2.yml
+# 2. set app.rate-limit.enabled: true in application-h2.yml
+# 3. run a Redis on localhost:6379 (REDIS_HOST / REDIS_PORT override)
+cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
+```
+
+Limits (`common/config/RateLimiterConfig.java`): 10 logins/min/IP, 20 token
+refreshes/min/IP, 5 exports/hour/IP (`app.rate-limit.export-per-hour`, raised to
+100 for h2), 5 password resets/min/IP.
+
+Profiles: `h2` / `dev` (local, seeded demo data; `dev` additionally needs MySQL
+and Redis) · `prod` (requires `AES_KEY`, `JWT_SIGNING_KEY` ≥32 chars and
+independent of `AES_KEY`, `DB_USER`, `DB_PASSWORD`; startup fails fast via
+`ProdGuard` if any are missing).
 
 **Default accounts (dev/h2 profiles only — seed data never runs in prod):**
 
@@ -182,6 +233,13 @@ app:
                                   # (fail-closed: unset ⇒ 403; h2/dev default dev-integration-key)
   rate-limit:
     enabled: true                 # Redisson login/refresh/export rate limiting
+                                  # (default; the h2 profile sets this to false and
+                                  #  excludes RedissonAutoConfigurationV2 — see Quick Start)
+
+# Profile overrides:
+#   dev  → MySQL, rate limiting off (still needs Redis for the Redisson client)
+#   h2   → file DB, rate limiting off, Redisson excluded (no Redis needed)
+#   prod → all of the below are required, checked by ProdGuard
 
 # Production (prod profile) — all required, checked by ProdGuard:
 # SPRING_PROFILES_ACTIVE=prod

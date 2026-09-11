@@ -1,3 +1,27 @@
+-- ============================================================================
+-- Local H2 schema (applied by spring.sql.init on the dev/h2 profiles only;
+-- the h2 URL lives in application-h2.yml and defaults to
+-- ${user.home}/.medical-dev/data/medical_dev).
+--
+-- Every statement is CREATE TABLE IF NOT EXISTS and spring.sql.init.mode=always
+-- re-runs this file on EVERY boot. That combination is idempotent for a fresh
+-- file but never ALTERs an existing one: after editing this file you must
+-- delete the local database (or point H2_DB_PATH at a new file) or the new
+-- column simply will not exist. DevSchemaGuard turns that silent drift into a
+-- loud startup failure — bump SCHEMA_VERSION there whenever this file changes.
+--
+-- Reminder: encrypted columns are hex ciphertext, so the usable plaintext
+-- length is (declared width / 2) - 29 bytes (1 version + 12 IV + 16 GCM tag).
+-- e.g. medical_history VARCHAR(4000) holds ~1971 characters.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS schema_version (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    version INT NOT NULL,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT NOT NULL AUTO_INCREMENT,
     username VARCHAR(200) NOT NULL,
