@@ -88,10 +88,10 @@ export default function StaffLayout() {
         <div style={{ marginTop: 'auto', padding: '16px' }}>
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, paddingLeft: 12 }}>Export CSV</div>
-            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadPatientsCsv().catch(() => alert('Export failed')) }}>
+            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadPatientsCsv().catch((e: Error) => alert(e?.message || 'Export failed')) }}>
               <span>📥</span> Patients
             </div>
-            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadBillsCsv().catch(() => alert('Export failed')) }}>
+            <div className={styles.menuItem} style={{ fontSize: 13 }} onClick={() => { downloadBillsCsv().catch((e: Error) => alert(e?.message || 'Export failed')) }}>
               <span>📥</span> Bills
             </div>
           </div>

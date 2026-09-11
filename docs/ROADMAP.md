@@ -16,9 +16,11 @@
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 >
+> **Round 50 M2 ✅ complete (2026-09-11) — export path unification.** The sidebar CSV export now calls the backend streaming endpoints (`/api/v1/export/patients|bills`) instead of rebuilding the CSV in the browser: PHI masking, the formula-injection guard, the export rate limit and the `EXPORT_*` audit rows all apply to what the user actually clicks. Blob downloads resolve to `{ blob, filename }` and a JSON error body wrapped in a Blob is now decoded, so a 429 reaches the user with the backend's message. `tsc` + `vite build` clean; backend contract, audit rows, parser and the 429 path verified. Found F15 (stale Redis limiter state silently pins an old limit) → new batch M10. **
+>
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 14 findings (4 🟡 HIGH, 9 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 1 of 9 batches done (M1). Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 2 of 10 batches done (M1, M2), plus new finding F15/M10 found while verifying M2. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2781,7 +2783,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1 ✅ complete (2026-09-11); M2–M9 ⬜ planned.** Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M2 ✅ complete (2026-09-11); M3–M10 ⬜ planned.** Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -2804,6 +2806,7 @@ The project's *reviewed* surfaces are in good shape: 26/26 `BaseEntity` subclass
 | F11 | 🟠 | Encrypted-column capacity is silently halved (hex = `2 × (plaintext + 29)`) while schema/entity widths claim the full size, and there is **no `@Size` anywhere** (0 occurrences) | `resources/sql/schema.sql` `medical_history VARCHAR(4000)` ≈ 1,971 chars usable, `allergies VARCHAR(2000)` ≈ 971, `name VARCHAR(200)` ≈ 71; `Patient.java:122,126` `@Column(length=4000/2000)` | M7 |
 | F12 | ⚪ | Dead code, dead config, doc drift and missing mechanical guards | dead: `util/CsvUtil` (0 callers, and it lacks the formula-injection guard `ExportController.csv` has), `tokenStore.clearAll()` (0 callers while logout hand-removes 9 keys), empty `com/martin/medical/` dir, unused `springdoc.version` property (`pom.xml:25` vs hardcoded `2.7.0` at :92), `hutool` pulled in for 3 `StrUtil.isBlank`; no ESLint/CI/`typecheck` script, `@types/react@19` against `react@18.3.0`; doc drift: CLAUDE.md claims `patientRequest` does **not** unwrap (it does, `patientRequest.ts:35`), API-LAYOUT.md:222 grants `DOCTOR` on `PUT /bills/{id}/pay` (code is `hasRole('ADMIN')`), API-LAYOUT.md:42 still lists dead `CsvUtil` | M9 |
 | F13 | 🟡 | **The documented H2 quick start cannot boot without Redis** — README says `h2 = local file DB, no external dependencies`, but the h2 profile keeps the rate limiters enabled, so `RedissonClient` connects eagerly and aborts startup | verified by booting `SPRING_PROFILES_ACTIVE=h2` against an unreachable Redis: `Error creating bean 'loginRateLimiter' … 'redisson' … RedisConnectionException`; `application-h2.yml` sets only `app.rate-limit.export-per-hour: 100`, while `application-dev.yml` sets `rate-limit.enabled: false` (so **dev** boots without Redis and **h2** does not) | M1 |
+| F15 | 🟠 | **Configured rate limits are silently ignored once Redis holds limiter state.** Redisson's `trySetRate` only initialises a limiter that does not exist yet, so `RateLimiterConfig`'s per-request `trySetRate` is a no-op on an existing key — and the remaining-permit counter / sliding window (`{key}:value`, `{key}:permits`) outlive the config hash, so an old budget keeps applying. Also: the 429 message hardcodes "Max 5 exports per hour" while the limit is `app.rate-limit.export-per-hour` (100 in h2) | discovered verifying M2: with `export-per-hour=3` and a stale `value=82` (left from the earlier 100/hour config) **21 consecutive exports all returned 200**; after deleting all three keys the 4th returned 429. Control: the login limiter (10/min) refused at #7 on the same instance | M10 |
 | F14 | 🟠 | H2 file DB is never versioned, and schema drift fails silently instead of loudly | `schema.sql` is 37/37 `CREATE TABLE IF NOT EXISTS` with **zero** ALTER/DROP/ADD; combined with a persistent `~/.medical-dev/data/medical_dev` + `DataInitializer` early-return on `COUNT(*)>0`, a schema change leaves missing columns that only surface on first touch (this is the already-documented `audit_log.prev_hash` incident, header block 2026-08-20); README documents the path but not the reset step | M1 |
 
 ## Non-goals (explicitly out of scope this round)
@@ -2828,6 +2831,7 @@ Batches are independent except where noted; each is small enough to land and ver
 | 7 | M7 — Pagination unification + input bounds | F8, F11 | M3 (frontend `size` call sites) |
 | 8 | M8 — Layering: VO/DTO extraction + controller split | F7, F9 | M5, M7 |
 | 9 | M9 — Tooling guardrails, dead code, doc sync | F12 | after M2/M3/M7 (tooling then guards the new shape) |
+| 10 | M10 — Rate limiter config actually applies | F15 | — |
 
 ## Data Contract Trace
 
@@ -2896,28 +2900,36 @@ Every batch that touches a request or response payload, traced field-by-field (C
 - `dev` still requires Redis at boot even though it too sets `rate-limit.enabled: false` (same eager-Redisson mechanism, no exclusion there). Left as-is deliberately — `dev` is the MySQL profile; one-line follow-up if that ever matters: add the same exclusion to `application-dev.yml`.
 - The guard's baseline is v1 *now*: a pre-existing local file that predates this batch gets the (empty) `schema_version` table created and stamped v1 on first boot, so it cannot detect drift that already happened. Recommend a one-time reset for a clean baseline.
 
-## Batch M2 — Export path unification 🟡
+## Batch M2 — Export path unification 🟡 ✅ Complete (2026-09-11)
 
 **Goal:** one CSV export implementation, the one that already exists on the server, so rate limiting, the audit trail and PHI masking apply to what the user actually clicks.
+
+> The backend export endpoints were verified **before** routing the UI to them (they had never been exercised — the UI only ever called `/patients?size=9999`): correct `Content-Disposition`, masked PHI, audit rows written. Routing the UI to them was then a small change.
 
 ### Changes
 
 | # | Change | Files |
 |---|--------|-------|
-| M2.1 | Rewrite `downloadPatientsCsv`/`downloadBillsCsv` to fetch `/export/patients` and `/export/bills` as blobs and save them using the `Content-Disposition` filename. Parse the JSON error body inside a Blob so 429/403 surface as messages | `medical-web/src/api/export.ts` |
-| M2.2 | Delete the client-side row assembly, the second `csv()` escaper and the `size=9999` requests (they are the drift source) | `medical-web/src/api/export.ts` |
-| M2.3 | Keep the button wiring; make failures visible instead of a bare `alert('Export failed')` where practical | `medical-web/src/layout/StaffLayout.tsx:91,94` |
+| M2.1 | `downloadPatientsCsv`/`downloadBillsCsv` now fetch `/export/patients` and `/export/bills` as blobs and save them under the **server's** filename; the client-side row building, the second `csv()` escaper and the `size=9999` requests are gone (48 → 25 lines) | `medical-web/src/api/export.ts` |
+| M2.2 | Blob responses now resolve to `{ blob, filename }` (`BlobDownload`) instead of a bare Blob, so callers never hardcode a name the backend owns. The dead `if (res.status < 400)` branch inside the *fulfilled* handler is removed (axios routes every non-2xx to the rejected handler) | `medical-web/src/api/request.ts` |
+| M2.3 | Failed downloads surface the backend's message: a JSON error body arrives **inside a Blob**, so `err.response.data.message` was undefined and every failure collapsed to the axios default text. New `serverErrorMessage()` decodes it, and the server message is now checked **before** the generic 429 text | `medical-web/src/api/request.ts` |
+| M2.4 | Export failures show the real reason instead of a bare `alert('Export failed')` | `medical-web/src/layout/StaffLayout.tsx:91,94` |
 
 ### Verification
 
-- Clicking Export in the sidebar hits `GET /api/v1/export/patients` (network tab) and downloads a CSV with masked phone (`****1234`) / email (`j***@domain`).
-- `audit_log` gains one `EXPORT_PATIENTS` / `EXPORT_BILLS` row per click (query via `GET /api/v1/audit-logs`).
-- The 101st export within an hour in the h2 profile (`app.rate-limit.export-per-hour: 100`) returns 429 and the UI shows the rate-limit message rather than a blank/failed download.
-- `npx tsc --noEmit` + `npm run build` clean.
+- Backend contract (curl, before wiring): `HTTP 200`, `Content-Disposition: attachment; filename=patients.csv`, `Content-Type: text/csv;charset=UTF-8`; patients CSV = 4 rows with `Phone=****0101`, `Email=j***@email.com`; bills CSV masks claim numbers (`****0001`).
+- Audit trail: each download writes `EXPORT_PATIENTS` / `EXPORT_BILLS` (module `export`, ip recorded) — this never happened on the old client-side path.
+- `filenameFromDisposition` unit-checked against 7 inputs: plain, quoted, RFC 5987 `filename*=UTF-8''…`, `inline`, `undefined`, a number, and a trailing parameter → `patients.csv` / `bills.csv` / null as appropriate.
+- `serverErrorMessage` unit-checked with the **exact** 429 body the filter emits: Blob(JSON) → the message, Blob(HTML) → undefined, plain object → the message, undefined → undefined.
+- Export rate limit verified end-to-end against a second instance (`export-per-hour=3`, limiters on): 3× `200` then 3× `429` with `{"code":429,"message":"Export rate limit exceeded. Max 5 exports per hour."}` — the text the UI now displays.
+- Vite serves the rewritten module (`/export/patients`, `responseType: "blob"`); `npx tsc --noEmit` clean; `npm run build` clean (213 modules).
+- **Not machine-verified:** the last browser hop (blob → file saved to disk). No browser driver is available in this environment — needs one click in the running app.
 
 ### Notes
 
-- Removes the last caller of the frontend-side CSV logic; `api/export.ts` shrinks by ~40 lines and stops duplicating export semantics.
+- Behaviour change: the export button now depends on the backend being up. It also goes through the export rate limiter, so a user can legitimately be refused (and now sees why).
+- The old client-side export wrote a UTF-8 BOM while the server does not; the download still prepends one (a client-side `new Blob([BOM, blob])`) so Excel keeps opening the file correctly.
+- New finding **F15** (see the findings table) came out of verifying the 429 path — the configured export limit was silently ignored because of stale Redis state. Recorded as batch M10.
 
 ## Batch M3 — API client consolidation + auth contract 🟡
 
@@ -3091,6 +3103,33 @@ Every batch that touches a request or response payload, traced field-by-field (C
 ### Notes
 
 - CI is **not** added (local demo); the `check` script is the reusable seam if that changes.
+
+## Batch M10 — Rate limiter config actually applies 🟠
+
+**Goal:** the configured rate limits are the limits that apply, and the 429 message stops lying about them.
+
+**Finding (F15), reproduced:** on an instance started with `--app.rate-limit.export-per-hour=3`, **21 consecutive exports all returned 200**. The Redis state explained it: `rate:export:<ip>` held `rate=3` (so the property *was* read), but the companion keys `{rate:export:<ip>}:value` (=82, the remaining-permit counter) and `{rate:export:<ip>}:permits` (an 18-entry sliding-window ZSET) had survived from the earlier 100/hour configuration. `trySetRate` only initialises a limiter that does not exist, so the new rate never took effect against the old budget. Deleting all three keys made the limiter behave exactly as configured: 3× `200`, then `429`.
+
+### Changes
+
+| # | Change | Files |
+|---|--------|-------|
+| M10.1 | Make a limit change self-applying: put the configured limit in the limiter **key** (e.g. `rate:export:<limit>:<ip>`), so a config change starts from a fresh limiter instead of inheriting a stale budget; drop the per-request `trySetRate` (or keep it only as first-touch initialisation) | `common/config/RateLimiterConfig.java` |
+| M10.2 | Stop hardcoding the limit in the 429 body — build the message from the configured value ("Max {n} exports per hour") | `common/config/RateLimiterConfig.java` |
+| M10.3 | Collapse the four near-identical inline filters into one factory (same key prefix/rate/message shape per endpoint), which is what makes M10.1/M10.2 a single implementation instead of four | `common/config/RateLimiterConfig.java` |
+| M10.4 | Document the "stale limiter keys pin an old limit" operational trap in the README rate-limiting section, with the cleanup command | `README.md` |
+
+### Verification
+
+- Fresh Redis (`redis-cli --scan --pattern 'rate:*' | xargs redis-cli del`), instance with `export-per-hour=3` → 3× `200` then `429` (already demonstrated with clean keys).
+- Change the limit on the **same** Redis without deleting keys: `export-per-hour=5` → the 6th export is refused (fails today).
+- The 429 body names the configured limit, not a hardcoded 5.
+- Login/refresh/export/reset limits all still enforced at their configured values; `mvn test` green.
+
+### Notes
+
+- This is why the project's own `IntegrationTest` disables rate limiting ("counters survive across test runs and would randomly 429 the auth tests") — the stale-state behaviour is the root cause of that workaround.
+- Keep the h2 profile's limiters off (M1); this batch is about the limits being real wherever they are enabled.
 
 ## Round completion criteria
 

@@ -1,48 +1,26 @@
-import { http } from './request'
-import { PageResult } from '../types/common'
-import { PatientVO, BillVO } from '../types/entities'
+import { http, BlobDownload } from './request'
 
-function csv(v: unknown) {
-  if (v == null) return ''
-  const s = String(v)
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`
-  return s
-}
-
-function download(filename: string, header: string, rows: string[]) {
-  const bom = '﻿'
-  const blob = new Blob([bom + header + '\n' + rows.join('\n')], { type: 'text/csv;charset=UTF-8' })
+function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
-  URL.revokeObjectURL(url)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export const downloadPatientsCsv = async () => {
-  const res = await http.get<PageResult<PatientVO>>('/patients', { params: { page: 1, size: 9999 } })
-  const patients = res.records ?? []
-  const header = 'MRN,Name,DOB,Sex,Gender,Race,Ethnicity,Language,Phone,Email,Address,City,State,ZIP,Insurance,MedicalHistory,Allergies,Created'
-  const rows = patients.map(p =>
-    [p.mrn, p.name, p.dateOfBirth ?? '', p.sexAtBirth, p.genderIdentity,
-      p.race, p.ethnicity, p.preferredLanguage,
-      p.phoneMobile, p.email,
-      p.addressLine1, p.city, p.state, p.zipCode,
-      p.insurancePayer, p.medicalHistory, p.allergies,
-      p.createTime?.slice(0, 10) ?? ''].map(csv).join(','))
-  download('patients.csv', header, rows)
+// The columns, the PHI masking (phone/email/claim number), the CSV escaping and
+// formula-injection guard, the export rate limit and the EXPORT_* audit entry
+// all live in the backend streaming export — never rebuild the CSV here.
+async function downloadCsv(path: string, fallbackName: string) {
+  const { blob, filename } = await http.get<BlobDownload>(path, { responseType: 'blob' })
+  // The server omits a BOM; Excel needs one to treat the file as UTF-8.
+  const utf8 = new Blob(['\uFEFF', blob], { type: 'text/csv;charset=UTF-8' })
+  saveBlob(utf8, filename ?? fallbackName)
 }
 
-export const downloadBillsCsv = async () => {
-  const res = await http.get<PageResult<BillVO>>('/bills', { params: { page: 1, size: 9999 } })
-  const bills = res.records ?? []
-  const header = 'ID,PatientID,Type,Status,TotalCharge,InsAdj,InsPay,PatientResp,PatientPaid,Copay,CPT,ICD10,POS,Payer,Claim#,FilingDate,PayTime,Method,Created'
-  const rows = bills.map(b =>
-    [b.id, b.patientId, b.billType, b.claimStatus,
-      b.totalCharge, b.insuranceAdjustment, b.insurancePayment, b.patientResponsibility,
-      b.patientPaidAmount, b.copayAmount,
-      b.cptCodes, b.icd10Codes, b.placeOfServiceCode, b.insurancePayerName,
-      b.insuranceClaimNumber ? '****' + String(b.insuranceClaimNumber).slice(-4) : '',
-      b.claimFilingDate,
-      b.payTime?.slice(0, 19) ?? '', b.paymentMethod,
-      b.createTime?.slice(0, 10) ?? ''].map(csv).join(','))
-  download('bills.csv', header, rows)
-}
+export const downloadPatientsCsv = () => downloadCsv('/export/patients', 'patients.csv')
+
+export const downloadBillsCsv = () => downloadCsv('/export/bills', 'bills.csv')

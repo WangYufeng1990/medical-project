@@ -38,17 +38,46 @@ function asAxiosResponse(p: unknown): AxiosResponse {
   return p as unknown as AxiosResponse
 }
 
+// File downloads resolve to the Blob plus the filename the server chose, so
+// callers never hardcode a name the backend owns.
+export interface BlobDownload {
+  blob: Blob
+  filename: string | null
+}
+
+function filenameFromDisposition(disposition: unknown): string | null {
+  if (typeof disposition !== 'string') return null
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+// A failed download wraps the backend's JSON error body in a Blob, so
+// data.message is undefined — decode it to recover the real message (e.g. 429).
+async function serverErrorMessage(data: unknown): Promise<string | undefined> {
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text())
+      return typeof parsed?.message === 'string' ? parsed.message : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const message = (data as { message?: unknown } | undefined)?.message
+  return typeof message === 'string' ? message : undefined
+}
+
 request.interceptors.response.use(
   async (res: AxiosResponse<Result<unknown> | Blob>) => {
     if (res.config.responseType === 'blob') {
-      if (res.status < 400) return asAxiosResponse(res.data)
-      const text = await (res.data as Blob).text()
-      try {
-        const json = JSON.parse(text)
-        return Promise.reject(new Error(json.message || 'Export failed'))
-      } catch {
-        return Promise.reject(new Error('Export failed'))
-      }
+      return asAxiosResponse({
+        blob: res.data,
+        filename: filenameFromDisposition(res.headers?.['content-disposition']),
+      } as BlobDownload)
     }
     const result = res.data as Result<unknown>
     return asAxiosResponse(result.code === 200 ? result.data : Promise.reject(new Error(result.message)))
@@ -94,12 +123,15 @@ request.interceptors.response.use(
       tokenStore.remove('token')
       if (!originalRequest.silent) window.location.href = '/login'
     }
+    // Server message first — it is more specific than the generic 429 text
+    // below (e.g. "Export rate limit exceeded. Max 5 exports per hour.").
+    const serverMessage = await serverErrorMessage(err.response?.data)
+    if (serverMessage) return Promise.reject(new Error(serverMessage))
     if (err.response?.status === 429) {
       const retryAfter = err.response.headers['retry-after']
       const msg = retryAfter ? `Rate limited. Try again in ${retryAfter}s.` : 'Too many requests. Please wait.'
       return Promise.reject(new Error(msg))
     }
-    if (err.response?.data?.message) return Promise.reject(new Error(err.response.data.message))
     return Promise.reject(err)
   }
 )
