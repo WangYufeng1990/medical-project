@@ -66,7 +66,17 @@ cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
 
 Limits (`common/config/RateLimiterConfig.java`): 10 logins/min/IP, 20 token
 refreshes/min/IP, 5 exports/hour/IP (`app.rate-limit.export-per-hour`, raised to
-100 for h2), 5 password resets/min/IP.
+100 for h2), 5 password resets/min/IP. The effective limit is part of the Redis
+key (`rate:export:100:3600:<ip>`), so a changed limit applies immediately;
+counters written for a previous limit are left behind inert. Clear counters only
+when you want to un-throttle yourself while testing:
+
+```bash
+# Redisson keeps three keys per limiter — the config hash plus brace-wrapped
+# `{...}:permits` and `{...}:value` companions. Deleting only the first leaves
+# the consumed budget in place, so match all of them:
+redis-cli --scan --pattern '*rate:*' | xargs -r redis-cli del
+```
 
 Profiles: `h2` / `dev` (local, seeded demo data; `dev` additionally needs MySQL
 and Redis) · `prod` (requires `AES_KEY`, `JWT_SIGNING_KEY` ≥32 chars and

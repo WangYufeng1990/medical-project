@@ -1,121 +1,85 @@
 package com.example.medical.common.config;
 
 import jakarta.servlet.Filter;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.redisson.api.RRateLimiter;
-import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 
 @Configuration
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
-        name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = true)
 public class RateLimiterConfig {
 
-    @org.springframework.beans.factory.annotation.Value("${app.rate-limit.export-per-hour:5}")
+    @Value("${app.rate-limit.export-per-hour:5}")
     private long exportPerHour;
+
+    /**
+     * A per-IP limiter for one group of endpoints.
+     *
+     * @param keyPrefix       Redis key prefix; the effective limit is appended to it
+     * @param messageTemplate 429 body, optionally containing one {@code %d} for the limit
+     */
+    private record Limiter(String keyPrefix, long rate, Duration interval,
+                           String messageTemplate, List<String> urlPatterns) {}
 
     @Bean
     public FilterRegistrationBean<Filter> loginRateLimiter(RedissonClient redissonClient) {
-        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
-            HttpServletRequest httpReq = (HttpServletRequest) request;
-            if (httpReq.getRequestURI().contains("/login") && "POST".equalsIgnoreCase(httpReq.getMethod())) {
-                String key = "rate:login:" + httpReq.getRemoteAddr();
-                RRateLimiter limiter = redissonClient.getRateLimiter(key);
-                limiter.trySetRate(RateType.OVERALL, 10, Duration.ofMinutes(1));
-
-                if (!limiter.tryAcquire()) {
-                    HttpServletResponse httpResp = (HttpServletResponse) response;
-                    httpResp.setStatus(429);
-                    httpResp.setContentType("application/json");
-                    httpResp.getWriter().write("{\"code\":429,\"message\":\"Too many login attempts. Please wait.\"}");
-                    return;
-                }
-            }
-            chain.doFilter(request, response);
-        };
-
-        FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
-        bean.setFilter(filter);
-        bean.addUrlPatterns("/api/v1/auth/login", "/api/v1/patient/login");
-        bean.setOrder(1);
-        return bean;
+        return register(redissonClient, new Limiter("rate:login", 10, Duration.ofMinutes(1),
+                "Too many login attempts. Please wait.",
+                List.of("/api/v1/auth/login", "/api/v1/patient/login")));
     }
 
     @Bean
     public FilterRegistrationBean<Filter> refreshRateLimiter(RedissonClient redissonClient) {
-        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
-            HttpServletRequest httpReq = (HttpServletRequest) request;
-            String key = "rate:refresh:" + httpReq.getRemoteAddr();
-            RRateLimiter limiter = redissonClient.getRateLimiter(key);
-            limiter.trySetRate(RateType.OVERALL, 20, Duration.ofMinutes(1));
-
-            if (!limiter.tryAcquire()) {
-                HttpServletResponse httpResp = (HttpServletResponse) response;
-                httpResp.setStatus(429);
-                httpResp.setContentType("application/json");
-                httpResp.getWriter().write("{\"code\":429,\"message\":\"Token refresh rate limit exceeded.\"}");
-                return;
-            }
-            chain.doFilter(request, response);
-        };
-
-        FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
-        bean.setFilter(filter);
-        bean.addUrlPatterns("/api/v1/auth/refresh", "/api/v1/patient/refresh");
-        bean.setOrder(1);
-        return bean;
+        return register(redissonClient, new Limiter("rate:refresh", 20, Duration.ofMinutes(1),
+                "Token refresh rate limit exceeded.",
+                List.of("/api/v1/auth/refresh", "/api/v1/patient/refresh")));
     }
 
     @Bean
     public FilterRegistrationBean<Filter> exportRateLimiter(RedissonClient redissonClient) {
-        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
-            HttpServletRequest httpReq = (HttpServletRequest) request;
-            String key = "rate:export:" + httpReq.getRemoteAddr();
-            RRateLimiter limiter = redissonClient.getRateLimiter(key);
-            limiter.trySetRate(RateType.OVERALL, exportPerHour, Duration.ofHours(1));
-
-            if (!limiter.tryAcquire()) {
-                HttpServletResponse httpResp = (HttpServletResponse) response;
-                httpResp.setStatus(429);
-                httpResp.setContentType("application/json");
-                httpResp.getWriter().write("{\"code\":429,\"message\":\"Export rate limit exceeded. Max 5 exports per hour.\"}");
-                return;
-            }
-            chain.doFilter(request, response);
-        };
-
-        FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
-        bean.setFilter(filter);
-        bean.addUrlPatterns("/api/v1/export/*");
-        bean.setOrder(1);
-        return bean;
+        return register(redissonClient, new Limiter("rate:export", exportPerHour, Duration.ofHours(1),
+                "Export rate limit exceeded. Max %d exports per hour.",
+                List.of("/api/v1/export/*")));
     }
 
     @Bean
     public FilterRegistrationBean<Filter> passwordResetRateLimiter(RedissonClient redissonClient) {
-        Filter filter = (ServletRequest request, ServletResponse response, FilterChain chain) -> {
-            HttpServletRequest httpReq = (HttpServletRequest) request;
-            String key = "rate:password-reset:" + httpReq.getRemoteAddr();
-            RRateLimiter limiter = redissonClient.getRateLimiter(key);
-            limiter.trySetRate(RateType.OVERALL, 5, Duration.ofMinutes(1));
+        return register(redissonClient, new Limiter("rate:password-reset", 5, Duration.ofMinutes(1),
+                "Too many password reset requests. Please wait.",
+                List.of("/api/v1/patient/forgot-password", "/api/v1/patient/reset-password")));
+    }
 
-            if (!limiter.tryAcquire()) {
-                HttpServletResponse httpResp = (HttpServletResponse) response;
-                httpResp.setStatus(429);
-                httpResp.setContentType("application/json");
-                httpResp.getWriter().write("{\"code\":429,\"message\":\"Too many password reset requests. Please wait.\"}");
+    /**
+     * The rate and interval are part of the Redis key on purpose. Redisson's
+     * {@code trySetRate} initialises a limiter only when it does not exist yet,
+     * and the remaining-permit counter it creates has no TTL — so with a key
+     * that omits the limit, changing {@code app.rate-limit.*} would silently
+     * keep serving the budget of whatever limit was configured first. Keying by
+     * the limit makes the change self-applying; the superseded keys are inert
+     * leftovers (see the README for the cleanup one-liner).
+     */
+    private FilterRegistrationBean<Filter> register(RedissonClient redissonClient, Limiter limiter) {
+        Filter filter = (request, response, chain) -> {
+            HttpServletRequest httpRequest = (HttpServletRequest) request;
+            String key = "%s:%d:%d:%s".formatted(limiter.keyPrefix(), limiter.rate(),
+                    limiter.interval().toSeconds(), httpRequest.getRemoteAddr());
+
+            RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
+            rateLimiter.trySetRate(RateType.OVERALL, limiter.rate(), limiter.interval());
+
+            if (!rateLimiter.tryAcquire()) {
+                reject((HttpServletResponse) response, limiter.messageTemplate().formatted(limiter.rate()));
                 return;
             }
             chain.doFilter(request, response);
@@ -123,8 +87,14 @@ public class RateLimiterConfig {
 
         FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>();
         bean.setFilter(filter);
-        bean.addUrlPatterns("/api/v1/patient/forgot-password", "/api/v1/patient/reset-password");
+        bean.addUrlPatterns(limiter.urlPatterns().toArray(String[]::new));
         bean.setOrder(1);
         return bean;
+    }
+
+    private static void reject(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(429);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"code\":429,\"message\":\"" + message + "\"}");
     }
 }

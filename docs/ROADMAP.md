@@ -16,13 +16,15 @@
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 >
+> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
+>
 > **Round 50 M3 ✅ complete (2026-09-11) — API client consolidation + auth contract.** `api/createClient.ts` now holds the single implementation of token injection, single-flight refresh, proactive refresh, the blob branch and error mapping; `request`/`patientRequest` are 14/12-line instances, so all 45 importing files were untouched. The refresh-failure **hang is fixed** (parked requests are now rejected instead of silently dropped), the refresh reads only `token` and fails loudly when it is missing, `LoginResponse` no longer invents `accessToken`/`expiresIn`/`user`, and the proactive timer got a 5 s floor that removes a 0 ms refresh loop. Verified by executing the real module against a fake 401/refresh server (5 cases) + tsc/build. `tsc`/`build` clean, bundle 435.28 → 433.41 kB. **
 >
 > **Round 50 M2 ✅ complete (2026-09-11) — export path unification.** The sidebar CSV export now calls the backend streaming endpoints (`/api/v1/export/patients|bills`) instead of rebuilding the CSV in the browser: PHI masking, the formula-injection guard, the export rate limit and the `EXPORT_*` audit rows all apply to what the user actually clicks. Blob downloads resolve to `{ blob, filename }` and a JSON error body wrapped in a Blob is now decoded, so a 429 reaches the user with the backend's message. `tsc` + `vite build` clean; backend contract, audit rows, parser and the 429 path verified. Found F15 (stale Redis limiter state silently pins an old limit) → new batch M10. **
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 3 of 10 batches done (M1, M2, M3), plus new finding F15/M10 found while verifying M2. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 4 of 10 batches done (M1, M2, M3, M10), the last of which closes F15 found while verifying M2. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2785,7 +2787,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M3 ✅ complete (2026-09-11); M4–M10 ⬜ planned.** Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M3 + M10 ✅ complete (2026-09-11 → 2026-09-14); M4–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -3118,32 +3120,34 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 - CI is **not** added (local demo); the `check` script is the reusable seam if that changes.
 
-## Batch M10 — Rate limiter config actually applies 🟠
+## Batch M10 — Rate limiter config actually applies 🟠 ✅ Complete (2026-09-14)
 
 **Goal:** the configured rate limits are the limits that apply, and the 429 message stops lying about them.
 
-**Finding (F15), reproduced:** on an instance started with `--app.rate-limit.export-per-hour=3`, **21 consecutive exports all returned 200**. The Redis state explained it: `rate:export:<ip>` held `rate=3` (so the property *was* read), but the companion keys `{rate:export:<ip>}:value` (=82, the remaining-permit counter) and `{rate:export:<ip>}:permits` (an 18-entry sliding-window ZSET) had survived from the earlier 100/hour configuration. `trySetRate` only initialises a limiter that does not exist, so the new rate never took effect against the old budget. Deleting all three keys made the limiter behave exactly as configured: 3× `200`, then `429`.
+> Reproduced before the fix: an instance started with `--app.rate-limit.export-per-hour=3` served **21 consecutive exports as HTTP 200**. The Redis state explained it — `rate:export:<ip>` held `rate=3` (so the property *was* read), but the companion keys `{rate:export:<ip>}:value` (remaining permits, 82 left over from an earlier 100/hour configuration) and `{rate:export:<ip>}:permits` (an 18-entry sliding window) had survived, and Redisson's `trySetRate` only initialises a limiter that does not yet exist.
 
 ### Changes
 
 | # | Change | Files |
 |---|--------|-------|
-| M10.1 | Make a limit change self-applying: put the configured limit in the limiter **key** (e.g. `rate:export:<limit>:<ip>`), so a config change starts from a fresh limiter instead of inheriting a stale budget; drop the per-request `trySetRate` (or keep it only as first-touch initialisation) | `common/config/RateLimiterConfig.java` |
-| M10.2 | Stop hardcoding the limit in the 429 body — build the message from the configured value ("Max {n} exports per hour") | `common/config/RateLimiterConfig.java` |
-| M10.3 | Collapse the four near-identical inline filters into one factory (same key prefix/rate/message shape per endpoint), which is what makes M10.1/M10.2 a single implementation instead of four | `common/config/RateLimiterConfig.java` |
-| M10.4 | Document the "stale limiter keys pin an old limit" operational trap in the README rate-limiting section, with the cleanup command | `README.md` |
+| M10.1 | The effective limit is now part of the limiter key — `rate:export:100:3600:<ip>` — so a changed limit starts from a fresh limiter instead of inheriting a stale budget. `trySetRate` stays per-request (no new JVM state) and is now always called with a rate/interval that matches the key | `common/config/RateLimiterConfig.java` |
+| M10.2 | The 429 body is built from the configured value (`"…Max %d exports per hour."`) instead of the hardcoded "Max 5", which was wrong whenever `export-per-hour` differed | same |
+| M10.3 | The four ~25-line inline filters collapse into one `register(redissonClient, Limiter)` factory over a `Limiter(keyPrefix, rate, interval, messageTemplate, urlPatterns)` record — 130 → 99 lines, endpoints now declarative. Dropped the redundant `getRequestURI().contains("/login")` guard (the urlPatterns already scope it) and the inline FQN annotations | same |
+| M10.4 | README: the limiter key format, that a changed limit now applies immediately, and the **correct** cleanup one-liner — `*rate:*`, not `rate:*` | `README.md` |
 
 ### Verification
 
-- Fresh Redis (`redis-cli --scan --pattern 'rate:*' | xargs redis-cli del`), instance with `export-per-hour=3` → 3× `200` then `429` (already demonstrated with clean keys).
-- Change the limit on the **same** Redis without deleting keys: `export-per-hour=5` → the 6th export is refused (fails today).
-- The 429 body names the configured limit, not a hardcoded 5.
-- Login/refresh/export/reset limits all still enforced at their configured values; `mvn test` green.
+- **A changed limit applies without touching Redis** — the exact case that failed before: with `export-per-hour=3` exhausted, restarting against the same Redis with `5` and no key cleanup gave `200 200 200 200 200 429 429`, with `rate:export:3:3600:<ip>` (inert) sitting beside the live `rate:export:5:3600:<ip>`.
+- 429 body taken from config: `{"code":429,"message":"Export rate limit exceeded. Max 3 exports per hour."}` — and `Max 5` after the change.
+- All four limiters still enforce: login `10× 200` then `429`; keys show `rate:login:10:60`, `rate:refresh:20:60`, `rate:export:<n>:3600`, `rate:password-reset:5:60`.
+- `mvn test`: **166 tests, 0 failures**; both instances booted with limiters on and no key cleanup between runs.
+- **Found while verifying:** Redisson keeps **three** keys per limiter — the config hash plus `{…}:permits` and `{…}:value`. Deleting only the first (my first attempt at resetting the login counter) left the consumed budget behind, so the limiter still fired at #7 instead of #11. The README command was corrected to `*rate:*` accordingly.
 
 ### Notes
 
-- This is why the project's own `IntegrationTest` disables rate limiting ("counters survive across test runs and would randomly 429 the auth tests") — the stale-state behaviour is the root cause of that workaround.
-- Keep the h2 profile's limiters off (M1); this batch is about the limits being real wherever they are enabled.
+- Keys left over from a superseded limit are inert, not a correctness problem. They have no TTL, so a long-lived deployment that re-tunes limits often would accumulate them; the README one-liner clears everything.
+- Only `export-per-hour` is configurable today; the other three rates are literals in the factory. Making them `@Value`s is now a one-line change each if it is ever wanted.
+- Limits stay per-IP (`getRemoteAddr()`), so behind a proxy they key on the proxy address — pre-existing, out of scope here.
 
 ## Round completion criteria
 
