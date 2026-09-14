@@ -885,15 +885,12 @@ export interface ConversationVO {
 
 export interface LoginResponse {
   token?: string
-  accessToken?: string
   refreshToken?: string
-  expiresIn?: number
   userId?: number
   username?: string
   realName?: string
   roles?: string[]
   permissions?: string[]
-  user?: { id: number; username: string; realName?: string }
 }
 
 export interface PatientLoginResponse {

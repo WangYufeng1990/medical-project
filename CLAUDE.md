@@ -193,7 +193,7 @@ Key rules:
 
 **Subagent, or you directly for small changes.** React 18 + TypeScript + Vite 5 + CSS Modules. Follow these patterns:
 
-**API calls**: Staff views import from `api/<module>.ts` (uses `request` interceptor — auto-injects token, unwraps `Result<T>`). Patient views use `patientRequest` from `api/patientRequest.ts` (auto-injects patientToken but does NOT unwrap response — keep `r.data.data.xxx`).
+**API calls**: Both clients unwrap `Result<T>` — the `http` facade resolves to the payload, so use the result directly (`const p = await getPatientById(id)`), never `r.data.data`. Staff views import from `api/<module>.ts` (built on `request`, injects `token`). Patient views import `{ http }` from `api/patientRequest.ts` (injects `patientToken`). Both are instances of `createApiClient` in `api/createClient.ts` — shared client behaviour (refresh, error mapping, blob handling) belongs there, never in one instance only. `r.data.data` is correct only in the two login views, which call `/auth/login` and `/patient/login` with bare `axios` because they run before any token exists.
 
 **UI patterns**: Modals: `<div className={styles.modalOverlay} onClick={close}>` + `<div className={styles.modal} onClick={e => e.stopPropagation()}>`. Forms: `<form className={styles.formGrid}>` with `<div className={styles.formGroup}>`. Tables: `<table className={styles.table}>`. Buttons: `btnPrimary` (save), `btnSm` (secondary), `btnSmDanger` (delete). CSS: `../shared.module.css` (staff), `../../shared.module.css` (patient).
 
