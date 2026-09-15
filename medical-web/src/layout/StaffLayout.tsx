@@ -30,7 +30,9 @@ const menuItems: MenuItem[] = [
 export default function StaffLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [roles, setRoles] = useState<string[]>([])
+  // Menu visibility is read from the token on every render (hasAnyRole); this
+  // state exists only to re-render once after mount so the menu reflects the session.
+  const [, setRoles] = useState<string[]>([])
   const [unread, setUnread] = useState(0)
 
   useEffect(() => { setRoles(getUserRoles()) }, [])
@@ -49,18 +51,9 @@ export default function StaffLayout() {
     item.type === 'divider' || hasAnyRole(item.roles))
 
   const handleLogout = async () => {
-    try { await logout() } catch {} // best-effort: trigger audit trail
-    tokenStore.remove('token')
-    tokenStore.remove('refreshToken')
-    tokenStore.remove('userId')
-    tokenStore.remove('username')
-    tokenStore.remove('realName')
-    tokenStore.remove('patientToken')
-    tokenStore.remove('patientRefreshToken')
-    tokenStore.remove('patientInfo')
-    // Emergency break-glass tokens must not survive into the next user's session.
-    sessionStorage.removeItem('emergencyToken')
-    sessionStorage.removeItem('emergencyPatientId')
+    // Best-effort: the audit entry is nice to have, local sign-out must not depend on it.
+    try { await logout() } catch (e) { console.warn('logout request failed', e) }
+    tokenStore.clearAll()
     navigate('/login')
   }
 

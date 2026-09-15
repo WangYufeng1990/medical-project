@@ -21,7 +21,7 @@ src/main/java/com/example/medical/
 ├── MedicalApplication.java
 ├── common/
 │   ├── audit/           AuditLogAspect, @Auditable annotation, AuditLog entity+repository
-│   ├── base/            BaseEntity (id, createTime, updateTime, isDeleted), PageQuery
+│   ├── base/            BaseEntity (id, createTime, updateTime, isDeleted), PageQuery, Pages (page bounds)
 │   ├── config/          SecurityConfig, CacheConfig, JpaConfig,
 │   │                    AesAttributeConverter, RateLimiterConfig, DataInitializer
 │   ├── enums/           ResultCode (200, 400, 401, 403, 404, 409, 500)
@@ -39,7 +39,6 @@ src/main/java/com/example/medical/
 │   ├── integration/     ADT + lab results JSON API
 │   └── quality/         eCQM clinical quality measures
 ├── security/            JwtClaimMapper, SecurityConfig
-└── util/                CsvUtil
 ```
 
 ## Response Envelope
@@ -219,7 +218,7 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | POST | `/` | ADMIN,DOCTOR | body: BillFormDTO | Create bill (DRAFT) |
 | PUT | `/{id}/submit` | ADMIN,DOCTOR | path | Submit claim (DRAFT → SUBMITTED) |
 | PUT | `/{id}/adjudicate` | ADMIN | body: {insurancePayment, adjustment, claimNumber, adjudicationDate} | Adjudicate (SUBMITTED/PENDING). Rejects PAID/DENIED (409) |
-| PUT | `/{id}/pay` | ADMIN,DOCTOR | body: {paymentAmount, paymentMethod} | Staff-side payment (PENDING → PAID). DRAFT not payable. Rejects PAID/DENIED (409) |
+| PUT | `/{id}/pay` | ADMIN | body: {paymentAmount, paymentMethod} | Staff-side payment (PENDING → PAID). DRAFT not payable. Rejects PAID/DENIED (409) |
 | PUT | `/{id}/deny` | ADMIN | body: {reason} | Deny claim (PENDING → DENIED). Rejects PAID (409) |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete |
 

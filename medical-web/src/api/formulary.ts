@@ -1,5 +1,4 @@
 import { http } from './request'
-import { FormularyEntry } from '../types/entities'
 
 export interface FormularyCheckResult {
   found: boolean

@@ -21,10 +21,24 @@
         <java.version>17</java.version>
         <lombok.version>1.18.36</lombok.version>
         <hapi-fhir.version>7.4.0</hapi-fhir.version>
-        <hutool.version>5.8.34</hutool.version>
         <springdoc.version>2.7.0</springdoc.version>
         <redisson.version>3.40.2</redisson.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- hapi-fhir-structures-r4 reaches hapi-fhir-base at 7.4.0 directly and at
+                 6.4.1 through org.hl7.fhir.utilities/r4 (both 6.3.11). Maven's
+                 nearest-wins already resolved this to 7.4.0; pinning it states that
+                 explicitly and lets the enforcer's dependencyConvergence rule pass
+                 instead of leaving a silent mixed-version HAPI tree. -->
+            <dependency>
+                <groupId>ca.uhn.hapi.fhir</groupId>
+                <artifactId>hapi-fhir-base</artifactId>
+                <version>${hapi-fhir.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Spring Boot Starters -->
@@ -89,7 +103,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.7.0</version>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- Utilities -->
@@ -97,11 +111,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>cn.hutool</groupId>
-            <artifactId>hutool-all</artifactId>
-            <version>${hutool.version}</version>
         </dependency>
 
         <!-- Test -->
@@ -146,6 +155,31 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>enforce-build-environment</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.8,)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[17,)</version>
+                                </requireJavaVersion>
+                                <banDuplicatePomDependencyVersions/>
+                                <dependencyConvergence/>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

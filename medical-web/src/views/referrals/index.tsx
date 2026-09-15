@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getReferralPage, getPatientReferrals, createReferral, updateReferral } from '../../api/referral'
+import { getReferralPage, createReferral, updateReferral } from '../../api/referral'
 import { getPatientPage } from '../../api/patient'
 import { ReferralForm } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'

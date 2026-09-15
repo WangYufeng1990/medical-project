@@ -4,14 +4,24 @@ import { JwtPayload } from '../types/common'
 // tokens and cached PHI no longer persist in localStorage — closing the tab
 // ends the session and shrinks the XSS-exfiltration surface. Reads fall back
 // to localStorage once so existing sessions survive the migration.
-const STORAGE_KEYS = ['token', 'refreshToken', 'patientToken', 'patientRefreshToken',
-  'userId', 'username', 'realName', 'patientInfo'] as const
+const STAFF_KEYS = ['token', 'refreshToken', 'userId', 'username', 'realName'] as const
+const PATIENT_KEYS = ['patientToken', 'patientRefreshToken', 'patientInfo'] as const
+// Break-glass credentials must never survive into the next user's session.
+const EMERGENCY_KEYS = ['emergencyToken', 'emergencyPatientId'] as const
+
+const dropKeys = (keys: readonly string[]) => keys.forEach(k => {
+  sessionStorage.removeItem(k)
+  localStorage.removeItem(k)
+})
 
 export const tokenStore = {
   get: (k: string): string | null => sessionStorage.getItem(k) ?? localStorage.getItem(k),
   set: (k: string, v: string) => sessionStorage.setItem(k, v),
   remove: (k: string) => { sessionStorage.removeItem(k); localStorage.removeItem(k) },
-  clearAll: () => STORAGE_KEYS.forEach(k => { sessionStorage.removeItem(k); localStorage.removeItem(k) }),
+  /** Staff sign-out: clears every credential this browser holds. */
+  clearAll: () => dropKeys([...STAFF_KEYS, ...PATIENT_KEYS, ...EMERGENCY_KEYS]),
+  /** Patient portal sign-out: leaves a staff session in the same browser alone. */
+  clearPatient: () => dropKeys(PATIENT_KEYS),
 }
 
 export function readPatientInfo(): { name?: string; patientId?: number; username?: string } {

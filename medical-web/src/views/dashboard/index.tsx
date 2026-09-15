@@ -72,7 +72,7 @@ export default function Dashboard() {
 
       <div className={styles.sectionTitle}>Overview</div>
       <div className={styles.grid}>
-        {statCards.map((c, i) => (
+        {statCards.map(c => (
           <div key={c.label} className={`${styles.card} ${styles.statCard}`} onClick={() => navigate(c.path)} style={{ borderLeftColor: c.color }}>
             <div className={styles.label}>{c.label}</div>
             <div className={styles.value}>{stats ? stats[c.key] ?? 0 : 0}</div>

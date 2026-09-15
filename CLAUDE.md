@@ -18,10 +18,10 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Cache | Redis | 7.x, accessed via Spring Cache + Redisson |
 | Auth | Spring Boot OAuth2 Resource Server | external IdP (Okta / Auth0 / AWS Cognito) |
 | FHIR | HAPI FHIR R4 | 7.x (org.hl7.fhir.r4) |
-| API Doc | Springdoc OpenAPI | 2.6.0 (Swagger UI at /doc.html) |
+| API Doc | Springdoc OpenAPI | 2.7.0 (Swagger UI at /doc.html) |
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
-| Util | Lombok, Hutool | latest |
+| Util | Lombok | latest |
 | Testing | JUnit 5 + Spring Boot Test | 166 tests (128 integration + 38 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
@@ -56,7 +56,7 @@ medical-project/
 │       │   ├── audit/                  # @Auditable, AuditLogAspect, AuditLogWriter,
 │       │   │                           # AuditLog, AuditLogVO, AuditLogService,
 │       │   │                           # AuditLogController, KeyAudit, KeyAuditController
-│       │   ├── base/                   # BaseEntity, PageQuery
+│       │   ├── base/                   # BaseEntity, PageQuery, Pages (the only place page bounds live)
 │       │   ├── config/                 # SecurityConfig, AesCryptoUtil, FhirConfig,
 │       │   │                           # CacheConfig, RateLimiterConfig, DataInitializer, etc.
 │       │   ├── enums/                  # ResultCode
@@ -76,7 +76,6 @@ medical-project/
 │       │   ├── integration/            # Mirth Connect ADT + lab results JSON API
 │       │   └── quality/                # CMS eCQM quality measures
 │       ├── security/                   # JwtClaimMapper, LoginUser, DevJwtEncoder
-│       └── util/                       # CsvUtil
 │       └── resources/
 │           ├── application.yml
 │           ├── application-dev.yml
@@ -151,6 +150,11 @@ medical-project/
 - Write tests only when asked.
 - Happy path + one edge case + one failure mode. No more.
 - Use `@WebMvcTest` for controllers, `@DataJpaTest` for repositories.
+- **Read test results with `mvn clean test`, not `mvn test`** — Surefire never deletes old
+  reports, so `target/surefire-reports` keeps counting classes that no longer exist (it once
+  summed to 294 for a 166-test suite). CI must use `clean` for the same reason.
+- Integration tests: one class per module extending `IntegrationTestSupport`; log in per class
+  (`@BeforeAll`), never in a suite-wide static — see `docs/ROADMAP.md` M4.
 
 ### 9. Git
 - Do not init or commit unless explicitly asked.

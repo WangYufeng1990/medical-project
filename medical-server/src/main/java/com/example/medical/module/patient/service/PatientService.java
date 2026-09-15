@@ -1,6 +1,5 @@
 package com.example.medical.module.patient.service;
 
-import cn.hutool.core.util.StrUtil;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
@@ -15,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.medical.common.base.Pages;
 import org.springframework.data.domain.Pageable;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +29,7 @@ public class PatientService {
     public Page<PatientVO> page(long page, long size, String keyword, java.util.Set<Long> scopedPatientIds) {
         Specification<Patient> spec = (root, query, cb) -> {
             var predicates = cb.conjunction();
-            if (!StrUtil.isBlank(keyword)) {
+            if (StringUtils.hasText(keyword)) {
                 String pattern = "%" + keyword + "%";
                 // name, phoneMobile, email are encrypted — LIKE on ciphertext is not meaningful
                 // Only MRN can be searched at the database level

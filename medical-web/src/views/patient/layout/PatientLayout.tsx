@@ -38,7 +38,7 @@ export default function PatientLayout() {
     return () => { cancelled = true; clearInterval(timer) }
   }, [loc.pathname])
 
-  const handleLogout = () => { tokenStore.remove('patientToken'); tokenStore.remove('patientRefreshToken'); tokenStore.remove('patientInfo'); navigate('/patient/login') }
+  const handleLogout = () => { tokenStore.clearPatient(); navigate('/patient/login') }
   const { warningVisible, reset } = useIdleTimeout(handleLogout)
 
   return (
@@ -65,7 +65,7 @@ export default function PatientLayout() {
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
-        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch {}; tokenStore.remove('patientToken'); tokenStore.remove('patientRefreshToken'); tokenStore.remove('patientInfo'); navigate('/patient/login') }}>
+        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch (e) { console.warn('logout request failed', e) }; tokenStore.clearPatient(); navigate('/patient/login') }}>
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>

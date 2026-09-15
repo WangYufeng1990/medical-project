@@ -18,9 +18,12 @@ cd medical-web && npm run dev
 # API docs: http://localhost:8080/doc.html
 ```
 
-Prerequisites: JDK 17+ and Maven for the backend, Node 18+ for the frontend. The
-`h2` profile needs nothing else — Redis is only required by the `dev` and `prod`
-profiles.
+Prerequisites: JDK 17+ and Maven (3.8+) for the backend, **Node 20.9+** for the
+frontend (`medical-web/.nvmrc` pins it — `nvm use` in that directory). Node 16
+and below fail with `structuredClone is not defined` from inside ESLint rather
+than anything resembling a version error, so check `node -v` before blaming the
+config. The `h2` profile needs nothing else — Redis is only required by the
+`dev` and `prod` profiles.
 
 ### Local database (h2 profile)
 
@@ -257,6 +260,26 @@ app:
 # JWT_SIGNING_KEY=...             # ≥32 chars, INDEPENDENT from AES_KEY (key separation)
 # DB_USER=... DB_PASSWORD=...
 ```
+
+## Checks before committing
+
+```bash
+# Backend — 166 tests plus the build-environment guardrails (enforcer).
+# Use `clean`: Surefire never deletes old reports, so `target/surefire-reports`
+# keeps counting test classes that no longer exist.
+cd medical-server && mvn clean verify
+
+# Frontend — ESLint (the recurring-bug rules from CLAUDE.md) + tsc --noEmit
+cd medical-web && npm run check
+
+# Production bundle
+cd medical-web && npm run build
+```
+
+`npm run check` is the pair of `lint` + `typecheck`; both run standalone too. The
+backend guardrails (`maven-enforcer-plugin`) check the Maven/Java version,
+duplicate POM dependency versions and dependency convergence — the last one is
+why `hapi-fhir-base` is pinned in `dependencyManagement`.
 
 ## Documentation
 

@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { http } from '../../../api/patientRequest'
 import { PageResult } from '../../../types/common'
-import { BillVO, PayForm } from '../../../types/entities'
+import { BillVO } from '../../../types/entities'
 import { PAGE_SIZE, BILL_STATUS_COLOR } from '../../../utils/labels'
 import styles from '../../shared.module.css'
 

@@ -1,6 +1,5 @@
 package com.example.medical.module.system.service;
 
-import cn.hutool.core.util.StrUtil;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
@@ -21,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import com.example.medical.common.base.Pages;
 import org.springframework.data.domain.Pageable;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +32,7 @@ public class SysUserService {
 
     public Page<SysUserVO> page(long page, long size, String keyword) {
         Specification<SysUser> spec = (root, query, cb) -> {
-            if (StrUtil.isBlank(keyword)) return null;
+            if (!StringUtils.hasText(keyword)) return null;
             String pattern = "%" + keyword + "%";
             return cb.or(
                     cb.like(root.get("username"), pattern),
