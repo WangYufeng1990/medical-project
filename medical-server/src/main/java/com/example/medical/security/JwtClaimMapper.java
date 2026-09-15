@@ -64,11 +64,9 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         if (perms == null) perms = List.of();
 
         String scope = jwt.getClaimAsString("scope");
-        Long emergencyPatientId = null;
-        try {
-            Number n = jwt.getClaim("patientId");
-            if (n != null) emergencyPatientId = n.longValue();
-        } catch (Exception ignored) {}
+        // The claim arrives as a Number from our own tokens; tolerate a numeric
+        // string rather than letting a type mismatch throw and be swallowed.
+        Long emergencyPatientId = toLong(jwt.getClaim("patientId"));
 
         List<GrantedAuthority> authorities = new ArrayList<>();
         for (String group : groups) {
@@ -83,6 +81,18 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
 
         LoginUser loginUser = new LoginUser(userId, username, "", scopes, emergencyPatientId, scope);
         return new UsernamePasswordAuthenticationToken(loginUser, null, authorities);
+    }
+
+    private static Long toLong(Object claim) {
+        if (claim instanceof Number n) return n.longValue();
+        if (claim instanceof String s && !s.isBlank()) {
+            try {
+                return Long.valueOf(s);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private Long extractUserId(Jwt jwt) {

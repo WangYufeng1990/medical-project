@@ -242,7 +242,8 @@ public class PatientAuthController {
                     "reason=" + reason,
                     httpRequest != null ? httpRequest.getRemoteAddr() : "unknown",
                     java.time.Instant.now());
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Failed to audit patient login failure for {}", username, e);
         }
     }
 

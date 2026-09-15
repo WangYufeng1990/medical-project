@@ -513,6 +513,21 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 ### Audit Logging
 AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, IP, timestamp → `audit_log` table. Applied to all CUD service operations. **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
 
+### Error status contract
+
+`Result<T>` carries the same code as the HTTP status. The mapping is deliberate, not incidental:
+
+| Situation | Status |
+|-----------|--------|
+| Business rule rejected (`BusinessException`), bean validation, malformed JSON, a non-numeric path variable, a missing parameter | **400** |
+| Not authenticated / token rejected | **401** (empty body, `WWW-Authenticate: Bearer`) |
+| Authenticated but not permitted (`@PreAuthorize`) | **403** |
+| Unknown path | **404** `No such endpoint` |
+| Verb not allowed on a known path | **405** `Method not allowed` |
+| Anything else | **500**, logged with a stack trace |
+
+An unrecognised path or verb used to answer 500 because the catch-all handler swallowed Spring's `NoResourceFoundException`/`HttpRequestMethodNotSupportedException` — clients saw a server error for their own mistake (fixed in M6).
+
 ### Pagination (all list endpoints)
 
 `?page` is 1-based; `?size` is capped at **200** (`common/base/Pages.java`, also referenced by `PageQuery`). Out-of-range values are **rejected with 400**, never clamped — a client asking for 10 000 rows is told no rather than silently given 200. Two message shapes exist because two mechanisms enforce the same limit: raw `@RequestParam` endpoints answer `{"code":400,"message":"Size must be between 1 and 200"}`, `PageQuery`-bound endpoints answer `size: Size must be at most 200` (bean validation). FHIR endpoints use their own `_count` cap of 500, per the FHIR contract.

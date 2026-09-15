@@ -9,6 +9,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -62,13 +67,44 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Bounds/format violations that Spring surfaces as IllegalArgumentException
-     * (e.g. PageRequest.of with page=0) — 400, not 500 (Review III M10/L1).
+     * Client-side binding mistakes: a non-numeric path variable, a missing required
+     * parameter, malformed JSON. Without these they fall through to the catch-all
+     * below and are reported as 500s, which blames the server for the caller's typo.
+     * <p>
+     * There is deliberately no handler for a bare {@link IllegalArgumentException}:
+     * page bounds are enforced by {@code Pages} (a BusinessException) and by
+     * {@code PageQuery} (bean validation), and anything else throwing one is a
+     * programming error worth logging as a 500 rather than dressing up as a 400.
      */
-    @ExceptionHandler(IllegalArgumentException.class)
+    @ExceptionHandler({
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class,
+            HttpMessageNotReadableException.class,
+    })
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Result<Void> handleIllegalArgument(IllegalArgumentException e) {
-        return Result.fail(400, e.getMessage() != null ? e.getMessage() : "Invalid request argument");
+    public Result<Void> handleBadRequest(Exception e) {
+        log.warn("Rejected malformed request: {}", e.getMessage());
+        return Result.fail(400, "Malformed request");
+    }
+
+    /**
+     * A path that does not exist, or a verb the endpoint does not accept. Both are
+     * client mistakes that the catch-all below would otherwise report as 500s —
+     * Spring Boot 3.2+ raises NoResourceFoundException for unmapped paths, and that
+     * was reaching the catch-all.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoSuchEndpoint(NoResourceFoundException e) {
+        log.warn("No endpoint for {}", e.getResourcePath());
+        return Result.fail(404, "No such endpoint");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    public Result<Void> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        log.warn("Method not allowed: {}", e.getMessage());
+        return Result.fail(405, "Method not allowed");
     }
 
     @ExceptionHandler(Exception.class)

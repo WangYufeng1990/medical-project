@@ -25,6 +25,12 @@ public class AesCryptoUtil {
     private static final int GCM_TAG_LENGTH = 128;
     private static final SecureRandom RNG = new SecureRandom();
     private static final byte VERSION_CURRENT = 0x01;
+    /**
+     * key_audit event holding just the rotated key's fingerprint (see
+     * {@link #recordRuntimeRotation}). Keep it within key_audit.event_type's
+     * VARCHAR(20) — a longer name fails the insert at runtime (verified the hard way).
+     */
+    private static final String FINGERPRINT_EVENT = "KEY_ROT_FINGERPRINT";
 
     @Value("${app.aes.key}")
     private String configuredKey;
@@ -42,6 +48,12 @@ public class AesCryptoUtil {
     static void setKeyAuditRepository(KeyAuditRepository repo) {
         keyAuditRepo = repo;
     }
+
+    // ── test-only key seam ──
+    // Package-private on purpose: JPA instantiates the converter outside Spring, so
+    // the key is process-wide static state and a test that swaps it must be able to
+    // put the previous value back (see AesAttributeConverterTest). These are the only
+    // entry points that bypass app.aes.key/rotate, and nothing in src/main calls them.
 
     static void initializeForTest(String key) {
         initializeForTest(key, null);
@@ -92,25 +104,15 @@ public class AesCryptoUtil {
             CURRENT_KEY = deriveKey(configuredKey);
             currentRawKey = configuredKey;
             previousRawKey = null;
-            boolean wasRotated = false;
             if (configuredPreviousKey != null && !configuredPreviousKey.isBlank()) {
                 PREVIOUS_KEY = deriveKey(configuredPreviousKey);
                 previousRawKey = configuredPreviousKey;
                 rotationActive = true;
-                wasRotated = true;
                 log.info("AES key rotation active: current=v1, previous=v0");
             } else {
                 PREVIOUS_KEY = null;
                 rotationActive = false;
                 log.info("AES-GCM encryption key initialized (single-key mode)");
-            }
-            if (keyAuditRepo != null) {
-                KeyAudit audit = new KeyAudit();
-                audit.setEventType(wasRotated ? "KEY_ROTATION" : "KEY_INIT");
-                audit.setKeyVersion(wasRotated ? "v1+v0" : "v1");
-                audit.setDetail(wasRotated ? "Key rotation detected on startup" : "Single key initialized on startup");
-                keyAuditRepo.save(audit);
-                warnIfStaleConfigAfterRuntimeRotation();
             }
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize AES encryption key", e);
@@ -124,14 +126,33 @@ public class AesCryptoUtil {
      * key, making post-rotation ciphertext unreadable. Warns loudly instead
      * of silently corrupting.
      */
+    /**
+     * Records the startup key event and runs the restart-consistency check.
+     * <p>
+     * Called by {@link KeyAuditBridge} once the audit repository is wired, not from
+     * {@link #init()}: a {@code @PostConstruct} here runs before the bridge, so
+     * {@code keyAuditRepo} is still null and neither the KEY_INIT row nor the
+     * mismatch check ever happened (verified — key_audit held no KEY_INIT rows).
+     */
+    void recordStartupAndCheckRotation() {
+        if (keyAuditRepo == null) return;
+        try {
+            KeyAudit audit = new KeyAudit();
+            audit.setEventType(rotationActive ? "KEY_ROTATION" : "KEY_INIT");
+            audit.setKeyVersion(rotationActive ? "v1+v0" : "v1");
+            audit.setDetail(rotationActive ? "Key rotation detected on startup" : "Single key initialized on startup");
+            keyAuditRepo.save(audit);
+            warnIfStaleConfigAfterRuntimeRotation();
+        } catch (Exception e) {
+            log.error("Failed to record the key startup audit", e);
+        }
+    }
+
     private void warnIfStaleConfigAfterRuntimeRotation() {
         try {
-            keyAuditRepo.findTopByEventTypeOrderByIdDesc("KEY_ROTATION").ifPresent(last -> {
-                String detail = last.getDetail();
-                if (detail == null || !detail.contains("newKey fingerprint=")) return;
-                String recorded = detail.substring(detail.indexOf("newKey fingerprint=") + "newKey fingerprint=".length());
-                int end = recorded.indexOf('.');
-                if (end > 0) recorded = recorded.substring(0, end);
+            keyAuditRepo.findTopByEventTypeOrderByIdDesc(FINGERPRINT_EVENT).ifPresent(last -> {
+                String recorded = last.getDetail();
+                if (recorded == null || recorded.isBlank()) return;
                 String configured = fingerprint(configuredKey);
                 if (!recorded.equals(configured)) {
                     log.error("KEY ROTATION CONFIG MISMATCH: key_audit records a runtime rotation with newKey "
@@ -149,6 +170,15 @@ public class AesCryptoUtil {
     /**
      * Encrypt with the current key. Output is hex-encoded with a version byte prefix.
      * Format: [version:1B][IV:12B][ciphertext+tag:N B] → hex
+     * <p>
+     * Throws when encryption fails instead of returning null. Encryption cannot fail
+     * for a single value — the only causes are process-wide (no key initialised, a
+     * JCE provider problem, no memory) — so returning null would turn a broken
+     * process into silently empty clinical fields: the write succeeds, the caller
+     * is told 200, and the PHI is gone. Failing the write rolls the transaction
+     * back instead. The read side keeps its placeholder behaviour on purpose:
+     * a single unreadable row must not break a list endpoint, but a value that
+     * cannot be encrypted must never be stored as if it were empty.
      */
     public static String encrypt(String plaintext) {
         if (plaintext == null) return null;
@@ -168,8 +198,10 @@ public class AesCryptoUtil {
             buffer.put(ciphertext);
             return bytesToHex(buffer.array());
         } catch (Exception e) {
-            log.error("AES-GCM encryption failed — storing null", e);
-            return null;
+            throw new IllegalStateException(
+                    "AES-GCM encryption failed — refusing to write the field. "
+                    + "The encryption key is probably unset or the JCE provider is broken; "
+                    + "storing a placeholder would silently lose this value.", e);
         }
     }
 
@@ -312,12 +344,20 @@ public class AesCryptoUtil {
     private static void recordRuntimeRotation(String newKey) {
         if (keyAuditRepo == null) return;
         try {
-            KeyAudit audit = new KeyAudit();
-            audit.setEventType("KEY_ROTATION");
-            audit.setKeyVersion("v1+v0");
-            audit.setDetail("Runtime rotation. newKey fingerprint=" + fingerprint(newKey)
-                    + ". Update AES_KEY/AES_KEY_PREVIOUS in env before restart.");
-            keyAuditRepo.save(audit);
+            KeyAudit rotation = new KeyAudit();
+            rotation.setEventType("KEY_ROTATION");
+            rotation.setKeyVersion("v1+v0");
+            rotation.setDetail("Runtime rotation. Update AES_KEY/AES_KEY_PREVIOUS in env before restart.");
+            keyAuditRepo.save(rotation);
+
+            // The fingerprint gets its own row so the restart check can compare a
+            // value instead of parsing the human-readable detail above (it used to
+            // substring/indexOf that sentence, so editing the wording broke it).
+            KeyAudit fingerprint = new KeyAudit();
+            fingerprint.setEventType(FINGERPRINT_EVENT);
+            fingerprint.setKeyVersion("v1+v0");
+            fingerprint.setDetail(AesCryptoUtil.fingerprint(newKey));
+            keyAuditRepo.save(fingerprint);
         } catch (Exception e) {
             log.error("Failed to record key rotation audit", e);
         }

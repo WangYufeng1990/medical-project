@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.time.temporal.Temporal;
@@ -150,20 +151,44 @@ public class AuditLogAspect {
         Object[] args = joinPoint.getArgs();
         for (Object arg : args) {
             if (arg == null) continue;
-            try {
-                var m = arg.getClass().getMethod("getUsername");
-                Object result = m.invoke(arg);
-                if (result != null) return result.toString();
-            } catch (Exception ignored) {}
-            // Check for nested "username" field via getter pattern
-            try {
-                var f = arg.getClass().getDeclaredField("username");
-                f.setAccessible(true);
-                Object val = f.get(arg);
-                if (val != null) return val.toString();
-            } catch (Exception ignored) {}
+            // Look the accessor up instead of catching NoSuchMethodException on every
+            // argument of every audited call: a miss is the normal case, not an error.
+            Method getter = noArgMethod(arg.getClass(), "getUsername");
+            if (getter != null) {
+                Object value = invokeQuietly(getter, arg);
+                if (value != null) return value.toString();
+            }
+            Object field = readFieldQuietly(arg, "username");
+            if (field != null) return field.toString();
         }
         return null;
+    }
+
+    private static Method noArgMethod(Class<?> type, String name) {
+        for (Method method : type.getMethods()) {
+            if (method.getName().equals(name) && method.getParameterCount() == 0) return method;
+        }
+        return null;
+    }
+
+    private static Object invokeQuietly(Method method, Object target) {
+        try {
+            return method.invoke(target);
+        } catch (ReflectiveOperationException e) {
+            log.trace("Audit: could not read {}.{}", target.getClass().getSimpleName(), method.getName(), e);
+            return null;
+        }
+    }
+
+    private static Object readFieldQuietly(Object target, String name) {
+        try {
+            Field field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (ReflectiveOperationException e) {
+            log.trace("Audit: no readable {} on {}", name, target.getClass().getSimpleName(), e);
+            return null;
+        }
     }
 
     private String buildDetail(ProceedingJoinPoint joinPoint, boolean phiAccess) {
@@ -257,7 +282,8 @@ public class AuditLogAspect {
         try {
             Object data = result.getClass().getMethod("getData").invoke(result);
             return data != null ? data : result;
-        } catch (Exception ignored) {
+        } catch (ReflectiveOperationException e) {
+            log.trace("Audit: result has no readable getData()", e);
             return result;
         }
     }
@@ -265,10 +291,12 @@ public class AuditLogAspect {
     private static Long extractId(Object obj, String field) {
         if (obj == null) return null;
         String getter = "get" + Character.toUpperCase(field.charAt(0)) + field.substring(1);
+        Method method = noArgMethod(obj.getClass(), getter);
         try {
-            Object value = obj.getClass().getMethod(getter).invoke(obj);
+            Object value = method == null ? null : method.invoke(obj);
             return value instanceof Number n ? n.longValue() : null;
-        } catch (Exception ignored) {
+        } catch (ReflectiveOperationException e) {
+            log.trace("Audit: no readable {}.{}", obj.getClass().getSimpleName(), getter, e);
             return null;
         }
     }

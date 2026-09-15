@@ -109,7 +109,8 @@ public class AuthService {
                     "reason=" + reason,
                     request != null ? request.getRemoteAddr() : "unknown",
                     java.time.Instant.now());
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Failed to audit login failure for {} ({})", username, reason, e);
         }
     }
 
