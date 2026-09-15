@@ -37,7 +37,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -49,6 +48,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.example.medical.module.appointment.entity.AppointmentStatus;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @RestController
 @RequestMapping("/api/v1/patient/me")
@@ -132,7 +133,7 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size,
+        Pageable pageable = Pages.of(page, size,
                 Sort.by(Sort.Direction.DESC, "appointmentTime"));
         var result = appointmentRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
@@ -169,7 +170,7 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size,
+        Pageable pageable = Pages.of(page, size,
                 Sort.by(Sort.Direction.DESC, "createTime"));
         var result = prescriptionRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
@@ -211,7 +212,7 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size,
+        Pageable pageable = Pages.of(page, size,
                 Sort.by(Sort.Direction.DESC, "createTime"));
         var result = billRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
@@ -352,7 +353,7 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        var pageable = org.springframework.data.domain.PageRequest.of(page - 1, size,
+        var pageable = Pages.of(page, size,
                 org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime"));
         var result = auditLogRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),

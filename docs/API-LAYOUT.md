@@ -514,6 +514,12 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 ### Audit Logging
 AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, IP, timestamp → `audit_log` table. Applied to all CUD service operations. **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
 
+### Pagination (all list endpoints)
+
+`?page` is 1-based; `?size` is capped at **200** (`common/base/Pages.java`, also referenced by `PageQuery`). Out-of-range values are **rejected with 400**, never clamped — a client asking for 10 000 rows is told no rather than silently given 200. Two message shapes exist because two mechanisms enforce the same limit: raw `@RequestParam` endpoints answer `{"code":400,"message":"Size must be between 1 and 200"}`, `PageQuery`-bound endpoints answer `size: Size must be at most 200` (bean validation). FHIR endpoints use their own `_count` cap of 500, per the FHIR contract.
+
+**Behaviour change (M7):** before this round the raw-parameter endpoints had no bound at all and `?size=9999` was served; the frontend used exactly that for CSV export and `size: 999` for a patient dropdown.
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 

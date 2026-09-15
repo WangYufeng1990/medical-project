@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import com.example.medical.module.appointment.entity.AppointmentStatus;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +48,7 @@ public class AppointmentService {
             }
             return predicates;
         };
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         return appointmentRepository.findAll(spec, pageable).map(this::toVO);
     }
 
@@ -101,7 +103,7 @@ public class AppointmentService {
                 (root, query, cb) -> cb.and(
                         cb.equal(root.get("appointmentId"), a.getId()),
                         cb.equal(root.get("patientId"), a.getPatientId())),
-                org.springframework.data.domain.PageRequest.of(0, 1))
+                PageRequest.of(0, 1))
                 .hasContent();
         if (exists) return;
 

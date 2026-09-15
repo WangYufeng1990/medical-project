@@ -18,7 +18,6 @@ import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Slf4j
 @Service
@@ -49,7 +50,7 @@ public class PrescriptionService {
             }
             return predicates;
         };
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         return prescriptionRepository.findAll(spec, pageable).map(this::toVO);
     }
 

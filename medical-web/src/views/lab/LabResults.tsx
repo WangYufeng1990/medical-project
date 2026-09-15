@@ -20,7 +20,7 @@ export default function LabResults() {
 
   const { data: patients } = useQuery({
     queryKey: ['patients', 'all'],
-    queryFn: () => getPatientPage({ page: 1, size: 999 }).then(r => r.records ?? []),
+    queryFn: () => getPatientPage({ page: 1, size: 200 }).then(r => r.records ?? []),
   })
 
   const { data: catalog } = useQuery({

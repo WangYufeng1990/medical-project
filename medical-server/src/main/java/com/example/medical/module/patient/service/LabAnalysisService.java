@@ -8,12 +8,12 @@ import com.example.medical.module.patient.repository.LoincCatalogRepository;
 import com.example.medical.module.patient.repository.ObservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import com.example.medical.common.base.Pages;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +23,7 @@ public class LabAnalysisService {
     private final LoincCatalogRepository loincCatalogRepository;
 
     public PageResult<ObservationVO> pageObservations(Long patientId, String loincCode, long page, long size) {
-        Pageable pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         Page<Observation> result = (loincCode == null || loincCode.isBlank())
                 ? observationRepository.findByPatientIdOrderByEffectiveDateDesc(patientId, pageable)
                 : observationRepository.findByPatientIdAndLoincCodeOrderByEffectiveDateDesc(patientId, loincCode, pageable);

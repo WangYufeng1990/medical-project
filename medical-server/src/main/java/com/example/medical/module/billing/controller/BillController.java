@@ -8,6 +8,7 @@ import com.example.medical.module.billing.service.BillService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -92,6 +93,7 @@ public class BillController {
     static class AdjudicateRequest {
         private BigDecimal adjustment;
         @Positive private BigDecimal insurancePayment;
+        @Size(max = 71, message = "Claim number must be at most 71 characters")
         private String claimNumber;
         private LocalDate adjudicationDate;
     }

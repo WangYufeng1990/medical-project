@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -59,7 +61,7 @@ public class ChatService {
     public PageResult<MessageVO> getConversation(Long currentUserId, String currentUserType,
                                                  Long partnerId, String partnerType,
                                                  long page, long size) {
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         var result = messageRepository.findMessagesBetween(
                 currentUserId, currentUserType, partnerId, partnerType, pageable);
 

@@ -10,10 +10,11 @@ import com.example.medical.module.system.entity.SysRole;
 import com.example.medical.module.system.repository.SysRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +30,7 @@ public class SysRoleService {
                     cb.like(root.get("roleName"), pattern),
                     cb.like(root.get("roleCode"), pattern));
         };
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         return sysRoleRepository.findAll(spec, pageable).map(SysRoleVO::fromEntity);
     }
 

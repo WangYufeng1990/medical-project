@@ -12,7 +12,6 @@ import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import com.example.medical.common.base.Pages;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -32,7 +32,7 @@ public class PriorAuthController {
     @GetMapping("/prior-auths")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<PriorAuthVO>> list(@RequestParam(required = false) Long patientId, @Valid PageQuery pageQuery) {
-        var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
+        var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
         org.springframework.data.jpa.domain.Specification<PriorAuth> spec = null;
         if (patientId != null) {

@@ -199,7 +199,7 @@ Key rules:
 
 **Falsy safety (CRITICAL)**: `!= null` for numeric checks, `?? '-'` for display fallback, `!== ''` for empty form checks. **NEVER use `||` for values that could be `0` or `false`.** `Number(x) || null` drops zero — use `x !== '' ? Number(x) : null`. `profile[f] || ''` drops 0/false — use `?? ''`.
 
-**Common patterns**: Patient dropdowns: `getPatientPage({ page: 1, size: 999 })`. Delete confirmation: `confirm('Delete?')`. Simple input: `prompt('reason:')`. Pagination: `page*PAGE_SIZE>=total`. Import order: react → API modules → CSS → utils.
+**Common patterns**: Patient dropdowns: `getPatientPage({ page: 1, size: 200 })` (200 is the server cap — `common/base/Pages.java`; larger sizes are rejected with 400). Delete confirmation: `confirm('Delete?')`. Simple input: `prompt('reason:')`. Pagination: `page*PAGE_SIZE>=total`. Import order: react → API modules → CSS → utils.
 
 **Vite cache**: If changes don't appear, kill all vite processes and restart with `--force`.
 

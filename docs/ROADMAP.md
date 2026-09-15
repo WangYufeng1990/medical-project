@@ -16,7 +16,7 @@
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 >
-> **Round 50 M5 ✅ complete (2026-09-14) — domain status enum + mapping fixes (F4).** `AppointmentStatus` (SCHEDULED/ARRIVED/CANCELLED/COMPLETED/NO_SHOW) replaces every magic appointment integer including the JPQL `status <> 2` (now a parameter); the DB column and wire format stay numeric. Four confirmed defects fixed and verified live against seeded data: a **no-show visit no longer exports as a cancelled Encounter** (it emits none), "Not Hispanic or Latino" no longer returns the **Hispanic** OMB code, preferred language moved from a mislabelled `us-core-birthsex` extension to `Patient.communication.language`, and the codebase's only bare `orElseThrow()` now returns 404 instead of 500. **166 tests green.** **\n>\n> **Round 50 M4 ✅ complete (2026-09-14) — test-suite decomposability (F3).** The 2,109-line / 128-test `IntegrationTest` monolith is now 17 classes along its own section seams plus `IntegrationTestSupport`; suite-wide static tokens are gone (each class logs in its own `@BeforeAll`), cleanup runs per class, and **166 tests pass in both class orders** (17 s, one shared context) with single classes and single methods runnable alone. The split immediately exposed a real defect the old single class had been masking: `AesAttributeConverterTest` swapped the **process-wide AES key** and never restored it, so every integration class running after it in the same JVM 500'd on save (seeded rows decrypted to `[DECRYPT_FAILED]`) — fixed with a snapshot/restore seam. **\n>\n> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
+> **Round 50 M7 ✅ complete (2026-09-14) — pagination unification + input bounds (F8, F11).** One `Pages.of(...)` builds every user-facing pageable and owns the 200-row cap: `?size=9999` (which the frontend really used) is now **400 instead of 200**, `page=0` is 400 instead of 500, and the 19 raw-`@RequestParam` endpoints that had *no* bound are covered by the same rule. `@Size` bounds derived from the AES storage rule (`VARCHAR(n)` fits `n/2 - 29` plaintext chars) turn an over-long `medicalHistory` into a 400 instead of a database error — verified exact at the boundary (1 971 accepted, 3 000 rejected). Also fixed FHIR `_count=0` dividing by zero. **166 tests green, tsc clean.** **\n>\n> **Round 50 M5 ✅ complete (2026-09-14) — domain status enum + mapping fixes (F4).** `AppointmentStatus` (SCHEDULED/ARRIVED/CANCELLED/COMPLETED/NO_SHOW) replaces every magic appointment integer including the JPQL `status <> 2` (now a parameter); the DB column and wire format stay numeric. Four confirmed defects fixed and verified live against seeded data: a **no-show visit no longer exports as a cancelled Encounter** (it emits none), "Not Hispanic or Latino" no longer returns the **Hispanic** OMB code, preferred language moved from a mislabelled `us-core-birthsex` extension to `Patient.communication.language`, and the codebase's only bare `orElseThrow()` now returns 404 instead of 500. **166 tests green.** **\n>\n> **Round 50 M4 ✅ complete (2026-09-14) — test-suite decomposability (F3).** The 2,109-line / 128-test `IntegrationTest` monolith is now 17 classes along its own section seams plus `IntegrationTestSupport`; suite-wide static tokens are gone (each class logs in its own `@BeforeAll`), cleanup runs per class, and **166 tests pass in both class orders** (17 s, one shared context) with single classes and single methods runnable alone. The split immediately exposed a real defect the old single class had been masking: `AesAttributeConverterTest` swapped the **process-wide AES key** and never restored it, so every integration class running after it in the same JVM 500'd on save (seeded rows decrypted to `[DECRYPT_FAILED]`) — fixed with a snapshot/restore seam. **\n>\n> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
 >
 > **Round 50 M3 ✅ complete (2026-09-11) — API client consolidation + auth contract.** `api/createClient.ts` now holds the single implementation of token injection, single-flight refresh, proactive refresh, the blob branch and error mapping; `request`/`patientRequest` are 14/12-line instances, so all 45 importing files were untouched. The refresh-failure **hang is fixed** (parked requests are now rejected instead of silently dropped), the refresh reads only `token` and fails loudly when it is missing, `LoginResponse` no longer invents `accessToken`/`expiresIn`/`user`, and the proactive timer got a 5 s floor that removes a 0 ms refresh loop. Verified by executing the real module against a fake 401/refresh server (5 cases) + tsc/build. `tsc`/`build` clean, bundle 435.28 → 433.41 kB. **
 >
@@ -24,7 +24,7 @@
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 6 of 10 batches done (M1, M2, M3, M4, M5, M10) — F15 was closed by M10, F3 by M4 and F4 by M5. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 7 of 10 batches done (M1, M2, M3, M4, M5, M7, M10) — F15 closed by M10, F3 by M4, F4 by M5, F8+F11 by M7. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2787,7 +2787,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M5 + M10 ✅ complete (2026-09-11 → 2026-09-14); M6–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M5, M7, M10 ✅ complete (2026-09-11 → 2026-09-14); M6, M8, M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -3065,27 +3065,42 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 - M6.1 is a deliberately visible behaviour change: PHI writes fail instead of silently dropping data.
 
-## Batch M7 — Pagination unification + input bounds 🟠
+## Batch M7 — Pagination unification + input bounds 🟠 ✅ Complete (2026-09-14)
 
-**Goal:** one pagination contract with a real bound, and encrypted columns that cannot be overflowed at runtime.
+**Goal:** one pagination contract with a real bound, and encrypted columns that cannot be overflowed into a 500.
 
 ### Changes
 
 | # | Change | Files |
 |---|--------|-------|
-| M7.1 | Single entry point for building pageables (e.g. `common/base/Pages.of(page, size)` enforcing `1..200`), or migrate the remaining endpoints to `@Valid PageQuery`; replace the 19 raw `@RequestParam page/size` sites in 11 files | `common/base/PageQuery.java`; new `common/base/Pages.java` (or equivalent); `PatientController`, `BillController`, `AppointmentController`, `PrescriptionController`, `ChatController`, `PatientChatController`, `SysUserController`, `SysRoleController`, `AuditLogController`, `LabResultController`, `PatientPortalController` |
-| M7.2 | Frontend: drop `size: 9999` (gone in M2) and `size: 999` (`views/lab/LabResults.tsx:23`) to the norm; update CLAUDE.md's pagination guidance | `views/lab/LabResults.tsx`; `CLAUDE.md` |
-| M7.3 | Document the encrypted-capacity rule in `schema.sql` next to the affected columns and add `@Size` bounds that fit (`2 × (n + 29) ≤ declared width`) on the free-text PHI fields | `resources/sql/schema.sql`; `module/patient/dto/PatientFormDTO.java`; `module/prescription/dto/PrescriptionItemDTO.java`; other PHI-bearing form DTOs |
+| M7.1 | New `Pages.of(page, size[, sort])` is the only place a user-facing page becomes a pageable, and the only place the bounds live (`MAX_SIZE = 200`, `DEFAULT_SIZE = 10`). Out-of-range is **rejected with 400, not clamped**. 20 sites across 17 files now route through it — previously every service and several controllers built `PageRequest.of((int)(page-1), (int)size)` by hand, and the raw-`@RequestParam` half had **no bound at all** | `common/base/Pages.java` (new); 17 controllers/services |
+| M7.2 | `PageQuery` references `Pages.MAX_SIZE` / `Pages.DEFAULT_SIZE`, so the limit cannot drift between the two binding styles (one numeric source of truth) | `common/base/PageQuery.java` |
+| M7.3 | `@Size` on the PHI fields whose columns are `VARCHAR` — the limits are derived, not guessed: hex ciphertext of `1 + 12 + plaintext + 16` bytes means `VARCHAR(n)` fits `n/2 - 29` characters. `medical_history` 4000 → **1971**, `allergies` 2000 → **971**, the `VARCHAR(200)` cluster → **71**, `email` 300 → **121**. One class-level javadoc per DTO explains where the odd numbers come from | `patient/dto/PatientFormDTO.java`; `system/dto/SysUserFormDTO.java`; `system/dto/SysUserUpdateFormDTO.java`; `billing/controller/BillController.java` (claim number) |
+| M7.4 | Frontend asked for `size: 999` on the lab page (would now 400) → 200; CLAUDE.md's `size: 999` guidance → 200 with the reason | `views/lab/LabResults.tsx`; `CLAUDE.md` |
+| M7.5 | Found while auditing `_count`: FHIR `_count=0` **divided by zero** in the patient search (`offset / maxCount`) and built a zero-size page in the observation search. Both now floor at 1 | `FhirPatientController`; `FhirObservationController` |
+| M7.6 | `docs/API-LAYOUT.md`: new Pagination section documenting the cap, the two 400 message shapes and the behaviour change | `docs/API-LAYOUT.md` |
 
 ### Verification
 
-- `GET /api/v1/patients?size=9999` → 400 with a clear message; `?size=200` works; `?page=0` → 400.
-- Creating a patient with a 3,000-character `medicalHistory` → 400 validation error, not a 500 database error.
-- `mvn test` green; `npx tsc --noEmit` clean.
+- `mvn clean test`: **166 tests, 0 failures**; `npx tsc --noEmit` clean.
+- Live against a copy of the seeded DB:
+
+  | Request | Before | After |
+  |---------|--------|-------|
+  | `GET /api/v1/patients?page=1&size=9999` | 200, tried to serve 9999 | **400 `Size must be between 1 and 200`** |
+  | `size=201` / `size=0` | 200 / 500 | **400** both |
+  | `size=200` | 200 | 200 (unchanged) |
+  | `page=0` | 500 (IllegalArgumentException) | **400 `Page must be at least 1`** |
+  | `GET /api/v1/patients/100/vitals?size=9999` (PageQuery) | 200 | **400 `size: Size must be at most 200`** |
+  | `POST /api/v1/patients` with a 3 000-char `medicalHistory` | DB error / 500 | **400 `Medical history must be at most 1971 characters`** |
+  | same with 1 971 chars | 200 | **200** — the derived boundary is exact |
 
 ### Notes
 
-- API-visible behaviour change (`size > 200` now rejected) — record in `docs/API-LAYOUT.md`.
+- Deliberately not routed through `Pages`: the CSV export paging loop (server-side scan, `EXPORT_PAGE_SIZE = 500`), the internal existence probes (`of(0, 1)`, `of(0, 20)`) and the FHIR `_count` cap of 500 — none of those are user page requests, and FHIR's own contract sets its cap.
+- Two 400 message shapes for one rule is a small wart: raw-parameter endpoints throw `BusinessException` from `Pages`, `PageQuery` endpoints fail bean validation first. Same status, same limit, different wording (documented in API-LAYOUT).
+- The patient portal's self-update endpoint still takes an untyped body, so its fields cannot carry `@Size` yet — M8.2 replaces that with a DTO and must carry these bounds.
+- `Pages` bounds are enforced in the service layer for the raw-parameter endpoints rather than at the web layer; if a future round migrates them all to `@Valid PageQuery`, the builder stays the single authority either way.
 
 ## Batch M8 — Layering: VO/DTO extraction + controller split 🟠
 

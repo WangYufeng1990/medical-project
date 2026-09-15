@@ -10,10 +10,11 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +40,7 @@ public class PatientService {
             }
             return predicates;
         };
-        PageRequest pageable = PageRequest.of((int) (page - 1), (int) size);
+        Pageable pageable = Pages.of(page, size);
         return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
     }
 

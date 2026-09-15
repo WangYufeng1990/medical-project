@@ -11,13 +11,13 @@ import com.example.medical.module.patient.repository.CarePlanRepository;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import com.example.medical.common.base.Pages;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -31,7 +31,7 @@ public class CarePlanController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     public Result<PageResult<CarePlanVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
-        var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
+        var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "startDate"));
         var page = carePlanRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId), pageable);

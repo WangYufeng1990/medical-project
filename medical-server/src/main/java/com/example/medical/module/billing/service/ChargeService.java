@@ -14,7 +14,6 @@ import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.repository.ChargeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -22,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Set;
+import com.example.medical.common.base.Pages;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +34,7 @@ public class ChargeService {
 
     public Page<ChargeVO> list(Long patientId, PageQuery pageQuery) {
         Set<Long> scopedPatientIds = doctorPatientScope.resolve();
-        var pageable = PageRequest.of((int) (pageQuery.getPage() - 1), (int) pageQuery.getSize(),
+        var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "createTime"));
         Specification<Charge> spec = (root, query, cb) -> {
             var predicates = cb.conjunction();

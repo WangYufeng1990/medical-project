@@ -5,7 +5,6 @@ import com.example.medical.common.result.PageResult;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -17,6 +16,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.example.medical.common.base.Pages;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -53,7 +54,7 @@ public class AuditLogService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        PageRequest pageable = PageRequest.of(page - 1, size,
+        Pageable pageable = Pages.of(page, size,
                 Sort.by(Sort.Direction.DESC, "createTime"));
         Page<AuditLog> result = auditLogRepository.findAll(spec, pageable);
         return PageResult.of(result.getTotalElements(), result.getSize(),

@@ -47,7 +47,7 @@ public class FhirObservationController {
         bundle.setType(Bundle.BundleType.SEARCHSET);
         bundle.setTimestamp(new java.util.Date());
 
-        int maxCount = Math.min(count, 500);
+        int maxCount = Math.max(1, Math.min(count, 500));
 
         List<Observation> observations;
         if (patientId != null) {
