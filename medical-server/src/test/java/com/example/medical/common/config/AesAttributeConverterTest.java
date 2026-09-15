@@ -1,15 +1,27 @@
 package com.example.medical.common.config;
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class AesAttributeConverterTest {
 
-    @BeforeAll
-    static void setUp() {
+    private AesCryptoUtil.KeySnapshot processKeys;
+
+    // The key is process-wide static state, so this class must hand back
+    // whatever it replaced: an integration test sharing the JVM reads seeded
+    // rows that were encrypted with the configured key.
+    @BeforeEach
+    void setUp() {
+        processKeys = AesCryptoUtil.snapshotKeysForTest();
         AesCryptoUtil.initializeForTest("test-aes-key-for-unit-tests-32bytes!");
+    }
+
+    @AfterEach
+    void tearDown() {
+        AesCryptoUtil.restoreKeysForTest(processKeys);
     }
 
     private final AesAttributeConverter converter = new AesAttributeConverter();

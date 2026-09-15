@@ -16,7 +16,7 @@
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 >
-> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
+> **Round 50 M4 ✅ complete (2026-09-14) — test-suite decomposability (F3).** The 2,109-line / 128-test `IntegrationTest` monolith is now 17 classes along its own section seams plus `IntegrationTestSupport`; suite-wide static tokens are gone (each class logs in its own `@BeforeAll`), cleanup runs per class, and **166 tests pass in both class orders** (17 s, one shared context) with single classes and single methods runnable alone. The split immediately exposed a real defect the old single class had been masking: `AesAttributeConverterTest` swapped the **process-wide AES key** and never restored it, so every integration class running after it in the same JVM 500'd on save (seeded rows decrypted to `[DECRYPT_FAILED]`) — fixed with a snapshot/restore seam. **\n>\n> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
 >
 > **Round 50 M3 ✅ complete (2026-09-11) — API client consolidation + auth contract.** `api/createClient.ts` now holds the single implementation of token injection, single-flight refresh, proactive refresh, the blob branch and error mapping; `request`/`patientRequest` are 14/12-line instances, so all 45 importing files were untouched. The refresh-failure **hang is fixed** (parked requests are now rejected instead of silently dropped), the refresh reads only `token` and fails loudly when it is missing, `LoginResponse` no longer invents `accessToken`/`expiresIn`/`user`, and the proactive timer got a 5 s floor that removes a 0 ms refresh loop. Verified by executing the real module against a fake 401/refresh server (5 cases) + tsc/build. `tsc`/`build` clean, bundle 435.28 → 433.41 kB. **
 >
@@ -24,7 +24,7 @@
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 4 of 10 batches done (M1, M2, M3, M10), the last of which closes F15 found while verifying M2. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 5 of 10 batches done (M1, M2, M3, M4, M10) — F15 was closed by M10 and F3 by M4. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2787,7 +2787,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M3 + M10 ✅ complete (2026-09-11 → 2026-09-14); M4–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M4 + M10 ✅ complete (2026-09-11 → 2026-09-14); M5–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -2971,30 +2971,35 @@ Every batch that touches a request or response payload, traced field-by-field (C
 - The emergency-token raw-axios calls in `views/patients/index.tsx:107-111` remain a legitimate second credential; a third instance would cover them if that path grows.
 - The two login views still use bare `axios` (they run before a token exists) — that is now the only place `r.data.data` is correct, and CLAUDE.md says so.
 
-## Batch M4 — Test-suite decomposability 🟡
+## Batch M4 — Test-suite decomposability 🟡 ✅ Complete (2026-09-14)
 
-**Goal:** any single test can be run alone, tests do not depend on declaration order, and no test leaks global crypto state.
+**Goal:** any single test can be run on its own, class execution order stops mattering, and no test leaves process-wide state behind for the rest of the JVM.
 
 ### Changes
 
 | # | Change | Files |
 |---|--------|-------|
-| M4.1 | Split `IntegrationTest` (2,109 lines / 128 tests) into per-module classes (`AuthIntegrationTest`, `PatientIntegrationTest`, `PrescriptionIntegrationTest`, `BillingIntegrationTest`, `SystemIntegrationTest`, `PortalIntegrationTest`, …), reusing the existing `// ── N. SECTION ──` blocks as the seams | `src/test/java/com/example/medical/...` |
-| M4.2 | Remove `@TestMethodOrder(OrderAnnotation)` and the `static adminToken/doctorToken/patientToken`; obtain tokens per class (`@BeforeAll` / a small `TestTokens` helper) so no test depends on an earlier test having run | same |
-| M4.3 | Give each class its own cleanup (`@Sql` per class or `@Transactional` rollback) so state does not leak across classes | `src/test/resources/cleanup-test-data.sql` + test classes |
-| M4.4 | `AesAttributeConverterTest`: capture the current key in `@BeforeEach` and restore it in `@AfterEach` so a test cannot leave the JVM-global key pointing at test material | `src/test/.../AesAttributeConverterTest.java` |
+| M4.1 | The 2,109-line / 128-test `IntegrationTest` monolith is split into 17 classes along its own section seams (auth, system, profile, patient, appointment, prescription, billing, chat, dashboard, portal, FHIR, export, audit log, Mirth, lab, quality, emergency access) plus `IntegrationTestSupport` holding the harness (annotations, `MockMvc`/`ObjectMapper`, login helpers). Largest class is now 523 lines | `src/test/java/com/example/medical/{IntegrationTest.java → 17 classes + IntegrationTestSupport.java}` |
+| M4.2 | The suite-wide `static adminToken/doctorToken/patientToken` are gone. Each class logs in what it needs in its own `@BeforeAll` (with `@TestInstance(PER_CLASS)`), so no test depends on whichever test happened to run first | the 17 classes |
+| M4.3 | Cleanup stays per class: `@Sql(cleanup-test-data.sql, BEFORE_TEST_CLASS)` moved to the base class, so every class starts from the seeded state instead of inheriting the previous class's writes | `IntegrationTestSupport.java` |
+| M4.4 | **Fixed the process-wide AES key leak**: `AesAttributeConverterTest` swapped the JVM-global key via `initializeForTest`/`rotate` and never put it back, so any integration class running later in the same JVM decrypted seeded rows to `[DECRYPT_FAILED]` and then 500'd on the next save (`AesAttributeConverter` refuses to persist the placeholder) | `common/config/AesCryptoUtil.java` (snapshot/restore seam); `common/config/AesAttributeConverterTest.java` (`@BeforeEach` snapshot → `@AfterEach` restore) |
+| M4.5 | Five classes keep an explicit **class-local** `@TestMethodOrder` because their tests are a deliberate sequence (create → update → delete, or a claim lifecycle: create → submit → adjudicate → pay); the other 12 are order-free. Ordering is documented in each class's javadoc, and remains class-local: the class still runs standalone | `Appointment/…, Billing/…, EmergencyPatient…, Patient…, SystemIntegrationTest.java` |
 
 ### Verification
 
-- `mvn test` → 162 tests, 0 failures (adjust the doc figure if the split changes the count, e.g. via `@Nested`).
-- A single method runs standalone and passes: `mvn test -Dtest=PatientAuthControllerTest#login_withWrongPassword_shouldReturn401`.
-- A single class runs standalone: `mvn test -Dtest=PrescriptionIntegrationTest`.
-- Running classes in reverse order (`@TestMethodOrder` removed; verified by `-Dtest=A,B` in both orders) gives the same result.
-- `AesCryptoUtil` key state is identical before/after each crypto test (assert in `@AfterEach`).
+- `mvn test`: **166 tests, 0 failures** (same 128 integration + 38 unit as before the split — nothing lost or duplicated); total time **17.6 s** (the 17 classes share one Spring context).
+- **Reverse class order** (`-Dsurefire.runOrder=reversealphabetical`): **166 tests, 0 failures**, with a genuinely different execution order. In that order `AesAttributeConverterTest` runs *between* integration classes — the exact case that failed before M4.4.
+- Standalone method: `mvn test -Dtest='AuthIntegrationTest#login_withWrongPassword_shouldReturn401'` → 1 test, 0 failures.
+- Standalone class: `mvn test -Dtest=BillingIntegrationTest` → 11 tests, 0 failures (an ordered class, run with no other class in the JVM).
+- Crypto leak regression: `-Dtest='AesAttributeConverterTest,PatientIntegrationTest' -Dsurefire.runOrder=reversealphabetical` (crypto first, integration second, same JVM) → 24 tests, 0 failures.
+- No unused imports introduced by the mechanical split (checked across all 17 files).
 
 ### Notes
 
-- Deliberately **not** doing `reuseForks=false`: it would mask the static-state problem instead of removing it, at a large startup cost.
+- **The split found a real defect, not just an ergonomics problem.** The old single class happened to run `AesAttributeConverterTest` before the Spring context existed, so `init()` reset the key and the leak never showed. Splitting into 17 classes put unit and integration classes in the same JVM run in an order where it did show — every class after it failed. This is what F3 was about: the suite could not be measured properly while one class owned all of it.
+- Two edge cases in the new seam were caught by verification rather than by review: restoring a snapshot taken *before* any Spring context exists (no key configured yet) must be a no-op, and a pointless 310k-iteration re-derivation is skipped when the key state is unchanged.
+- Deliberate trade-off: making the five narrative classes fully self-contained (each test creating its own fixture, no ordering) is a larger rewrite than the ordering it removes. Class-local `@Order` is explicit and survives being run alone; note it as a follow-up if those sequences ever need to run in parallel.
+- `IntegrationTestSupport` documents the per-class login pattern, so new tests do not reintroduce a suite-wide token.
 
 ## Batch M5 — Domain status enums + mapping fixes 🟠
 

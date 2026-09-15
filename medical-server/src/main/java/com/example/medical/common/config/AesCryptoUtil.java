@@ -36,6 +36,8 @@ public class AesCryptoUtil {
     private static SecretKey PREVIOUS_KEY;
     private static boolean rotationActive;
     private static KeyAuditRepository keyAuditRepo;
+    private static String currentRawKey;
+    private static String previousRawKey;
 
     static void setKeyAuditRepository(KeyAuditRepository repo) {
         keyAuditRepo = repo;
@@ -50,9 +52,33 @@ public class AesCryptoUtil {
             CURRENT_KEY = deriveKey(key);
             PREVIOUS_KEY = previousKey != null ? deriveKey(previousKey) : null;
             rotationActive = PREVIOUS_KEY != null;
+            currentRawKey = key;
+            previousRawKey = previousKey;
         } catch (Exception e) {
             throw new RuntimeException("Test key initialization failed", e);
         }
+    }
+
+    /**
+     * Process-wide key state. The keys are static, so a test that swaps them
+     * changes encryption for every other test in the same JVM — snapshot first
+     * and restore afterwards instead of leaving the JVM on test material.
+     */
+    record KeySnapshot(String current, String previous) {}
+
+    static KeySnapshot snapshotKeysForTest() {
+        return new KeySnapshot(currentRawKey, previousRawKey);
+    }
+
+    static void restoreKeysForTest(KeySnapshot snapshot) {
+        // No key was configured yet (no Spring context has initialised one):
+        // there is no prior state to put back, and the next init() sets it.
+        if (snapshot.current() == null) return;
+        if (java.util.Objects.equals(snapshot.current(), currentRawKey)
+                && java.util.Objects.equals(snapshot.previous(), previousRawKey)) {
+            return;
+        }
+        initializeForTest(snapshot.current(), snapshot.previous());
     }
 
     @PostConstruct
@@ -64,9 +90,12 @@ public class AesCryptoUtil {
         }
         try {
             CURRENT_KEY = deriveKey(configuredKey);
+            currentRawKey = configuredKey;
+            previousRawKey = null;
             boolean wasRotated = false;
             if (configuredPreviousKey != null && !configuredPreviousKey.isBlank()) {
                 PREVIOUS_KEY = deriveKey(configuredPreviousKey);
+                previousRawKey = configuredPreviousKey;
                 rotationActive = true;
                 wasRotated = true;
                 log.info("AES key rotation active: current=v1, previous=v0");
@@ -273,6 +302,8 @@ public class AesCryptoUtil {
         CURRENT_KEY = newCurrent;
         PREVIOUS_KEY = newPrevious;
         rotationActive = true;
+        currentRawKey = newKey;
+        previousRawKey = oldKey;
         log.info("AES key rotated at runtime — current=v1, previous=v0. "
                 + "IMPORTANT: update AES_KEY (new key) and AES_KEY_PREVIOUS (old key) in env before restart.");
         recordRuntimeRotation(newKey);
