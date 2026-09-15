@@ -22,6 +22,7 @@ public class PatientCaseController {
 
     @GetMapping("/{id}/case")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @com.example.medical.common.audit.Auditable(module = "patient", action = "FHIR_VIEW", phiAccess = true)
     public ResponseEntity<String> getCase(@PathVariable Long id) {
         doctorPatientScope.requireAccess(id);
         Bundle bundle = patientCaseService.getPatientCase(id);

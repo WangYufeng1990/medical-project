@@ -29,6 +29,7 @@ public class ImmunizationController {
 
     @GetMapping("/patients/{patientId}/immunizations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "immunization", action = "VIEW", phiAccess = true)
     public Result<PageResult<ImmunizationVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),

@@ -3147,7 +3147,27 @@ The audit found **12 endpoints still returning entities**, not the 5 the plan li
 
 - `mvn clean verify`: 166 tests, 0 failures. `npx tsc --noEmit` clean. No controller returns an entity any more (re-checked by grep).
 
-**Left as a finding, not fixed:** auditing patient-data *reads* on the staff side is largely absent — e.g. `VitalSignController`'s only `@Auditable` is on `create`, so a doctor opening a patient's vitals writes no audit row. The portal's access-history view therefore shows the patient's own reads but not staff reads (its main purpose). Adding read auditing to those endpoints is a policy choice about audit volume, not a mechanical fix — it deserves its own decision.
+### M8.1.6 — staff reads of a patient's record now leave a trace ✅
+
+Opening a patient's vitals wrote no audit row: `VitalSignController`'s only `@Auditable` was on `create`, so a doctor could read a full clinical history and leave nothing behind — and the portal's access-history view (the feature built to show exactly that) could not show it.
+
+While fixing it, my first reading of the codebase was wrong and worth recording: read auditing was **not** absent. `PatientService.getById` (`VIEW`), `PatientController.getHistory`/`getAllergies` (`VIEW_HISTORY`/`VIEW_ALLERGIES`), `FhirPatientController` and `FhirObservationController` (`FHIR_VIEW`) were already audited — my initial survey looked only at controller annotations a few lines above each `@GetMapping` and missed them. The real gap was the **clinical list endpoints**, which have no service layer (they use repositories directly), so there was nowhere for a service-level annotation to live.
+
+| # | Change | Files |
+|---|--------|-------|
+| M8.1.6 | `@Auditable(..., action = "VIEW", phiAccess = true)` added to the single-patient clinical reads: vitals, problems, immunizations, care plans, consent, referrals (list + by-patient), lab observations + trend, prescription detail + by-patient, and the FHIR case bundle (`FHIR_VIEW`). Deliberately not added to list/search endpoints with no single patient (patient search, FHIR search) or to reference data (LOINC catalog): those rows could not be attributed to a patient, so they would add volume without making the access history better | `VitalSignController`, `ProblemController`, `ImmunizationController`, `CarePlanController`, `ConsentController`, `ReferralController`, `LabResultController`, `PrescriptionController`, `PatientCaseController` |
+
+**Verification** (live, on a DB copy): a doctor read five things about patient 100 — vitals, problems, observations, allergies, and the FHIR case bundle. The patient's own access history then returned **5 rows**:
+
+```
+patient      FHIR_VIEW       patientId=100
+patient      VIEW_ALLERGIES  patientId=100
+observation  VIEW            patientId=100
+problem      VIEW            patientId=100
+vital_sign   VIEW            patientId=100
+```
+
+Before the change the same five reads produced **0** rows — and 0 rows were visible to the patient. `mvn clean verify`: 166 tests, 0 failures.
 
 **Also noted:** the portal's disclosures response carries `rowHash`/`prevHash` (the tamper-evidence hashes) because it reuses `AuditLogVO`; the page uses none of them. A narrower portal VO would be tidier if that list ever grows.
 

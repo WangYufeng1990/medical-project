@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import com.example.medical.common.audit.Auditable;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -29,6 +30,7 @@ public class ConsentController {
 
     @GetMapping("/consent")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "consent", action = "VIEW", phiAccess = true)
     public Result<List<ConsentVO>> listByPatient(@RequestParam Long patientId) {
         return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(patientId)
                 .stream().map(ConsentVO::fromEntity).toList());

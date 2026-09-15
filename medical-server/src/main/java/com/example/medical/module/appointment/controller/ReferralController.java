@@ -32,6 +32,7 @@ public class ReferralController {
 
     @GetMapping("/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "referral", action = "VIEW", phiAccess = true)
     public Result<PageResult<ReferralVO>> list(@RequestParam(required = false) Long patientId, @Valid PageQuery pageQuery) {
         var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),
                 Sort.by(Sort.Direction.DESC, "referralDate"));
@@ -50,6 +51,7 @@ public class ReferralController {
 
     @GetMapping("/patients/{patientId}/referrals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "referral", action = "VIEW", phiAccess = true)
     public Result<List<ReferralVO>> listByPatient(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
         return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(patientId)

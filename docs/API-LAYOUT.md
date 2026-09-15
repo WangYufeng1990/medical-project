@@ -511,7 +511,7 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 | `dashboard` | `'stats'` | 30 min | none |
 
 ### Audit Logging
-AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, IP, timestamp → `audit_log` table. Applied to all CUD service operations. **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
+AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, patientId, IP, timestamp → `audit_log` table. Applied to all CUD service operations, and to **reads that target a single patient**: opening a patient (`patient:VIEW`), their history/allergies (`VIEW_HISTORY`/`VIEW_ALLERGIES`), vitals/problems/immunizations/care-plans/referrals/consent/observations/prescriptions (`VIEW`), the FHIR patient and observation reads (`FHIR_VIEW`) and the FHIR case bundle. The row carries the `patientId`, so the portal's own access history (`GET /api/v1/patient/me/disclosures`) can show who opened the record. Unaudited by design: list/search endpoints with no single patient (patient search, FHIR search) and reference data (LOINC catalog). **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
 
 ### Error status contract
 

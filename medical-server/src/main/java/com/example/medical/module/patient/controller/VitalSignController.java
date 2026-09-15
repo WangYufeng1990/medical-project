@@ -31,6 +31,7 @@ public class VitalSignController {
 
     @GetMapping("/patients/{patientId}/vitals")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "vital_sign", action = "VIEW", phiAccess = true)
     public Result<PageResult<VitalSignVO>> list(@PathVariable Long patientId, @Valid PageQuery pageQuery) {
         doctorPatientScope.requireAccess(patientId);
         var pageable = Pages.of(pageQuery.getPage(), pageQuery.getSize(),

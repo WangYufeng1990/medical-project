@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.example.medical.common.audit.Auditable;
 
 @RestController
 @RequestMapping("/api/v1/prescriptions")
@@ -46,12 +47,14 @@ public class PrescriptionController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "prescription", action = "VIEW", phiAccess = true)
     public Result<PrescriptionVO> getById(@PathVariable Long id) {
         return Result.ok(prescriptionService.getById(id));
     }
 
     @GetMapping("/by-patient/{patientId}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "prescription", action = "VIEW", phiAccess = true)
     public Result<List<PrescriptionVO>> getByPatientId(@PathVariable Long patientId) {
         return Result.ok(prescriptionService.getByPatientId(patientId));
     }

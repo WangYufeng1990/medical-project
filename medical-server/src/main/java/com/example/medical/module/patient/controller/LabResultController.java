@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.example.medical.common.audit.Auditable;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -25,6 +26,7 @@ public class LabResultController {
 
     @GetMapping("/patients/{patientId}/observations")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "observation", action = "VIEW", phiAccess = true)
     public Result<PageResult<ObservationVO>> getObservations(
             @PathVariable Long patientId,
             @RequestParam(required = false) String loinc,
@@ -36,6 +38,7 @@ public class LabResultController {
 
     @GetMapping("/patients/{patientId}/observations/trend")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+    @Auditable(module = "observation", action = "VIEW", phiAccess = true)
     public Result<List<ObservationVO>> getTrend(
             @PathVariable Long patientId,
             @RequestParam String loinc) {
