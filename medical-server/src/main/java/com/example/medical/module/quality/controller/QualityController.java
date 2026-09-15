@@ -1,9 +1,9 @@
 package com.example.medical.module.quality.controller;
 
 import com.example.medical.common.result.Result;
-import com.example.medical.module.quality.entity.QualityMeasure;
-import com.example.medical.module.quality.entity.QualityResult;
 import com.example.medical.module.quality.service.QualityMeasureService;
+import com.example.medical.module.quality.dto.QualityMeasureVO;
+import com.example.medical.module.quality.dto.QualityResultVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -20,8 +20,9 @@ public class QualityController {
     private final QualityMeasureService qualityMeasureService;
 
     @GetMapping("/measures")
-    public Result<List<QualityMeasure>> listMeasures() {
-        return Result.ok(qualityMeasureService.listMeasures());
+    public Result<List<QualityMeasureVO>> listMeasures() {
+        return Result.ok(qualityMeasureService.listMeasures()
+                .stream().map(QualityMeasureVO::fromEntity).toList());
     }
 
     @GetMapping("/measures/{cmsId}/report")
@@ -36,7 +37,8 @@ public class QualityController {
     }
 
     @GetMapping("/measures/{cmsId}/history")
-    public Result<List<QualityResult>> getHistory(@PathVariable String cmsId) {
-        return Result.ok(qualityMeasureService.getHistory(cmsId));
+    public Result<List<QualityResultVO>> getHistory(@PathVariable String cmsId) {
+        return Result.ok(qualityMeasureService.getHistory(cmsId)
+                .stream().map(QualityResultVO::fromEntity).toList());
     }
 }

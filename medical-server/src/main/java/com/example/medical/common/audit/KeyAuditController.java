@@ -18,7 +18,8 @@ public class KeyAuditController {
     private final KeyAuditRepository keyAuditRepository;
 
     @GetMapping("/history")
-    public Result<List<KeyAudit>> history() {
-        return Result.ok(keyAuditRepository.findAllByOrderByEventTimeDesc());
+    public Result<List<KeyAuditVO>> history() {
+        return Result.ok(keyAuditRepository.findAllByOrderByEventTimeDesc()
+                .stream().map(KeyAuditVO::fromEntity).toList());
     }
 }

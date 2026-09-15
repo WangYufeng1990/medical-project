@@ -6,6 +6,7 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.patient.entity.Consent;
 import com.example.medical.module.patient.repository.ConsentRepository;
 import com.example.medical.security.LoginUser;
+import com.example.medical.module.patient.dto.ConsentVO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,8 +29,9 @@ public class ConsentController {
 
     @GetMapping("/consent")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<List<Consent>> listByPatient(@RequestParam Long patientId) {
-        return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(patientId));
+    public Result<List<ConsentVO>> listByPatient(@RequestParam Long patientId) {
+        return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(patientId)
+                .stream().map(ConsentVO::fromEntity).toList());
     }
 
     @PostMapping("/consent")
@@ -61,8 +63,9 @@ public class ConsentController {
 
     @GetMapping("/patient/me/consent")
     @PreAuthorize("hasRole('PATIENT')")
-    public Result<List<Consent>> myConsent(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(loginUser.getUserId()));
+    public Result<List<ConsentVO>> myConsent(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(consentRepository.findByPatientIdOrderByCreateTimeDesc(loginUser.getUserId())
+                .stream().map(ConsentVO::fromEntity).toList());
     }
 
     @PutMapping("/patient/me/consent/{id}/revoke")

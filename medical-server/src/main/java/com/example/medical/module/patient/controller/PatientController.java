@@ -13,6 +13,8 @@ import com.example.medical.module.patient.repository.AllergyEntryRepository;
 import com.example.medical.module.patient.repository.MedicalHistoryEntryRepository;
 import com.example.medical.module.patient.service.PatientService;
 import com.example.medical.security.LoginUser;
+import com.example.medical.module.patient.dto.MedicalHistoryEntryVO;
+import com.example.medical.module.patient.dto.AllergyEntryVO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -94,9 +96,10 @@ public class PatientController {
     @GetMapping("/{patientId}/history")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @com.example.medical.common.audit.Auditable(module = "patient", action = "VIEW_HISTORY", phiAccess = true)
-    public Result<List<MedicalHistoryEntry>> getHistory(@PathVariable Long patientId) {
+    public Result<List<MedicalHistoryEntryVO>> getHistory(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
-        return Result.ok(historyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
+        return Result.ok(historyRepo.findByPatientIdOrderByCreateTimeDesc(patientId)
+                .stream().map(MedicalHistoryEntryVO::fromEntity).toList());
     }
 
     @PostMapping("/{patientId}/history")
@@ -117,9 +120,10 @@ public class PatientController {
     @GetMapping("/{patientId}/allergies")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @com.example.medical.common.audit.Auditable(module = "patient", action = "VIEW_ALLERGIES", phiAccess = true)
-    public Result<List<AllergyEntry>> getAllergies(@PathVariable Long patientId) {
+    public Result<List<AllergyEntryVO>> getAllergies(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
-        return Result.ok(allergyRepo.findByPatientIdOrderByCreateTimeDesc(patientId));
+        return Result.ok(allergyRepo.findByPatientIdOrderByCreateTimeDesc(patientId)
+                .stream().map(AllergyEntryVO::fromEntity).toList());
     }
 
     @PostMapping("/{patientId}/allergies")

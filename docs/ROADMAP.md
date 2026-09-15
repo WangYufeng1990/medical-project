@@ -3117,9 +3117,39 @@ Every batch that touches a request or response payload, traced field-by-field (C
 - The patient portal's self-update endpoint still takes an untyped body, so its fields cannot carry `@Size` yet — M8.2 replaces that with a DTO and must carry these bounds.
 - `Pages` bounds are enforced in the service layer for the raw-parameter endpoints rather than at the web layer; if a future round migrates them all to `@Valid PageQuery`, the builder stays the single authority either way.
 
-## Batch M8 — Layering: VO/DTO extraction + controller split 🟠
+## Batch M8 — Layering: VO/DTO extraction + controller split 🟠 (in progress)
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
+
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO. **M8.2–M8.6 ⬜ still open.**
+
+### M8.1 — no raw entities on the wire ✅
+
+The audit found **12 endpoints still returning entities**, not the 5 the plan listed (the original grep missed `LabResultController`, `PatientController.getHistory/getAllergies` and `KeyAuditController`). Seven of them could reuse a VO the staff side already had; five needed a new one.
+
+| # | Change | Files |
+|---|--------|-------|
+| M8.1.1 | Portal endpoints now map to the VOs the staff endpoints already return: `myVitals` → `VitalSignVO`, `myProblems` → `ProblemVO`, `myImmunizations` → `ImmunizationVO`, `myReferrals` → `ReferralVO`, `myCarePlans` → `CarePlanVO`, `myPriorAuths` → `PriorAuthVO`, `myDisclosures` → `AuditLogVO` (were raw `VitalSign`/`Problem`/…/`AuditLog`) | `PatientPortalController` |
+| M8.1.2 | Five new VOs for the rest: `ConsentVO`, `QualityMeasureVO`, `QualityResultVO`, `PharmacyVO`, `FormularyEntryVO`, plus `MedicalHistoryEntryVO`, `AllergyEntryVO`, `LoincCatalogVO` and `KeyAuditVO` for the endpoints the plan had missed | `module/*/dto/`, `common/audit/KeyAuditVO.java` |
+| M8.1.3 | `QualityMeasureVO` deliberately drops `denominatorQuery`, `numeratorQuery` and `exclusionQuery`: the measure endpoints were publishing the raw SQL behind each eCQM measure | `module/quality/dto/QualityMeasureVO.java` |
+| M8.1.4 | `PharmacyVO` normalises the 0/1 column into a real boolean — the TypeScript type already said `supportsEpcs?: boolean` while the API sent `1`/`0` | `module/prescription/dto/PharmacyVO.java` |
+| M8.1.5 | **Found while verifying**: `patient_id` was null on every portal audit row, so the patient's own "who accessed my record" view (`GET /patient/me/disclosures`) returned **0 rows, always**. Neither resolution path could fire: `myVitals(loginUser)` has no `patientId` argument, its module is not `patient`, and the result is a list. The aspect now falls back to the principal — a PATIENT token's user id *is* the patient id, and a break-glass token carries the patient it was issued for | `common/audit/AuditLogAspect.java` |
+
+**Verification (contract diff against the previous build, captured live before the change):**
+
+| Endpoint group | Result |
+|----------------|--------|
+| staff vitals / problems / immunizations / care-plans / referrals / pharmacy / profile | **byte-identical field sets** — they already used VOs |
+| portal vitals / problems / immunizations / referrals / care-plans / prior-auths | only `isDeleted`, `updateTime`, `version` removed — JPA bookkeeping the frontend never reads (checked: those names appear nowhere in `views/`, `api/` or the TS types) |
+| quality measures | the three SQL fields removed, every other field identical by value |
+| pharmacy | `supportsEpcs`: `1`/`0` (int) → `true`/`false` (boolean) — matches the TS type for the first time |
+| portal disclosures | 0 rows before → **1 row with `patientId=100`** after the aspect fix |
+
+- `mvn clean verify`: 166 tests, 0 failures. `npx tsc --noEmit` clean. No controller returns an entity any more (re-checked by grep).
+
+**Left as a finding, not fixed:** auditing patient-data *reads* on the staff side is largely absent — e.g. `VitalSignController`'s only `@Auditable` is on `create`, so a doctor opening a patient's vitals writes no audit row. The portal's access-history view therefore shows the patient's own reads but not staff reads (its main purpose). Adding read auditing to those endpoints is a policy choice about audit volume, not a mechanical fix — it deserves its own decision.
+
+**Also noted:** the portal's disclosures response carries `rowHash`/`prevHash` (the tamper-evidence hashes) because it reuses `AuditLogVO`; the page uses none of them. A narrower portal VO would be tidier if that list ever grows.
 
 ### Changes
 

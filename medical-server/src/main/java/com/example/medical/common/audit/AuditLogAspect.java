@@ -129,7 +129,22 @@ public class AuditLogAspect {
                 }
             }
         }
-        // 3. Fall back to the method result (e.g. patient login returns the id)
+        // 3. The principal already knows which patient this is about: a PATIENT
+        //    token's user id *is* the patient id, and a break-glass token carries
+        //    the patient it was issued for. Without this every portal ACCESS row
+        //    stored patient_id = null (no patientId argument, module not "patient",
+        //    result is a list), so the portal's own access history — and any
+        //    patient-scoped audit view — could never show anything.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_PATIENT".equals(a.getAuthority()))) {
+                return loginUser.getUserId();
+            }
+            if (loginUser.getEmergencyPatientId() != null) {
+                return loginUser.getEmergencyPatientId();
+            }
+        }
+        // 4. Fall back to the method result (e.g. patient login returns the id)
         return extractId(unwrapResult(result), "patientId");
     }
 

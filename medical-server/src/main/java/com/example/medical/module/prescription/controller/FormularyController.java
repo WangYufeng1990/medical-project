@@ -1,6 +1,7 @@
 package com.example.medical.module.prescription.controller;
 
 import com.example.medical.common.result.Result;
+import com.example.medical.module.prescription.dto.FormularyEntryVO;
 import com.example.medical.module.prescription.entity.FormularyEntry;
 import com.example.medical.module.prescription.repository.FormularyEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,8 @@ public class FormularyController {
 
     @GetMapping("/formulary/{rxnormCode}")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<List<FormularyEntry>> listByDrug(@PathVariable String rxnormCode) {
-        return Result.ok(formularyEntryRepository.findByRxnormCode(rxnormCode));
+    public Result<List<FormularyEntryVO>> listByDrug(@PathVariable String rxnormCode) {
+        return Result.ok(formularyEntryRepository.findByRxnormCode(rxnormCode)
+                .stream().map(FormularyEntryVO::fromEntity).toList());
     }
 }

@@ -49,6 +49,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 import com.example.medical.module.appointment.entity.AppointmentStatus;
 import com.example.medical.common.base.Pages;
+import com.example.medical.common.audit.AuditLogVO;
+import com.example.medical.module.appointment.dto.ReferralVO;
+import com.example.medical.module.billing.dto.PriorAuthVO;
+import com.example.medical.module.patient.dto.CarePlanVO;
+import com.example.medical.module.patient.dto.ImmunizationVO;
+import com.example.medical.module.patient.dto.ProblemVO;
+import com.example.medical.module.patient.dto.VitalSignVO;
 import org.springframework.data.domain.Pageable;
 
 @RestController
@@ -314,42 +321,48 @@ public class PatientPortalController {
 
     @GetMapping("/vitals")
     @com.example.medical.common.audit.Auditable(module = "vital_sign", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.patient.entity.VitalSign>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId()));
+    public Result<List<VitalSignVO>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId())
+                .stream().map(VitalSignVO::fromEntity).toList());
     }
 
     @GetMapping("/problems")
     @com.example.medical.common.audit.Auditable(module = "problem", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.patient.entity.Problem>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId()));
+    public Result<List<ProblemVO>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId())
+                .stream().map(ProblemVO::fromEntity).toList());
     }
 
     @GetMapping("/immunizations")
     @com.example.medical.common.audit.Auditable(module = "immunization", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.patient.entity.Immunization>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId()));
+    public Result<List<ImmunizationVO>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId())
+                .stream().map(ImmunizationVO::fromEntity).toList());
     }
 
     @GetMapping("/referrals")
     @com.example.medical.common.audit.Auditable(module = "referral", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.appointment.entity.Referral>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId()));
+    public Result<List<ReferralVO>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId())
+                .stream().map(ReferralVO::fromEntity).toList());
     }
 
     @GetMapping("/care-plans")
     @com.example.medical.common.audit.Auditable(module = "care_plan", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.patient.entity.CarePlan>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId()));
+    public Result<List<CarePlanVO>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId())
+                .stream().map(CarePlanVO::fromEntity).toList());
     }
 
     @GetMapping("/prior-auths")
     @com.example.medical.common.audit.Auditable(module = "prior_auth", action = "ACCESS", phiAccess = true)
-    public Result<List<com.example.medical.module.billing.entity.PriorAuth>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(priorAuthRepository.findByPatientIdOrderByRequestedAtDesc(loginUser.getUserId()));
+    public Result<List<PriorAuthVO>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(priorAuthRepository.findByPatientIdOrderByRequestedAtDesc(loginUser.getUserId())
+                .stream().map(PriorAuthVO::fromEntity).toList());
     }
 
     @GetMapping("/disclosures")
-    public Result<PageResult<com.example.medical.common.audit.AuditLog>> myDisclosures(
+    public Result<PageResult<AuditLogVO>> myDisclosures(
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -359,6 +372,6 @@ public class PatientPortalController {
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
                 pageable);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
-                result.getNumber() + 1, result.getContent()));
+                result.getNumber() + 1, result.getContent().stream().map(AuditLogVO::fromEntity).toList()));
     }
 }

@@ -1,6 +1,7 @@
 package com.example.medical.module.prescription.controller;
 
 import com.example.medical.common.result.Result;
+import com.example.medical.module.prescription.dto.PharmacyVO;
 import com.example.medical.module.prescription.entity.PharmacyDirectory;
 import com.example.medical.module.prescription.repository.PharmacyDirectoryRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,15 +19,17 @@ public class PharmacyController {
     private final PharmacyDirectoryRepository pharmacyDirectoryRepository;
 
     @GetMapping
-    public Result<List<PharmacyDirectory>> list(
+    public Result<List<PharmacyVO>> list(
             @RequestParam(required = false) String zip,
             @RequestParam(required = false) String state) {
+        List<PharmacyDirectory> pharmacies;
         if (zip != null && !zip.isBlank()) {
-            return Result.ok(pharmacyDirectoryRepository.findByZipCodeStartingWith(zip.substring(0, Math.min(3, zip.length()))));
+            pharmacies = pharmacyDirectoryRepository.findByZipCodeStartingWith(zip.substring(0, Math.min(3, zip.length())));
+        } else if (state != null && !state.isBlank()) {
+            pharmacies = pharmacyDirectoryRepository.findByStateOrderByNameAsc(state);
+        } else {
+            pharmacies = pharmacyDirectoryRepository.findAll();
         }
-        if (state != null && !state.isBlank()) {
-            return Result.ok(pharmacyDirectoryRepository.findByStateOrderByNameAsc(state));
-        }
-        return Result.ok(pharmacyDirectoryRepository.findAll());
+        return Result.ok(pharmacies.stream().map(PharmacyVO::fromEntity).toList());
     }
 }
