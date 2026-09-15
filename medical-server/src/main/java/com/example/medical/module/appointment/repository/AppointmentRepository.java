@@ -11,9 +11,10 @@ import java.util.List;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long>, JpaSpecificationExecutor<Appointment> {
 
-    @Query("SELECT a FROM Appointment a WHERE a.doctorId = :doctorId AND a.status <> 2 " +
+    @Query("SELECT a FROM Appointment a WHERE a.doctorId = :doctorId AND a.status <> :cancelledStatus " +
             "AND a.appointmentTime BETWEEN :start AND :end")
     List<Appointment> findConflicting(@Param("doctorId") Long doctorId,
+                                       @Param("cancelledStatus") int cancelledStatus,
                                        @Param("start") LocalDateTime start,
                                        @Param("end") LocalDateTime end);
 

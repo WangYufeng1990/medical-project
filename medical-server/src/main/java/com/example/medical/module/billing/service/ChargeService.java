@@ -58,7 +58,8 @@ public class ChargeService {
     @Transactional
     @Auditable(module = "charge", action = "CONVERT_TO_BILL")
     public BillVO convert(Long id) {
-        Charge c = chargeRepository.findById(id).orElseThrow();
+        Charge c = chargeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Charge not found"));
         doctorPatientScope.requireAccess(c.getPatientId());
         if (!"DRAFT".equals(c.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Charge is not in DRAFT status");

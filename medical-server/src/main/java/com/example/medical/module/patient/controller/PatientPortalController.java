@@ -48,6 +48,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 
 @RestController
 @RequestMapping("/api/v1/patient/me")
@@ -151,13 +152,14 @@ public class PatientPortalController {
         if (!appt.getPatientId().equals(loginUser.getUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
         }
-        if (appt.getStatus() != null && (appt.getStatus() == 2 || appt.getStatus() == 3)) {
+        if (AppointmentStatus.anyOf(appt.getStatus(),
+                AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED)) {
             throw new BusinessException(ResultCode.CONFLICT, "Appointment already cancelled or completed");
         }
         if (appt.getAppointmentTime() != null && appt.getAppointmentTime().isBefore(java.time.LocalDateTime.now())) {
             throw new BusinessException(ResultCode.CONFLICT, "Cannot cancel past appointments");
         }
-        appt.setStatus(2);
+        appt.setStatus(AppointmentStatus.CANCELLED.code());
         appointmentRepository.save(appt);
         return Result.ok();
     }

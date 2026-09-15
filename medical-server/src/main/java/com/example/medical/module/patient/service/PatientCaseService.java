@@ -32,6 +32,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +45,6 @@ public class PatientCaseService {
     private static final String RXNORM_SYSTEM = "http://www.nlm.nih.gov/research/umls/rxnorm";
     private static final String RACE_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race";
     private static final String ETHNICITY_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity";
-    private static final String LANGUAGE_EXT_URL = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex";
     private static final String OMB_CATEGORY_SYSTEM = "urn:oid:2.16.840.1.113883.6.238";
 
     private final PatientRepository patientRepository;
@@ -79,7 +80,10 @@ public class PatientCaseService {
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
                 Sort.by(Sort.Direction.DESC, "appointmentTime"));
         for (Appointment a : appointments) {
-            bundle.addEntry().setResource(buildEncounter(a)).getRequest()
+            Encounter encounter = buildEncounter(a);
+            // A cancelled or no-show visit produced no encounter to report.
+            if (encounter == null) continue;
+            bundle.addEntry().setResource(encounter).getRequest()
                     .setMethod(Bundle.HTTPVerb.PUT)
                     .setUrl("Encounter/" + a.getId());
         }
@@ -204,9 +208,9 @@ public class PatientCaseService {
             fp.addExtension(ethnicityExt);
         }
         if (p.getPreferredLanguage() != null && !p.getPreferredLanguage().isBlank()) {
-            fp.addExtension()
-                    .setUrl(LANGUAGE_EXT_URL)
-                    .setValue(new StringType(p.getPreferredLanguage()));
+            fp.addCommunication()
+                    .setLanguage(new CodeableConcept().setText(p.getPreferredLanguage()))
+                    .setPreferred(true);
         }
 
         return fp;
@@ -221,7 +225,7 @@ public class PatientCaseService {
 
     private static String raceToOmbCode(String race) {
         if (race == null) return null;
-        return switch (race.toLowerCase()) {
+        return switch (race.toLowerCase(Locale.ROOT)) {
             case "white" -> "2106-3";
             case "black or african american", "black" -> "2054-5";
             case "asian" -> "2028-9";
@@ -233,9 +237,11 @@ public class PatientCaseService {
 
     private static String ethnicityToOmbCode(String ethnicity) {
         if (ethnicity == null) return null;
-        String lower = ethnicity.toLowerCase();
+        String lower = ethnicity.toLowerCase(Locale.ROOT);
+        // The negative form must come first: "Not Hispanic or Latino" contains
+        // "hispanic". It also must not match on a bare "not".
+        if (lower.contains("not hispanic") || lower.contains("not latino")) return "2186-5";
         if (lower.contains("hispanic") || lower.contains("latino")) return "2135-2";
-        if (lower.contains("not hispanic") || lower.contains("not")) return "2186-5";
         return null;
     }
 
@@ -260,6 +266,22 @@ public class PatientCaseService {
         return allergy;
     }
 
+    /**
+     * FHIR has no "no-show" status, and reporting a missed visit as CANCELLED
+     * (what the previous default branch did) is wrong. A visit that never
+     * happened gets no encounter at all, signalled by a null return.
+     */
+    private static Encounter.EncounterStatus toEncounterStatus(Integer appointmentStatus) {
+        AppointmentStatus status = AppointmentStatus.fromCode(appointmentStatus);
+        if (status == null) return Encounter.EncounterStatus.UNKNOWN;
+        return switch (status) {
+            case SCHEDULED -> Encounter.EncounterStatus.PLANNED;
+            case ARRIVED -> Encounter.EncounterStatus.ARRIVED;
+            case COMPLETED -> Encounter.EncounterStatus.FINISHED;
+            case CANCELLED, NO_SHOW -> null;
+        };
+    }
+
     private Encounter buildEncounter(Appointment a) {
         Encounter encounter = new Encounter();
         encounter.setId(a.getId().toString());
@@ -269,13 +291,9 @@ public class PatientCaseService {
                     .getIndividual().setReference("Practitioner/" + a.getDoctorId());
         }
 
-        encounter.setStatus(switch (a.getStatus()) {
-            case 0 -> Encounter.EncounterStatus.PLANNED;
-            case 1 -> Encounter.EncounterStatus.ARRIVED;
-            case 3 -> Encounter.EncounterStatus.FINISHED;
-            case 6 -> Encounter.EncounterStatus.INPROGRESS;
-            default -> Encounter.EncounterStatus.CANCELLED;
-        });
+        Encounter.EncounterStatus status = toEncounterStatus(a.getStatus());
+        if (status == null) return null;
+        encounter.setStatus(status);
 
         if (a.getAppointmentTime() != null) {
             encounter.getPeriod().setStart(java.sql.Timestamp.valueOf(a.getAppointmentTime()));

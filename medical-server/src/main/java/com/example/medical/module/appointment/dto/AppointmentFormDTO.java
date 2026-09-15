@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 
 @Data
 public class AppointmentFormDTO {
@@ -41,7 +42,7 @@ public class AppointmentFormDTO {
         a.setIcd10Codes(icd10Codes);
         a.setDescription(description);
         a.setNotes(notes);
-        a.setStatus(status != null ? status : 0);
+        a.setStatus(status != null ? status : AppointmentStatus.SCHEDULED.code());
         return a;
     }
 

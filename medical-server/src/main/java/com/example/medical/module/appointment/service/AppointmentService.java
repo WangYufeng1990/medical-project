@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -74,7 +75,7 @@ public class AppointmentService {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
         doctorPatientScope.requireAccess(a.getPatientId());
-        if (a.getStatus() != null && java.util.Set.of(2, 3, 4).contains(a.getStatus())) {
+        if (AppointmentStatus.isTerminal(a.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Terminal appointments cannot be modified");
         }
         if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
@@ -89,7 +90,8 @@ public class AppointmentService {
         Integer previousStatus = a.getStatus();
         dto.applyTo(a);
         appointmentRepository.save(a);
-        if (Integer.valueOf(3).equals(a.getStatus()) && !Integer.valueOf(3).equals(previousStatus)) {
+        if (AppointmentStatus.COMPLETED.matches(a.getStatus())
+                && !AppointmentStatus.COMPLETED.matches(previousStatus)) {
             generateCharge(a);
         }
     }
@@ -121,7 +123,8 @@ public class AppointmentService {
         Appointment a = appointmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
         doctorPatientScope.requireAccess(a.getPatientId());
-        if (a.getStatus() != null && java.util.Set.of(3, 4).contains(a.getStatus())) {
+        if (AppointmentStatus.anyOf(a.getStatus(),
+                AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW)) {
             throw new BusinessException(ResultCode.CONFLICT,
                     "Completed/no-show appointments cannot be deleted");
         }
@@ -132,7 +135,7 @@ public class AppointmentService {
         LocalDateTime windowStart = appointmentTime.minusMinutes(30);
         LocalDateTime windowEnd = appointmentTime.plusMinutes(30);
         return appointmentRepository
-                .findConflicting(doctorId, windowStart, windowEnd)
+                .findConflicting(doctorId, AppointmentStatus.CANCELLED.code(), windowStart, windowEnd)
                 .stream()
                 .filter(a -> excludeId == null || !a.getId().equals(excludeId))
                 .map(this::toVO)

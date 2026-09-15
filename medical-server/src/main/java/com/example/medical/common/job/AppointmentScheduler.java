@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 
 @Slf4j
 @Component
@@ -36,14 +37,14 @@ public class AppointmentScheduler {
     private void doMarkNoShows() {
         List<Appointment> missed = appointmentRepository.findAll(
                 (root, query, cb) -> cb.and(
-                        cb.equal(root.get("status"), 0),
+                        cb.equal(root.get("status"), AppointmentStatus.SCHEDULED.code()),
                         cb.lessThan(root.get("appointmentTime"), LocalDateTime.now())
                 ),
                 org.springframework.data.domain.Sort.unsorted()
         );
 
         if (!missed.isEmpty()) {
-            missed.forEach(a -> a.setStatus(4));
+            missed.forEach(a -> a.setStatus(AppointmentStatus.NO_SHOW.code()));
             appointmentRepository.saveAll(missed);
             log.info("Marked {} appointments as no-show", missed.size());
         }

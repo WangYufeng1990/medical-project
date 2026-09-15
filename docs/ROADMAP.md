@@ -16,7 +16,7 @@
 >
 > **Post-review ops fix (2026-08-20): h2 file DB anchored to `${user.home}/.medical-dev/data/medical_dev` (was `./data/medical_dev`, CWD-relative — running from project root vs `medical-server/` silently opened two different DBs; the stale file also lacked `audit_log.prev_hash`, so Review III chain-hash writes failed, and old SQL-eCQM zero results persisted). `H2_DB_PATH` env overrides. Stale `data/` files removed; schema + seed rebuild on next h2 boot.**
 >
-> **Round 50 M4 ✅ complete (2026-09-14) — test-suite decomposability (F3).** The 2,109-line / 128-test `IntegrationTest` monolith is now 17 classes along its own section seams plus `IntegrationTestSupport`; suite-wide static tokens are gone (each class logs in its own `@BeforeAll`), cleanup runs per class, and **166 tests pass in both class orders** (17 s, one shared context) with single classes and single methods runnable alone. The split immediately exposed a real defect the old single class had been masking: `AesAttributeConverterTest` swapped the **process-wide AES key** and never restored it, so every integration class running after it in the same JVM 500'd on save (seeded rows decrypted to `[DECRYPT_FAILED]`) — fixed with a snapshot/restore seam. **\n>\n> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
+> **Round 50 M5 ✅ complete (2026-09-14) — domain status enum + mapping fixes (F4).** `AppointmentStatus` (SCHEDULED/ARRIVED/CANCELLED/COMPLETED/NO_SHOW) replaces every magic appointment integer including the JPQL `status <> 2` (now a parameter); the DB column and wire format stay numeric. Four confirmed defects fixed and verified live against seeded data: a **no-show visit no longer exports as a cancelled Encounter** (it emits none), "Not Hispanic or Latino" no longer returns the **Hispanic** OMB code, preferred language moved from a mislabelled `us-core-birthsex` extension to `Patient.communication.language`, and the codebase's only bare `orElseThrow()` now returns 404 instead of 500. **166 tests green.** **\n>\n> **Round 50 M4 ✅ complete (2026-09-14) — test-suite decomposability (F3).** The 2,109-line / 128-test `IntegrationTest` monolith is now 17 classes along its own section seams plus `IntegrationTestSupport`; suite-wide static tokens are gone (each class logs in its own `@BeforeAll`), cleanup runs per class, and **166 tests pass in both class orders** (17 s, one shared context) with single classes and single methods runnable alone. The split immediately exposed a real defect the old single class had been masking: `AesAttributeConverterTest` swapped the **process-wide AES key** and never restored it, so every integration class running after it in the same JVM 500'd on save (seeded rows decrypted to `[DECRYPT_FAILED]`) — fixed with a snapshot/restore seam. **\n>\n> **Round 50 M10 ✅ complete (2026-09-14) — rate limiter config actually applies (F15).** A configured limit now takes effect: the effective limit is part of the limiter key (`rate:export:100:3600:<ip>`), because Redisson's `trySetRate` only initialises a limiter that does not exist and the leftover permit counters had no TTL — an instance set to `export-per-hour=3` was measured serving **21 consecutive exports** as 200. Verified by changing the limit on the same Redis with no cleanup (`200×5` then `429`, message now reading "Max 5" from config), all four limiters still enforcing, `mvn test` 166 green. The four duplicated inline filters collapsed into one factory (130 → 99 lines). Also corrected the README cleanup pattern to `*rate:*` — Redisson keeps three keys per limiter and matching only the first leaves the consumed budget behind. **
 >
 > **Round 50 M3 ✅ complete (2026-09-11) — API client consolidation + auth contract.** `api/createClient.ts` now holds the single implementation of token injection, single-flight refresh, proactive refresh, the blob branch and error mapping; `request`/`patientRequest` are 14/12-line instances, so all 45 importing files were untouched. The refresh-failure **hang is fixed** (parked requests are now rejected instead of silently dropped), the refresh reads only `token` and fails loudly when it is missing, `LoginResponse` no longer invents `accessToken`/`expiresIn`/`user`, and the proactive timer got a 5 s floor that removes a 0 ms refresh loop. Verified by executing the real module against a fake 401/refresh server (5 cases) + tsc/build. `tsc`/`build` clean, bundle 435.28 → 433.41 kB. **
 >
@@ -24,7 +24,7 @@
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 5 of 10 batches done (M1, M2, M3, M4, M10) — F15 was closed by M10 and F3 by M4. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 6 of 10 batches done (M1, M2, M3, M4, M5, M10) — F15 was closed by M10, F3 by M4 and F4 by M5. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2787,7 +2787,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M4 + M10 ✅ complete (2026-09-11 → 2026-09-14); M5–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M5 + M10 ✅ complete (2026-09-11 → 2026-09-14); M6–M9 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -3001,31 +3001,44 @@ Every batch that touches a request or response payload, traced field-by-field (C
 - Deliberate trade-off: making the five narrative classes fully self-contained (each test creating its own fixture, no ordering) is a larger rewrite than the ordering it removes. Class-local `@Order` is explicit and survives being run alone; note it as a follow-up if those sequences ever need to run in parallel.
 - `IntegrationTestSupport` documents the per-class login pattern, so new tests do not reintroduce a suite-wide token.
 
-## Batch M5 — Domain status enums + mapping fixes 🟠
+## Batch M5 — Domain status enums + mapping fixes 🟠 ✅ Complete (2026-09-14)
 
-**Goal:** status values stop being magic numbers, and the four confirmed mapping defects are fixed.
+**Goal:** appointment status stops being an unnamed integer, and the four confirmed mapping defects are fixed.
+
+> The enum was derived from the code, not invented: only NO_SHOW (4, set by `AppointmentScheduler`) and CANCELLED (2, excluded by the conflict query) were documented anywhere. The DB column stays `INT` and the wire format stays numeric, so nothing changes for the frontend or the schema.
 
 ### Changes
 
 | # | Change | Files |
 |---|--------|-------|
-| M5.1 | Add `AppointmentStatus` (0 SCHEDULED, 1 ARRIVED, 2 CANCELLED, 3 COMPLETED, 4 NO_SHOW) with `code`/`fromCode`, and replace the ~10 magic comparisons (`Set.of(2,3,4)`, `Set.of(3,4)`, `Integer.valueOf(3)`, `setStatus(4)`, JPQL `status <> 2`) | new `module/appointment/entity/AppointmentStatus.java`; `module/appointment/service/AppointmentService.java`; `module/appointment/repository/AppointmentRepository.java`; `common/job/AppointmentScheduler.java`; `module/patient/controller/PatientPortalController.java:154,160` |
-| M5.2 | `buildEncounter`: delete the nonexistent `case 6`; stop mapping no-show to `CANCELLED` (a no-show encounter never happened — omit it from the bundle, or map explicitly with a comment) | `module/patient/service/PatientCaseService.java:272-278` |
-| M5.3 | `ethnicityToOmbCode`: check "not hispanic"/"not latino" **before** the hispanic branch and drop the unanchored `contains("not")` | `module/patient/service/PatientCaseService.java:234-240` |
-| M5.4 | Fix the mislabelled extension: preferred language belongs in `Patient.communication.language` (FHIR R4), not a `us-core-birthsex` URL; remove/rename the constant accordingly | `module/patient/service/PatientCaseService.java:46,206-210` |
-| M5.5 | Bare `orElseThrow()` → 404 `BusinessException` (the only occurrence in the codebase) | `module/billing/service/ChargeService.java:61` |
+| M5.1 | New `AppointmentStatus` (SCHEDULED 0, ARRIVED 1, CANCELLED 2, COMPLETED 3, NO_SHOW 4) with `code()`, `matches()`, `anyOf()`, `isTerminal()`, `fromCode()`. Replaces every magic number: `Set.of(2,3,4)` → `isTerminal()`, `Set.of(3,4)` → `anyOf(COMPLETED, NO_SHOW)`, `Integer.valueOf(3).equals(...)` → `COMPLETED.matches(...)`, `setStatus(4)` → `NO_SHOW.code()`, `setStatus(0)` default → `SCHEDULED.code()`, and the JPQL `status <> 2` → a named `:cancelledStatus` parameter fed from `CANCELLED.code()` | entity/AppointmentStatus.java (new); service/AppointmentService.java; repository/AppointmentRepository.java; common/job/AppointmentScheduler.java; controller/PatientPortalController.java; dto/AppointmentFormDTO.java |
+| M5.2 | `buildEncounter` no longer invents outcomes: the nonexistent `case 6` is gone, and a cancelled or **no-show** visit now emits **no Encounter at all** instead of `CANCELLED` (FHIR has no no-show status; a visit that never happened should not be reported as a cancelled one). A null/missing status maps to `UNKNOWN` rather than throwing | module/patient/service/PatientCaseService.java |
+| M5.3 | `ethnicityToOmbCode` tested the negative form second, so "Not Hispanic or Latino" matched `contains("hispanic")` and returned the **Hispanic** code; the second branch was dead, and its `contains("not")` would have matched almost anything. Negative forms are now checked first | same |
+| M5.4 | Preferred language moved where FHIR R4 actually puts it — `Patient.communication.language` with `preferred: true`. The old code attached it as a `StringType` extension using a constant named `LANGUAGE_EXT_URL` that pointed at `us-core-birthsex` | same |
+| M5.5 | The only bare `orElseThrow()` in the codebase → 404 `BusinessException` (was a 500 `NoSuchElementException`) | module/billing/service/ChargeService.java |
+| M5.6 | `toLowerCase()` → `toLowerCase(Locale.ROOT)` in both OMB mappings (a Turkish default locale would otherwise change the match) | same |
 
 ### Verification
 
-- `GET /api/v1/fhir/patients/{id}/$everything` (or the case endpoint) on a no-show fixture: no encounter is emitted with `CANCELLED`; on a completed fixture: `FINISHED`. Existing status round-trips unchanged.
-- Ethnicity "Not Hispanic or Latino" → OMB `2186-5`; "Hispanic or Latino" → `2135-2`. Assert both.
-- Preferred language appears under `Patient.communication` with `preferred: true`.
-- `PUT /api/v1/charges/{missing}/convert` → 404 (was 500).
-- `mvn test` green.
+- `mvn clean test`: **166 tests, 0 failures**.
+- **Live against the seeded data** (patient 100 has appointments 200/201 `COMPLETED` and 202/203 `NO_SHOW`), via `GET /api/v1/patients/100/case`:
+
+  | Check | Before | After |
+  |-------|--------|-------|
+  | Encounter entries for patient 100 | 4, the two no-shows as `cancelled` | **2, both `finished`** — the no-shows emit nothing |
+  | `Not Hispanic or Latino` (patient 100) | `2135-2` (Hispanic) | **`2186-5`** |
+  | `Hispanic or Latino` (patient 101) | `2135-2` | `2135-2` (unchanged) |
+  | Preferred language | `us-core-birthsex` extension | **`Patient.communication: [{language:{text:"en"}, preferred:true}]`** |
+  | `PUT /api/v1/charges/999999/convert` | 500 | **404 `{"code":404,"message":"Charge not found"}`** |
+  | `PUT /api/v1/charges/{existing}/convert` (happy path) | 200 | 200 (unchanged) |
+
+- The parameterised conflict query is covered by `createAppointment_conflicting_shouldReturn409`, which stays green.
 
 ### Notes
 
-- DB column stays `INT` — no schema or seed change, so this batch is reversible and does not touch the frontend wire type.
+- Deliberately **not** done here, to keep the batch reviewable: `sys_user.status` (0 disabled / 1 enabled) is still compared as a literal in `AuthService`, `SysUserService` and `PatientAuthController`; `bill.claim_status` and `prescription.rx_status` are stringly-typed throughout. Same defect class, larger blast radius — a follow-up.
+- Behaviour change worth knowing: a no-show appointment no longer appears in the FHIR case bundle as an Encounter. Any consumer counting encounters for a patient will see fewer entries than before, which is the point — the previous numbers were wrong.
+- `AppointmentStatus.fromCode` returns null instead of throwing, so an unrecognised status from the database degrades to `UNKNOWN` rather than breaking the whole bundle.
 
 ## Batch M6 — Crypto & error-handling contract 🟠
 
