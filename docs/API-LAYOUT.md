@@ -150,7 +150,7 @@ All require `PATIENT` role.
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/` | — | Current patient profile |
-| PUT | `/` | body: {phoneMobile, email, addressLine1, city, state, zipCode, ...} | Self-service profile update (name/DOB/MRN blocked — requires staff verification) |
+| PUT | `/` | body: `PatientSelfUpdateFormDTO` (12 fields) | Self-service profile update — full update, `@Size` bounded, 400 on an over-long field. Staff-verified fields are not part of the body at all — see the section below |
 | GET | `/appointments` | `?page=1&size=10` | My appointments |
 | PUT | `/appointments/{id}/cancel` | path | Cancel own appointment (status 0/1/5 → 2). Rejects cancelled/completed/no-show (409); past appointments rejected (400) |
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
@@ -512,6 +512,24 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 
 ### Audit Logging
 AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, patientId, IP, timestamp → `audit_log` table. Applied to all CUD service operations, and to **reads that target a single patient**: opening a patient (`patient:VIEW`), their history/allergies (`VIEW_HISTORY`/`VIEW_ALLERGIES`), vitals/problems/immunizations/care-plans/referrals/consent/observations/prescriptions (`VIEW`), the FHIR patient and observation reads (`FHIR_VIEW`) and the FHIR case bundle. The row carries the `patientId`, so the portal's own access history (`GET /api/v1/patient/me/disclosures`) can show who opened the record. Unaudited by design: list/search endpoints with no single patient (patient search, FHIR search) and reference data (LOINC catalog). **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.
+
+### Patient self-service update — `PUT /api/v1/patient/me`
+
+Body: `PatientSelfUpdateFormDTO` — exactly the twelve fields a patient may change:
+`phoneMobile`, `phoneHome`, `phoneWork`, `email`, `addressLine1`, `addressLine2`,
+`city`, `state`, `zipCode`, `emergencyContactName`, `emergencyContactPhone`,
+`emergencyContactRelation`. Each carries a `@Size` bound derived from its encrypted
+column (`VARCHAR(200)` fits 71 characters of plaintext, `VARCHAR(300)` fits 121;
+`emergencyContactRelation` is not encrypted and is bounded by its `VARCHAR(50)`);
+an over-long value returns **400** naming the field instead of a database error.
+
+**Behaviour changes (M8.2):** the body used to be an untyped `Map`, and
+staff-verified fields sent alongside it were silently ignored. They are now simply
+not part of the contract — legal name, MRN, date of birth, sex at birth, insurance
+and allergies cannot be changed from this endpoint at all (an unknown key is
+ignored, so sending `name` changes nothing). The endpoint is also a true **full
+update**: a field omitted from the body is cleared, where previously only the keys
+present were touched. The portal submits all twelve.
 
 ### Error status contract
 

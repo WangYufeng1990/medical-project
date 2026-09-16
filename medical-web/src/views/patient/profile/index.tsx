@@ -25,6 +25,14 @@ const FIELDS: { key: keyof PatientProfileVO; label: string; readonly?: boolean; 
   { key: 'allergies', label: 'Allergies', readonly: true },
 ]
 
+// The backend accepts exactly these keys; the readonly ones (name, MRN, date of
+// birth, sex at birth, insurance, allergies) are staff-verified and are not part
+// of the payload at all. `?? null` keeps an empty field empty for 0/false too.
+const EDITABLE_KEYS = FIELDS.filter(f => !f.readonly).map(f => f.key)
+
+const selfServicePayload = (form: Partial<PatientProfileVO>) =>
+  Object.fromEntries(EDITABLE_KEYS.map(k => [k, form[k] ?? null]))
+
 export default function PatientProfile() {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
@@ -43,12 +51,13 @@ export default function PatientProfile() {
   }, [profile])
 
   const updateMutation = useMutation({
-    mutationFn: (data: PatientProfileVO) => http.put('/patient/me', data),
+    mutationFn: () => http.put<void>('/patient/me', selfServicePayload(form)),
     onSuccess: () => {
       setEditing(false)
       queryClient.invalidateQueries({ queryKey: ['me', 'profile'] })
       alert('Profile updated')
     },
+    onError: (err: Error) => alert(err?.message || 'Profile update failed'),
   })
 
   const pwdMutation = useMutation({
@@ -70,7 +79,7 @@ export default function PatientProfile() {
     </h2>
     <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: 700, marginTop: 16 }}>
       {editing ? (
-        <form onSubmit={e => { e.preventDefault(); updateMutation.mutate(form as PatientProfileVO) }} className={styles.formGrid}>
+        <form onSubmit={e => { e.preventDefault(); updateMutation.mutate() }} className={styles.formGrid}>
           {FIELDS.map(f => (
             <div key={f.key} className={styles.formGroup}>
               <label>{f.label}</label>

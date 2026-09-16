@@ -56,6 +56,7 @@ import com.example.medical.module.patient.dto.CarePlanVO;
 import com.example.medical.module.patient.dto.ImmunizationVO;
 import com.example.medical.module.patient.dto.ProblemVO;
 import com.example.medical.module.patient.dto.VitalSignVO;
+import com.example.medical.module.patient.dto.PatientSelfUpdateFormDTO;
 import org.springframework.data.domain.Pageable;
 
 @RestController
@@ -113,24 +114,12 @@ public class PatientPortalController {
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "patient", action = "UPDATE_PROFILE", phiAccess = true)
     public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
-                                       @RequestBody Map<String, Object> body) {
+                                       @Valid @RequestBody PatientSelfUpdateFormDTO form) {
         Patient patient = patientRepository.findById(loginUser.getUserId())
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
-
-        // name changes require staff verification — NOT self-service
-        if (body.containsKey("phoneMobile")) patient.setPhoneMobile((String) body.get("phoneMobile"));
-        if (body.containsKey("phoneHome")) patient.setPhoneHome((String) body.get("phoneHome"));
-        if (body.containsKey("phoneWork")) patient.setPhoneWork((String) body.get("phoneWork"));
-        if (body.containsKey("email")) patient.setEmail((String) body.get("email"));
-        if (body.containsKey("addressLine1")) patient.setAddressLine1((String) body.get("addressLine1"));
-        if (body.containsKey("addressLine2")) patient.setAddressLine2((String) body.get("addressLine2"));
-        if (body.containsKey("city")) patient.setCity((String) body.get("city"));
-        if (body.containsKey("state")) patient.setState((String) body.get("state"));
-        if (body.containsKey("zipCode")) patient.setZipCode((String) body.get("zipCode"));
-        if (body.containsKey("emergencyContactName")) patient.setEmergencyContactName((String) body.get("emergencyContactName"));
-        if (body.containsKey("emergencyContactPhone")) patient.setEmergencyContactPhone((String) body.get("emergencyContactPhone"));
-        if (body.containsKey("emergencyContactRelation")) patient.setEmergencyContactRelation((String) body.get("emergencyContactRelation"));
-
+        // Staff-verified fields (name, MRN, DOB, sex at birth, insurance, allergies)
+        // are not part of the payload, so they cannot be changed from here at all.
+        form.applyTo(patient);
         patientRepository.save(patient);
         return Result.ok();
     }

@@ -3114,14 +3114,37 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 - Deliberately not routed through `Pages`: the CSV export paging loop (server-side scan, `EXPORT_PAGE_SIZE = 500`), the internal existence probes (`of(0, 1)`, `of(0, 20)`) and the FHIR `_count` cap of 500 — none of those are user page requests, and FHIR's own contract sets its cap.
 - Two 400 message shapes for one rule is a small wart: raw-parameter endpoints throw `BusinessException` from `Pages`, `PageQuery` endpoints fail bean validation first. Same status, same limit, different wording (documented in API-LAYOUT).
-- The patient portal's self-update endpoint still takes an untyped body, so its fields cannot carry `@Size` yet — M8.2 replaces that with a DTO and must carry these bounds.
+- The patient portal's self-update endpoint still took an untyped body, so its fields could not carry `@Size` — **closed in M8.2**, which replaced it with `PatientSelfUpdateFormDTO` carrying the derived bounds.
 - `Pages` bounds are enforced in the service layer for the raw-parameter endpoints rather than at the web layer; if a future round migrates them all to `@Valid PageQuery`, the builder stays the single authority either way.
 
 ## Batch M8 — Layering: VO/DTO extraction + controller split 🟠 (in progress)
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO. **M8.2–M8.6 ⬜ still open.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3–M8.6 ⬜ still open.**
+
+### M8.2 — the portal's untyped request body ✅
+
+`PUT /api/v1/patient/me` took a `Map<String, Object>` and applied twelve fields by hand with `if (body.containsKey(...))` and `(String)` casts — no validation, no types, and a silently ignored field for every staff-verified value a client sent along.
+
+| # | Change | Files |
+|---|--------|-------|
+| M8.2.1 | New `PatientSelfUpdateFormDTO`: exactly the twelve fields a patient may change, each with the `@Size` bound derived from its encrypted column (200 → 71 plaintext characters, 300 → 121, and the unencrypted `emergencyContactRelation` → its own 50). Conversion lives in the DTO (`applyTo`) | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController` |
+| M8.2.2 | The frontend now sends only the editable fields (`FIELDS.filter(f => !f.readonly)`) instead of the whole profile object with `?? null`, so the contract is what the request actually contains — the old payload carried `name`, `mrn`, `insurancePayer` and `allergies`, which the backend ignored | `views/patient/profile/index.tsx` |
+
+**Verification** (live, on a DB copy):
+
+| Check | Result |
+|-------|--------|
+| All twelve fields updated | **200**, and a read-back shows the new phone/email/city/ZIP/emergency contact |
+| Sending `name`, `allergies`, `insurancePayer`, `mrn` alongside | **200** but **none of them changed** — they are not part of the DTO, so they cannot be set from here |
+| `phoneMobile` 71 chars / 72 chars | **200** / **400** `phoneMobile: Phone (mobile) must be at most 71 characters` |
+| `email` 121 / 130 chars | **200** / **400** `email: Email must be at most 121 characters` |
+| `emergencyContactRelation` 60 chars | **400** (unencrypted `VARCHAR(50)`) |
+
+- `mvn clean verify`: 166 tests, 0 failures; `npx tsc --noEmit` clean; `npm run lint` unchanged (0 errors, 4 pre-existing warnings).
+
+**Behaviour change to know about:** the endpoint is now a true full update — a field omitted from the body is cleared, where previously only the keys present were touched. The portal submits all twelve, so its behaviour is unchanged; a client sending a partial body will now clear the rest. PUT semantics, and documented in API-LAYOUT.
 
 ### M8.1 — no raw entities on the wire ✅
 
