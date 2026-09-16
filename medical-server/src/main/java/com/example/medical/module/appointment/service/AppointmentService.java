@@ -15,6 +15,7 @@ import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +58,38 @@ public class AppointmentService {
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
         doctorPatientScope.requireAccess(a.getPatientId());
         return toVO(a);
+    }
+
+    /** The patient portal's own view: no doctor scope, the id comes from the token. */
+    public Page<AppointmentVO> pageForPatient(Long patientId, long page, long size) {
+        Pageable pageable = Pages.of(page, size, Sort.by(Sort.Direction.DESC, "appointmentTime"));
+        return appointmentRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                pageable).map(this::toVO);
+    }
+
+    /**
+     * Patient-initiated cancellation. Ownership is checked here rather than in
+     * the portal controller, so no other caller can cancel someone else's
+     * appointment through this path.
+     */
+    @Transactional
+    @Auditable(module = "appointment", action = "CANCEL")
+    public void cancelByPatient(Long id, Long patientId) {
+        Appointment a = appointmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
+        if (!a.getPatientId().equals(patientId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
+        }
+        if (AppointmentStatus.anyOf(a.getStatus(),
+                AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED)) {
+            throw new BusinessException(ResultCode.CONFLICT, "Appointment already cancelled or completed");
+        }
+        if (a.getAppointmentTime() != null && a.getAppointmentTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.CONFLICT, "Cannot cancel past appointments");
+        }
+        a.setStatus(AppointmentStatus.CANCELLED.code());
+        appointmentRepository.save(a);
     }
 
     @Transactional

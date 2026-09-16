@@ -28,7 +28,7 @@
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 9 of 10 batches done (M1–M7, M9, M10) — F15 closed by M10, F3 by M4, F4 by M5, F6+F10 by M6, F8+F11 by M7, F12 by M9. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 9 of 10 batches done (M1–M7, M9, M10; M8 in progress — 3 of its 6 slices landed) — F15 closed by M10, F3 by M4, F4 by M5, F6+F10 by M6, F8+F11 by M7, F12 by M9. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2791,7 +2791,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M7, M9, M10 ✅ complete (2026-09-11 → 2026-09-15); M8 ⬜ planned.** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M7, M9, M10 ✅ complete (2026-09-11 → 2026-09-15); M8 🟠 in progress (M8.1–M8.3 ✅ 2026-09-16, M8.4–M8.6 ⬜).** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -3121,7 +3121,48 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3–M8.6 ⬜ still open.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4–M8.6 ⬜ still open.**
+
+### M8.3 — the portal's business logic moves into services ✅
+
+`PatientPortalController` was not a controller: 18 injected beans, three of them other modules' `*Repository`, plus the cancellation rules, the payment ownership check, the password-change flow and the VO assembly (doctor/patient name lookups) written out inline. Nothing below the web layer could reuse any of it, and `patient` reached into `system`, `appointment`, `billing` and `prescription` at the repository level.
+
+| # | Change | Files |
+|---|--------|-------|
+| M8.3.1 | **Password-history policy existed three times** — `PatientPortalController`, `UserProfileController` and `SysUserService` each built a `PasswordHistory` row and each re-implemented the `findTop3…` + `matches` check. Now `PasswordHistoryService` (`requireNotReused` / `record`) is the only copy; the three call sites keep their own `userType` and identity (staff credentials key on `SysUser.id`, patients on `PatientAuth.id` — the same table, two id spaces) | `module/system/service/PasswordHistoryService.java` (new); `UserProfileController`; `SysUserService`; `PatientAccountService` |
+| M8.3.2 | Portal password change moved to `PatientAccountService.changePassword(patientId, old, new)`, taking the credential id from `PatientAuth`, not from the request | `module/patient/service/PatientAccountService.java` (new) |
+| M8.3.3 | Appointment cancellation moved to `AppointmentService.cancelByPatient(id, patientId)` — ownership check, terminal-state check and the past-appointment check all in one place instead of in a controller | `AppointmentService` |
+| M8.3.4 | Bill payment moved to `BillService.payByPatient(id, patientId, amount, method)`; the payment maths is now one private `applyPayment` shared by the staff path (`pay`) and the portal path, and `findBill` removes the duplicated lookup. Ownership is checked *before* the state check, so a foreign bill is 403 regardless of its status | `BillService` |
+| M8.3.5 | Patient-scoped listings moved to their owning services: `AppointmentService.pageForPatient` (appointments by `appointmentTime`), `PrescriptionService.pageForPatient` (`createTime`), `BillService.pageForPatient` (`createTime`), all without doctor scope — the id comes from the token. This is what removes `PatientRepository`/`SysUserRepository`/`PrescriptionItemRepository` from the portal controller: the VO assembly (doctor/patient names, prescription items) now happens inside the owning module | `AppointmentService`, `PrescriptionService`, `BillService` |
+| M8.3.6 | `ReferralService.listByPatient` and `PriorAuthService.listByPatient` are new — `referral` lives in `appointment` and `prior_auth` in `billing`, so the portal was querying two foreign repositories to render two read-only pages. `ReferralController.listByPatient` now delegates to the same method (its `doctorPatientScope.requireAccess` stays where it was) | `module/appointment/service/ReferralService.java`, `module/billing/service/PriorAuthService.java` (new); `ReferralController` |
+| M8.3.7 | Profile read/update moved to `PatientService.profile` / `updateOwnProfile`. `profile` is deliberately **not** audited and still returns `null` for a missing row: a patient reading their own record is the baseline case and a row per page load would bury the real accesses in `/patient/me/disclosures` | `PatientService` |
+| M8.3.8 | The two controller-nested request classes became DTOs in the module's `dto/`: `PatientPasswordChangeFormDTO`, `PatientPayBillFormDTO`. The latter adds `@NotNull` on `paymentAmount` — previously a null amount passed `@Positive` (which ignores null) and then hit `paid.add(null)` → NPE → **500** | `module/patient/dto/` |
+| M8.3.9 | **M8.1 leftovers found while tracing the emergency controller:** `GET /api/v1/emergency/history` still returned `List<EmergencyAccess>` (a JPA entity, so `isDeleted`/`version`/`updateTime` on the wire) and `POST /access/{patientId}` returned an untyped `Map<String, Object>`. Now `EmergencyAccessVO` and `EmergencyAccessTokenVO` | `module/system/dto/` (new); `EmergencyAccessController` |
+| M8.3.10 | `EmergencyAccessResultVO.expiresIn` in the frontend was never sent — the backend has always returned `expiresInMinutes`. Dead field, but the type lied; renamed in TS | `medical-web/src/types/entities.ts` |
+| M8.3.11 | The patient's bill page offered **Pay Now** for `DRAFT` bills, but `applyPayment` only accepts `PENDING`, so that button could only ever produce a 409. Hidden for DRAFT | `views/patient/bills/index.tsx` |
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **173 tests, 0 failures** (166 → 173; the portal class went from 6 to 13), enforcer clean |
+| Cancel own future appointment | **200**, status → 2 in the patient's own list; a second attempt → **409** `Appointment already cancelled or completed` |
+| Cancel another patient's appointment | **403** — the ownership check lives in the service now, not in the controller |
+| Cancel a past appointment (seed 202) | **409** `Cannot cancel past appointments` |
+| Pay seeded bill 501 (37.80, PENDING) | **200** → `claimStatus` `PAID` in the patient's list |
+| Pay another patient's bill (502) | **403** (ownership first, so the PAID state of 502 is irrelevant) |
+| Wrong old password | **400** `Old password is incorrect` |
+| Change → change → reuse the first new password | 200, 200, then **400** `New password must not match any of the last 3 passwords` — proves the replaced hash was recorded, which is exactly what the three-way duplication made easy to get wrong |
+| `npm run check` | tsc clean; eslint 0 errors, same 4 warnings as before this batch |
+
+**Test isolation fixed on the way:** the new portal tests mutate shared seed state, so `cleanup-test-data.sql` now restores bill 501 to `PENDING`/unpaid and `patient1`'s password hash (plus deletes `PATIENT` password history). Without that, the billing "2 PAID bills" assertion and every later `patientLogin("patient1", …)` would fail depending on class order.
+
+**Behaviour changes to know about**
+
+- `PUT /api/v1/patient/me/bills/{id}/pay` with a missing `paymentAmount` is now **400**, not 500.
+- `GET /api/v1/emergency/history` no longer exposes `isDeleted`/`version`/`updateTime`/`createTime` (VO instead of entity); `POST /api/v1/emergency/access/{patientId}` is typed as `{token, expiresInMinutes, patientId}`.
+- The audited portal operations now carry a `targetId` on their audit row (`appointment`/`billing`/`patient` id); previously the row for e.g. a patient password change had `targetId = null`. Action names, modules and the `patientId` are unchanged.
+- Still open from M8.1's scope, deliberately not touched here: the remaining `Map<String, Object>` responses in the integration/ePrescribing/quality report endpoints.
 
 ### M8.2 — the portal's untyped request body ✅
 
@@ -3200,7 +3241,7 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 |---|--------|-------|
 | M8.1 | Add VOs (+ `fromEntity`) for the endpoints currently returning entities: portal `vitals/problems/immunizations/referrals/care-plans/prior-auths/disclosures`, `ConsentController`, `QualityController`, `PharmacyController`, `FormularyController` | new DTOs under each module's `dto/`; `PatientPortalController:314-359`; `ConsentController:31,64`; `QualityController:23,39`; `PharmacyController:21`; `FormularyController:40` |
 | M8.2 | `PUT /api/v1/patient/me`: `Map<String,Object>` → `PatientSelfUpdateFormDTO` (the 12 allowed fields + `@Size`); frontend sends only the editable fields | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController:103-127`; `medical-web/src/views/patient/profile/index.tsx:44,73` |
-| M8.3 | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services; breaks `patient↔system`, `patient↔appointment`, `patient↔billing` cycles | `PatientPortalController`; `module/patient/service/*`; reuse `AuthService`'s password-history pattern |
+| M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**: `patient` still imports `system`/`appointment`/`billing`/`prescription`, but only their *services* now (plus `PatientDataExport`, M8.6) — no foreign repository is reachable from the portal controller any more | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
 | M8.4 | Split `PatientPortalController` (18 deps) by resource: profile / observations / appointments / prescriptions / bills (+ chat untouched) | `module/patient/controller/PatientPortal*Controller.java` |
 | M8.5 | Remove `common → module` reverse deps: relocate `common/job/AppointmentScheduler`, `QualityScheduler` into their modules (and `DataRetentionJob` into a dedicated retention component that owns its cross-module queries); reassess `DoctorPatientScope`'s location | `common/job/*`; affected module packages |
 | M8.6 | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → move assembly to a service or a `common`-level DTO to break the cycle | `module/patient/dto/PatientDataExport.java`; `PatientPortalController.exportMyData` |

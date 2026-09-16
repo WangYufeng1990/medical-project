@@ -4,6 +4,7 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.patient.dto.PatientFormDTO;
+import com.example.medical.module.patient.dto.PatientSelfUpdateFormDTO;
 import com.example.medical.module.patient.dto.PatientVO;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
@@ -64,6 +65,27 @@ public class PatientService {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
         dto.applyTo(patient);
+        patientRepository.save(patient);
+    }
+
+    /**
+     * The portal's own profile read. Not audited and returns {@code null} when the
+     * patient row is gone: a patient reading their own record is the baseline
+     * case, and adding a row per page load would bury the real accesses in
+     * {@code /patient/me/disclosures}.
+     */
+    public PatientVO profile(Long patientId) {
+        return patientRepository.findById(patientId).map(PatientVO::fromEntity).orElse(null);
+    }
+
+    @Transactional
+    @Auditable(module = "patient", action = "UPDATE_PROFILE", phiAccess = true)
+    public void updateOwnProfile(Long patientId, PatientSelfUpdateFormDTO form) {
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
+        // Staff-verified fields (name, MRN, DOB, sex at birth, insurance, allergies)
+        // are not part of the payload, so they cannot be changed from here at all.
+        form.applyTo(patient);
         patientRepository.save(patient);
     }
 

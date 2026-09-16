@@ -152,7 +152,7 @@ All require `PATIENT` role.
 | GET | `/` | — | Current patient profile |
 | PUT | `/` | body: `PatientSelfUpdateFormDTO` (12 fields) | Self-service profile update — full update, `@Size` bounded, 400 on an over-long field. Staff-verified fields are not part of the body at all — see the section below |
 | GET | `/appointments` | `?page=1&size=10` | My appointments |
-| PUT | `/appointments/{id}/cancel` | path | Cancel own appointment (status 0/1/5 → 2). Rejects cancelled/completed/no-show (409); past appointments rejected (400) |
+| PUT | `/appointments/{id}/cancel` | path | Cancel own appointment (status → 2). Rejects an appointment that is already cancelled/completed (409) and one whose time has passed (409) |
 | GET | `/prescriptions` | `?page=1&size=10` | My prescriptions |
 | GET | `/bills` | `?page=1&size=10` | My bills |
 | GET | `/export` | — | HIPAA Right of Access — full data export (demographics + appointments + prescriptions + bills) |
@@ -171,8 +171,8 @@ All require `PATIENT` role.
 | GET | `/messages/conversations` | `?page=1&size=20` | My chat conversations |
 | GET | `/messages/{partnerId}` | `?page=1&size=50` | Chat messages with a staff member |
 | POST | `/messages` | body: {receiverId, content} | Send a chat message |
-| PUT | `/bills/{id}/pay` | body: {paymentAmount, paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified. DRAFT is not payable |
-| PUT | `/password` | body: {oldPassword, newPassword} | Change password (enforces complexity + history policy) |
+| PUT | `/bills/{id}/pay` | body: `PatientPayBillFormDTO` {paymentAmount (> 0, required), paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified (403 for someone else's bill). DRAFT is not payable; a missing amount is 400, not 500 |
+| PUT | `/password` | body: `PatientPasswordChangeFormDTO` {oldPassword, newPassword} | Change password — verifies the old one (400), enforces complexity (`@ValidPassword`) and the last-3 history policy |
 | POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
 | POST | `/patient/reset-password` | body: {token, newPassword} | Public. Resets password (policy-enforced), clears lockout; token single-use, 401 on invalid/expired/reused |
 
@@ -378,8 +378,8 @@ Requires `ADMIN` or `DOCTOR`. Break-glass access with mandatory audit.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| POST | `/access/{patientId}` | body: {reason} | Returns short-lived (30min) JWT with `scope=EMERGENCY` + `patientId` claim. Use this token to access the specific patient's data via `/patients/{id}` |
-| GET | `/history` | `?patientId=&audited=0` | View emergency access history — filter by patient or unreviewed (ADMIN only) |
+| POST | `/access/{patientId}` | body: {reason} | Returns `EmergencyAccessTokenVO` {token, expiresInMinutes, patientId} — short-lived (30min) JWT with `scope=EMERGENCY` + `patientId` claim. Use this token to access the specific patient's data via `/patients/{id}` |
+| GET | `/history` | `?patientId=&audited=0` | View emergency access history — `EmergencyAccessVO[]` (filter by patient or unreviewed; ADMIN only) |
 | PUT | `/{id}/review` | path | Mark emergency access as reviewed — sets `audited=1`, `reviewedBy`, `reviewedAt` (ADMIN only) |
 
 ### Key Management — `/api/v1/admin/keys`

@@ -70,6 +70,16 @@ public class PrescriptionService {
                 .stream().map(this::toVO).toList();
     }
 
+    /** The patient portal's own view: no doctor scope, the id comes from the token. */
+    public Page<PrescriptionVO> pageForPatient(Long patientId, long page, long size) {
+        Pageable pageable = Pages.of(page, size,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "createTime"));
+        return prescriptionRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                pageable).map(this::toVO);
+    }
+
     @Transactional
     @Auditable(module = "prescription", action = "CREATE", phiAccess = true)
     public void create(PrescriptionFormDTO dto, com.example.medical.security.LoginUser loginUser) {

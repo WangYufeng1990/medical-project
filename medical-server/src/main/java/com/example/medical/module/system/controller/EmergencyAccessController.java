@@ -3,8 +3,9 @@ package com.example.medical.module.system.controller;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
-import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.system.dto.EmergencyAccessTokenVO;
+import com.example.medical.module.system.dto.EmergencyAccessVO;
 import com.example.medical.module.system.entity.EmergencyAccess;
 import com.example.medical.module.system.repository.EmergencyAccessRepository;
 import com.example.medical.security.LoginUser;
@@ -24,7 +25,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -42,11 +42,12 @@ public class EmergencyAccessController {
     @PostMapping("/access/{patientId}")
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "emergency", action = "ACCESS", phiAccess = true)
-    public Result<Map<String, Object>> emergencyAccess(@AuthenticationPrincipal LoginUser loginUser,
+    public Result<EmergencyAccessTokenVO> emergencyAccess(@AuthenticationPrincipal LoginUser loginUser,
                                                         @PathVariable Long patientId,
                                                         @Valid @RequestBody EmergencyAccessRequest request) {
-        Patient patient = patientRepository.findById(patientId)
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
+        if (!patientRepository.existsById(patientId)) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
+        }
 
         Instant now = Instant.now();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(
@@ -73,25 +74,27 @@ public class EmergencyAccessController {
         log.warn("EMERGENCY ACCESS: user={} patient={} expiresIn={}min",
                 loginUser.getUsername(), patientId, EMERGENCY_ACCESS_MINUTES);
 
-        return Result.ok(Map.of("token", token, "expiresInMinutes", EMERGENCY_ACCESS_MINUTES,
-                "patientId", patientId));
+        return Result.ok(EmergencyAccessTokenVO.of(token, EMERGENCY_ACCESS_MINUTES, patientId));
     }
 
     @GetMapping("/history")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<java.util.List<EmergencyAccess>> history(
+    public Result<List<EmergencyAccessVO>> history(
             @RequestParam(required = false) Long patientId,
             @RequestParam(required = false) Integer audited) {
         if (audited != null) {
-            return Result.ok(emergencyAccessRepository.findByAuditedOrderByAccessedAtDesc(audited));
+            return Result.ok(emergencyAccessRepository.findByAuditedOrderByAccessedAtDesc(audited)
+                    .stream().map(EmergencyAccessVO::fromEntity).toList());
         }
         if (patientId != null) {
-            return Result.ok(emergencyAccessRepository.findByPatientIdOrderByAccessedAtDesc(patientId));
+            return Result.ok(emergencyAccessRepository.findByPatientIdOrderByAccessedAtDesc(patientId)
+                    .stream().map(EmergencyAccessVO::fromEntity).toList());
         }
         var pageable = org.springframework.data.domain.PageRequest.of(0, 500,
                 org.springframework.data.domain.Sort.by(
                         org.springframework.data.domain.Sort.Direction.DESC, "accessedAt"));
-        return Result.ok(emergencyAccessRepository.findAll(pageable).getContent());
+        return Result.ok(emergencyAccessRepository.findAll(pageable).getContent()
+                .stream().map(EmergencyAccessVO::fromEntity).toList());
     }
 
     @PutMapping("/{id}/review")

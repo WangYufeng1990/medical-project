@@ -6,10 +6,9 @@ import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
 import com.example.medical.common.validation.ValidPassword;
 import com.example.medical.module.system.dto.SysUserVO;
-import com.example.medical.module.system.entity.PasswordHistory;
 import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.repository.PasswordHistoryRepository;
 import com.example.medical.module.system.repository.SysUserRepository;
+import com.example.medical.module.system.service.PasswordHistoryService;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -31,10 +30,9 @@ import java.util.List;
 public class UserProfileController {
 
     private final SysUserRepository sysUserRepository;
-    private final PasswordHistoryRepository passwordHistoryRepository;
+    private final PasswordHistoryService passwordHistoryService;
     private final PasswordEncoder passwordEncoder;
 
-    private static final int PASSWORD_HISTORY_LIMIT = 3;
     private static final int PASSWORD_MAX_AGE_DAYS = 90;
 
     @GetMapping
@@ -100,28 +98,15 @@ public class UserProfileController {
         }
 
         String newPlainPassword = request.getNewPassword();
-        if (isInPasswordHistory("SYS_USER", user.getId(), newPlainPassword)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST,
-                    "New password must not match any of the last " + PASSWORD_HISTORY_LIMIT + " passwords");
-        }
-
-        PasswordHistory history = new PasswordHistory();
-        history.setUserType("SYS_USER");
-        history.setUserId(user.getId());
-        history.setPasswordHash(user.getPassword());
-        history.setChangedAt(user.getPasswordChangedAt());
-        passwordHistoryRepository.save(history);
+        passwordHistoryService.requireNotReused(PasswordHistoryService.STAFF_USER_TYPE, user.getId(),
+                newPlainPassword);
+        passwordHistoryService.record(PasswordHistoryService.STAFF_USER_TYPE, user.getId(),
+                user.getPassword(), user.getPasswordChangedAt());
 
         user.setPassword(passwordEncoder.encode(newPlainPassword));
         user.setPasswordChangedAt(LocalDateTime.now());
         sysUserRepository.save(user);
         return Result.ok();
-    }
-
-    private boolean isInPasswordHistory(String userType, Long userId, String plainPassword) {
-        List<PasswordHistory> recent = passwordHistoryRepository
-                .findTop3ByUserTypeAndUserIdOrderByChangedAtDesc(userType, userId);
-        return recent.stream().anyMatch(h -> passwordEncoder.matches(plainPassword, h.getPasswordHash()));
     }
 
     @Data

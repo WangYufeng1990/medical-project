@@ -8,6 +8,7 @@ import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.ReferralVO;
 import com.example.medical.module.appointment.entity.Referral;
 import com.example.medical.module.appointment.repository.ReferralRepository;
+import com.example.medical.module.appointment.service.ReferralService;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.Data;
@@ -28,6 +29,7 @@ import com.example.medical.common.base.Pages;
 public class ReferralController {
 
     private final ReferralRepository referralRepository;
+    private final ReferralService referralService;
     private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/referrals")
@@ -54,8 +56,7 @@ public class ReferralController {
     @Auditable(module = "referral", action = "VIEW", phiAccess = true)
     public Result<List<ReferralVO>> listByPatient(@PathVariable Long patientId) {
         doctorPatientScope.requireAccess(patientId);
-        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(patientId)
-                .stream().map(ReferralVO::fromEntity).toList());
+        return Result.ok(referralService.listByPatient(patientId));
     }
 
     @PostMapping("/referrals")

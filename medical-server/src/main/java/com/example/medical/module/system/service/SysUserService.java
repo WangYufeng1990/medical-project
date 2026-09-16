@@ -28,7 +28,7 @@ public class SysUserService {
 
     private final SysUserRepository sysUserRepository;
     private final PasswordEncoder passwordEncoder;
-    private final com.example.medical.module.system.repository.PasswordHistoryRepository passwordHistoryRepository;
+    private final PasswordHistoryService passwordHistoryService;
 
     public Page<SysUserVO> page(long page, long size, String keyword) {
         Specification<SysUser> spec = (root, query, cb) -> {
@@ -76,13 +76,8 @@ public class SysUserService {
         // Optional password reset by admin (Review III H4): record the replaced
         // hash so the password-history check still works, then set the new one.
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
-            com.example.medical.module.system.entity.PasswordHistory history =
-                    new com.example.medical.module.system.entity.PasswordHistory();
-            history.setUserType("SYS_USER");
-            history.setUserId(user.getId());
-            history.setPasswordHash(user.getPassword());
-            history.setChangedAt(user.getPasswordChangedAt());
-            passwordHistoryRepository.save(history);
+            passwordHistoryService.record(PasswordHistoryService.STAFF_USER_TYPE, user.getId(),
+                    user.getPassword(), user.getPasswordChangedAt());
 
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
             user.setPasswordChangedAt(LocalDateTime.now());

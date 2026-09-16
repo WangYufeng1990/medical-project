@@ -1,63 +1,55 @@
 package com.example.medical.module.patient.controller;
 
-import com.example.medical.common.enums.ResultCode;
-import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.audit.AuditLogVO;
+import com.example.medical.common.audit.Auditable;
+import com.example.medical.common.audit.repository.AuditLogRepository;
+import com.example.medical.common.base.Pages;
 import com.example.medical.common.result.PageResult;
-import java.util.Map;
 import com.example.medical.common.result.Result;
-import com.example.medical.common.validation.ValidPassword;
 import com.example.medical.module.appointment.dto.AppointmentVO;
-import com.example.medical.module.appointment.entity.Appointment;
+import com.example.medical.module.appointment.dto.ReferralVO;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
+import com.example.medical.module.appointment.service.AppointmentService;
+import com.example.medical.module.appointment.service.ReferralService;
 import com.example.medical.module.billing.dto.BillVO;
-import com.example.medical.module.billing.entity.Bill;
+import com.example.medical.module.billing.dto.PriorAuthVO;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.service.BillService;
+import com.example.medical.module.billing.service.PriorAuthService;
+import com.example.medical.module.patient.dto.CarePlanVO;
+import com.example.medical.module.patient.dto.ImmunizationVO;
 import com.example.medical.module.patient.dto.ObservationVO;
 import com.example.medical.module.patient.dto.PatientDataExport;
+import com.example.medical.module.patient.dto.PatientPasswordChangeFormDTO;
+import com.example.medical.module.patient.dto.PatientPayBillFormDTO;
+import com.example.medical.module.patient.dto.PatientSelfUpdateFormDTO;
 import com.example.medical.module.patient.dto.PatientVO;
+import com.example.medical.module.patient.dto.ProblemVO;
+import com.example.medical.module.patient.dto.VitalSignVO;
 import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.entity.PatientAuth;
-import com.example.medical.module.patient.repository.PatientAuthRepository;
+import com.example.medical.module.patient.repository.CarePlanRepository;
+import com.example.medical.module.patient.repository.ImmunizationRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.patient.repository.ProblemRepository;
+import com.example.medical.module.patient.repository.VitalSignRepository;
 import com.example.medical.module.patient.service.LabAnalysisService;
-import com.example.medical.module.prescription.dto.PrescriptionItemVO;
+import com.example.medical.module.patient.service.PatientAccountService;
+import com.example.medical.module.patient.service.PatientService;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
 import com.example.medical.module.prescription.repository.PrescriptionRepository;
-import com.example.medical.module.system.entity.PasswordHistory;
-import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.repository.PasswordHistoryRepository;
-import com.example.medical.module.system.repository.SysUserRepository;
+import com.example.medical.module.prescription.service.PrescriptionService;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
-import com.example.medical.module.appointment.entity.AppointmentStatus;
-import com.example.medical.common.base.Pages;
-import com.example.medical.common.audit.AuditLogVO;
-import com.example.medical.module.appointment.dto.ReferralVO;
-import com.example.medical.module.billing.dto.PriorAuthVO;
-import com.example.medical.module.patient.dto.CarePlanVO;
-import com.example.medical.module.patient.dto.ImmunizationVO;
-import com.example.medical.module.patient.dto.ProblemVO;
-import com.example.medical.module.patient.dto.VitalSignVO;
-import com.example.medical.module.patient.dto.PatientSelfUpdateFormDTO;
-import org.springframework.data.domain.Pageable;
 
 @RestController
 @RequestMapping("/api/v1/patient/me")
@@ -65,29 +57,47 @@ import org.springframework.data.domain.Pageable;
 @PreAuthorize("hasRole('PATIENT')")
 public class PatientPortalController {
 
-    private static final int PASSWORD_HISTORY_LIMIT = 3;
-
+    private final PatientService patientService;
+    private final PatientAccountService patientAccountService;
+    private final LabAnalysisService labAnalysisService;
+    private final AppointmentService appointmentService;
+    private final PrescriptionService prescriptionService;
+    private final BillService billService;
+    private final ReferralService referralService;
+    private final PriorAuthService priorAuthService;
+    private final VitalSignRepository vitalSignRepository;
+    private final ProblemRepository problemRepository;
+    private final ImmunizationRepository immunizationRepository;
+    private final CarePlanRepository carePlanRepository;
+    private final AuditLogRepository auditLogRepository;
+    // Only /export still reaches across modules; M8.6 moves that assembly into a service.
     private final PatientRepository patientRepository;
-    private final PatientAuthRepository patientAuthRepository;
     private final AppointmentRepository appointmentRepository;
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final BillRepository billRepository;
-    private final BillService billService;
-    private final SysUserRepository sysUserRepository;
-    private final PasswordHistoryRepository passwordHistoryRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final LabAnalysisService labAnalysisService;
-    private final com.example.medical.module.patient.repository.VitalSignRepository vitalSignRepository;
-    private final com.example.medical.module.patient.repository.ProblemRepository problemRepository;
-    private final com.example.medical.module.patient.repository.ImmunizationRepository immunizationRepository;
-    private final com.example.medical.common.audit.repository.AuditLogRepository auditLogRepository;
-    private final com.example.medical.module.appointment.repository.ReferralRepository referralRepository;
-    private final com.example.medical.module.patient.repository.CarePlanRepository carePlanRepository;
-    private final com.example.medical.module.billing.repository.PriorAuthRepository priorAuthRepository;
+
+    @GetMapping
+    public Result<PatientVO> profile(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(patientService.profile(loginUser.getUserId()));
+    }
+
+    @PutMapping
+    public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
+                                      @Valid @RequestBody PatientSelfUpdateFormDTO form) {
+        patientService.updateOwnProfile(loginUser.getUserId(), form);
+        return Result.ok();
+    }
+
+    @PutMapping("/password")
+    public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
+                                       @Valid @RequestBody PatientPasswordChangeFormDTO form) {
+        patientAccountService.changePassword(loginUser.getUserId(), form.getOldPassword(), form.getNewPassword());
+        return Result.ok();
+    }
 
     @GetMapping("/observations")
-    @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
+    @Auditable(module = "observation", action = "ACCESS", phiAccess = true)
     public Result<PageResult<ObservationVO>> myObservations(
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(required = false) String loinc,
@@ -97,31 +107,39 @@ public class PatientPortalController {
     }
 
     @GetMapping("/observations/trend")
-    @com.example.medical.common.audit.Auditable(module = "observation", action = "ACCESS", phiAccess = true)
+    @Auditable(module = "observation", action = "ACCESS", phiAccess = true)
     public Result<List<ObservationVO>> myObservationsTrend(
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam String loinc) {
         return Result.ok(labAnalysisService.getTrend(loginUser.getUserId(), loinc));
     }
 
-    @GetMapping
-    public Result<PatientVO> profile(@AuthenticationPrincipal LoginUser loginUser) {
-        Patient patient = patientRepository.findById(loginUser.getUserId()).orElse(null);
-        return Result.ok(patient != null ? PatientVO.fromEntity(patient) : null);
+    @GetMapping("/vitals")
+    @Auditable(module = "vital_sign", action = "ACCESS", phiAccess = true)
+    public Result<List<VitalSignVO>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId())
+                .stream().map(VitalSignVO::fromEntity).toList());
     }
 
-    @PutMapping
-    @Transactional
-    @com.example.medical.common.audit.Auditable(module = "patient", action = "UPDATE_PROFILE", phiAccess = true)
-    public Result<Void> updateProfile(@AuthenticationPrincipal LoginUser loginUser,
-                                       @Valid @RequestBody PatientSelfUpdateFormDTO form) {
-        Patient patient = patientRepository.findById(loginUser.getUserId())
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient not found"));
-        // Staff-verified fields (name, MRN, DOB, sex at birth, insurance, allergies)
-        // are not part of the payload, so they cannot be changed from here at all.
-        form.applyTo(patient);
-        patientRepository.save(patient);
-        return Result.ok();
+    @GetMapping("/problems")
+    @Auditable(module = "problem", action = "ACCESS", phiAccess = true)
+    public Result<List<ProblemVO>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId())
+                .stream().map(ProblemVO::fromEntity).toList());
+    }
+
+    @GetMapping("/immunizations")
+    @Auditable(module = "immunization", action = "ACCESS", phiAccess = true)
+    public Result<List<ImmunizationVO>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId())
+                .stream().map(ImmunizationVO::fromEntity).toList());
+    }
+
+    @GetMapping("/care-plans")
+    @Auditable(module = "care_plan", action = "ACCESS", phiAccess = true)
+    public Result<List<CarePlanVO>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId())
+                .stream().map(CarePlanVO::fromEntity).toList());
     }
 
     @GetMapping("/appointments")
@@ -129,35 +147,15 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        Pageable pageable = Pages.of(page, size,
-                Sort.by(Sort.Direction.DESC, "appointmentTime"));
-        var result = appointmentRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
-                pageable);
+        var result = appointmentService.pageForPatient(loginUser.getUserId(), page, size);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
-                result.getNumber() + 1,
-                result.getContent().stream().map(this::toAppointmentVO).toList()));
+                result.getNumber() + 1, result.getContent()));
     }
 
     @PutMapping("/appointments/{id}/cancel")
-    @Transactional
-    @com.example.medical.common.audit.Auditable(module = "appointment", action = "CANCEL")
     public Result<Void> cancelMyAppointment(@AuthenticationPrincipal LoginUser loginUser,
-                                             @PathVariable Long id) {
-        Appointment appt = appointmentRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Appointment not found"));
-        if (!appt.getPatientId().equals(loginUser.getUserId())) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
-        }
-        if (AppointmentStatus.anyOf(appt.getStatus(),
-                AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED)) {
-            throw new BusinessException(ResultCode.CONFLICT, "Appointment already cancelled or completed");
-        }
-        if (appt.getAppointmentTime() != null && appt.getAppointmentTime().isBefore(java.time.LocalDateTime.now())) {
-            throw new BusinessException(ResultCode.CONFLICT, "Cannot cancel past appointments");
-        }
-        appt.setStatus(AppointmentStatus.CANCELLED.code());
-        appointmentRepository.save(appt);
+                                            @PathVariable Long id) {
+        appointmentService.cancelByPatient(id, loginUser.getUserId());
         return Result.ok();
     }
 
@@ -166,18 +164,56 @@ public class PatientPortalController {
             @AuthenticationPrincipal LoginUser loginUser,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        Pageable pageable = Pages.of(page, size,
-                Sort.by(Sort.Direction.DESC, "createTime"));
-        var result = prescriptionRepository.findAll(
+        var result = prescriptionService.pageForPatient(loginUser.getUserId(), page, size);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
+    }
+
+    @GetMapping("/referrals")
+    @Auditable(module = "referral", action = "ACCESS", phiAccess = true)
+    public Result<List<ReferralVO>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(referralService.listByPatient(loginUser.getUserId()));
+    }
+
+    @GetMapping("/bills")
+    public Result<PageResult<BillVO>> myBills(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size) {
+        var result = billService.pageForPatient(loginUser.getUserId(), page, size);
+        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
+                result.getNumber() + 1, result.getContent()));
+    }
+
+    @PutMapping("/bills/{id}/pay")
+    public Result<Void> payMyBill(@AuthenticationPrincipal LoginUser loginUser,
+                                  @PathVariable Long id,
+                                  @Valid @RequestBody PatientPayBillFormDTO form) {
+        billService.payByPatient(id, loginUser.getUserId(), form.getPaymentAmount(), form.getPaymentMethod());
+        return Result.ok();
+    }
+
+    @GetMapping("/prior-auths")
+    @Auditable(module = "prior_auth", action = "ACCESS", phiAccess = true)
+    public Result<List<PriorAuthVO>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.ok(priorAuthService.listByPatient(loginUser.getUserId()));
+    }
+
+    @GetMapping("/disclosures")
+    public Result<PageResult<AuditLogVO>> myDisclosures(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        var pageable = Pages.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
+        var result = auditLogRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
                 pageable);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
-                result.getNumber() + 1,
-                result.getContent().stream().map(this::toPrescriptionVO).toList()));
+                result.getNumber() + 1, result.getContent().stream().map(AuditLogVO::fromEntity).toList()));
     }
 
     @GetMapping("/export")
-    @com.example.medical.common.audit.Auditable(module = "patient", action = "EXPORT_SELF", phiAccess = true)
+    @Auditable(module = "patient", action = "EXPORT_SELF", phiAccess = true)
     public Result<PatientDataExport> exportMyData(@AuthenticationPrincipal LoginUser loginUser) {
         Long patientId = loginUser.getUserId();
         Patient patient = patientRepository.findById(patientId).orElse(null);
@@ -201,166 +237,5 @@ public class PatientPortalController {
 
         return Result.ok(PatientDataExport.of(patient, appointments, prescriptions,
                 allItems, bills));
-    }
-
-    @GetMapping("/bills")
-    public Result<PageResult<BillVO>> myBills(
-            @AuthenticationPrincipal LoginUser loginUser,
-            @RequestParam(defaultValue = "1") long page,
-            @RequestParam(defaultValue = "10") long size) {
-        Pageable pageable = Pages.of(page, size,
-                Sort.by(Sort.Direction.DESC, "createTime"));
-        var result = billRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
-                pageable);
-        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
-                result.getNumber() + 1,
-                result.getContent().stream().map(this::toBillVO).toList()));
-    }
-
-    @PutMapping("/bills/{id}/pay")
-    public Result<Void> payMyBill(@AuthenticationPrincipal LoginUser loginUser,
-                                   @PathVariable Long id,
-                                   @Valid @RequestBody PatientPayRequest request) {
-        Bill bill = billRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
-        if (!bill.getPatientId().equals(loginUser.getUserId())) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
-        }
-        billService.pay(id, request.getPaymentAmount(), request.getPaymentMethod());
-        return Result.ok();
-    }
-
-    @PutMapping("/password")
-    @Transactional
-    @com.example.medical.common.audit.Auditable(module = "auth", action = "PATIENT_PASSWORD_CHANGE", phiAccess = true)
-    public Result<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
-                                       @Valid @RequestBody PatientPasswordChangeRequest request) {
-        PatientAuth auth = patientAuthRepository.findByPatientId(loginUser.getUserId())
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Patient auth not found"));
-        if (!passwordEncoder.matches(request.getOldPassword(), auth.getPassword())) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "Old password is incorrect");
-        }
-
-        if (isInPasswordHistory("PATIENT", auth.getId(), request.getNewPassword())) {
-            throw new BusinessException(ResultCode.BAD_REQUEST,
-                    "New password must not match any of the last " + PASSWORD_HISTORY_LIMIT + " passwords");
-        }
-
-        PasswordHistory history = new PasswordHistory();
-        history.setUserType("PATIENT");
-        history.setUserId(auth.getId());
-        history.setPasswordHash(auth.getPassword());
-        history.setChangedAt(auth.getPasswordChangedAt());
-        passwordHistoryRepository.save(history);
-
-        auth.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        auth.setPasswordChangedAt(LocalDateTime.now());
-        patientAuthRepository.save(auth);
-        return Result.ok();
-    }
-
-    private boolean isInPasswordHistory(String userType, Long userId, String plainPassword) {
-        List<PasswordHistory> recent = passwordHistoryRepository
-                .findTop3ByUserTypeAndUserIdOrderByChangedAtDesc(userType, userId);
-        return recent.stream().anyMatch(h -> passwordEncoder.matches(plainPassword, h.getPasswordHash()));
-    }
-
-    @Data
-    static class PatientPayRequest {
-        @Positive(message = "Payment amount must be positive")
-        private BigDecimal paymentAmount;
-        @NotBlank(message = "Payment method is required")
-        private String paymentMethod;
-    }
-
-    @Data
-    static class PatientPasswordChangeRequest {
-        @NotBlank(message = "Old password is required")
-        private String oldPassword;
-        @NotBlank(message = "New password is required")
-        @ValidPassword
-        private String newPassword;
-    }
-
-    private AppointmentVO toAppointmentVO(Appointment a) {
-        String doctorName = sysUserRepository.findById(a.getDoctorId())
-                .map(SysUser::getRealName).orElse("");
-        String patientName = patientRepository.findById(a.getPatientId())
-                .map(Patient::getName).orElse("");
-        return AppointmentVO.fromEntity(a, patientName, doctorName);
-    }
-
-    private PrescriptionVO toPrescriptionVO(Prescription p) {
-        String patientName = patientRepository.findById(p.getPatientId())
-                .map(Patient::getName).orElse("");
-        String doctorName = sysUserRepository.findById(p.getDoctorId())
-                .map(SysUser::getRealName).orElse("");
-        List<PrescriptionItemVO> items = prescriptionItemRepository
-                .findByPrescriptionId(p.getId())
-                .stream().map(PrescriptionItemVO::fromEntity).toList();
-        return PrescriptionVO.fromEntity(p, patientName, doctorName, items);
-    }
-
-    private BillVO toBillVO(Bill b) {
-        String patientName = patientRepository.findById(b.getPatientId())
-                .map(Patient::getName).orElse("");
-        return BillVO.fromEntity(b, patientName);
-    }
-
-    @GetMapping("/vitals")
-    @com.example.medical.common.audit.Auditable(module = "vital_sign", action = "ACCESS", phiAccess = true)
-    public Result<List<VitalSignVO>> myVitals(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(vitalSignRepository.findByPatientIdOrderByRecordedAtDesc(loginUser.getUserId())
-                .stream().map(VitalSignVO::fromEntity).toList());
-    }
-
-    @GetMapping("/problems")
-    @com.example.medical.common.audit.Auditable(module = "problem", action = "ACCESS", phiAccess = true)
-    public Result<List<ProblemVO>> myProblems(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(problemRepository.findByPatientIdOrderByOnsetDateDesc(loginUser.getUserId())
-                .stream().map(ProblemVO::fromEntity).toList());
-    }
-
-    @GetMapping("/immunizations")
-    @com.example.medical.common.audit.Auditable(module = "immunization", action = "ACCESS", phiAccess = true)
-    public Result<List<ImmunizationVO>> myImmunizations(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(immunizationRepository.findByPatientIdOrderByAdministrationDateDesc(loginUser.getUserId())
-                .stream().map(ImmunizationVO::fromEntity).toList());
-    }
-
-    @GetMapping("/referrals")
-    @com.example.medical.common.audit.Auditable(module = "referral", action = "ACCESS", phiAccess = true)
-    public Result<List<ReferralVO>> myReferrals(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(referralRepository.findByPatientIdOrderByReferralDateDesc(loginUser.getUserId())
-                .stream().map(ReferralVO::fromEntity).toList());
-    }
-
-    @GetMapping("/care-plans")
-    @com.example.medical.common.audit.Auditable(module = "care_plan", action = "ACCESS", phiAccess = true)
-    public Result<List<CarePlanVO>> myCarePlans(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(carePlanRepository.findByPatientIdOrderByStartDateDesc(loginUser.getUserId())
-                .stream().map(CarePlanVO::fromEntity).toList());
-    }
-
-    @GetMapping("/prior-auths")
-    @com.example.medical.common.audit.Auditable(module = "prior_auth", action = "ACCESS", phiAccess = true)
-    public Result<List<PriorAuthVO>> myPriorAuths(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.ok(priorAuthRepository.findByPatientIdOrderByRequestedAtDesc(loginUser.getUserId())
-                .stream().map(PriorAuthVO::fromEntity).toList());
-    }
-
-    @GetMapping("/disclosures")
-    public Result<PageResult<AuditLogVO>> myDisclosures(
-            @AuthenticationPrincipal LoginUser loginUser,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        var pageable = Pages.of(page, size,
-                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime"));
-        var result = auditLogRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("patientId"), loginUser.getUserId()),
-                pageable);
-        return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
-                result.getNumber() + 1, result.getContent().stream().map(AuditLogVO::fromEntity).toList()));
     }
 }

@@ -60,7 +60,7 @@ export default function PatientBills() {
           <td><span style={{ color: BILL_STATUS_COLOR[r.claimStatus || ''] || '#909399', fontWeight: 600 }}>{r.claimStatus}</span></td>
           <td>${r.totalCharge}</td><td>${r.insurancePayment}</td><td>${r.patientResponsibility}</td>
           <td>
-            {(r.claimStatus === 'PENDING' || r.claimStatus === 'DRAFT') && <button className={styles.btnPrimary} onClick={() => openPay(r)}>Pay Now</button>}
+            {r.claimStatus === 'PENDING' && <button className={styles.btnPrimary} onClick={() => openPay(r)}>Pay Now</button>}
           </td>
         </tr>
       ))}</tbody>

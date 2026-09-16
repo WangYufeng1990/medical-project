@@ -695,7 +695,7 @@ export interface EmergencyAccessVO {
 
 export interface EmergencyAccessResultVO {
   token: string
-  expiresIn: number
+  expiresInMinutes: number
   patientId: number
 }
 

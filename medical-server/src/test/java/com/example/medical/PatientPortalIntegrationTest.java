@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -14,10 +17,66 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PatientPortalIntegrationTest extends IntegrationTestSupport {
 
     private String patientToken = null;
+    private String adminToken = null;
 
     @BeforeAll
     void authenticate() throws Exception {
         patientToken = patientLogin("patient1", "patient123");
+        adminToken = login("admin", "admin123");
+    }
+
+    /**
+     * Books an appointment {@code daysAhead} out for {@code patientId} and returns
+     * its id. Callers pass distinct offsets: two bookings for the same doctor
+     * within 30 minutes collide (409), and every seeded appointment is in the past.
+     */
+    private long bookAppointment(long patientId, long doctorId, int daysAhead) throws Exception {
+        Map<String, Object> body = new HashMap<>();
+        body.put("patientId", patientId);
+        body.put("doctorId", doctorId);
+        body.put("appointmentTime", LocalDateTime.now().plusDays(daysAhead).withNano(0).toString());
+        body.put("visitType", "FOLLOW_UP");
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        MvcResult result = mockMvc.perform(get("/api/v1/appointments")
+                        .param("patientId", String.valueOf(patientId))
+                        .param("page", "1").param("size", "200")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode records = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("records");
+        long latestId = 0;
+        String latestTime = "";
+        for (JsonNode row : records) {
+            if (row.get("appointmentTime").asText().compareTo(latestTime) > 0) {
+                latestTime = row.get("appointmentTime").asText();
+                latestId = row.get("id").asLong();
+            }
+        }
+        assertTrue(latestId > 0, "appointment was not created");
+        return latestId;
+    }
+
+    private JsonNode myAppointments() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me/appointments")
+                        .param("page", "1").param("size", "50")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("records");
+    }
+
+    private JsonNode findAppointment(JsonNode records, long id) {
+        for (JsonNode row : records) {
+            if (row.get("id").asLong() == id) return row;
+        }
+        return null;
     }
 
     // ──────────────────────────────────────────────────────
@@ -97,5 +156,116 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk()).andReturn();
         JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
         assertEquals("James Anderson", node.get("data").get("name").asText());
+    }
+
+    // ── cancellation rules (AppointmentService.cancelByPatient) ──
+
+    @Test
+    void patientCancelOwnAppointment_shouldSucceedAndBeOneShot() throws Exception {
+        long id = bookAppointment(100L, 2L, 7);
+
+        mockMvc.perform(put("/api/v1/patient/me/appointments/" + id + "/cancel")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+
+        JsonNode cancelled = findAppointment(myAppointments(), id);
+        assertNotNull(cancelled);
+        assertEquals(2, cancelled.get("status").asInt());
+
+        MvcResult second = mockMvc.perform(put("/api/v1/patient/me/appointments/" + id + "/cancel")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isConflict())
+                .andReturn();
+        assertEquals("Appointment already cancelled or completed",
+                objectMapper.readTree(second.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    @Test
+    void patientCancelOtherPatientsAppointment_shouldBeForbidden() throws Exception {
+        long id = bookAppointment(101L, 2L, 8);
+        mockMvc.perform(put("/api/v1/patient/me/appointments/" + id + "/cancel")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patientCancelPastAppointment_shouldConflict() throws Exception {
+        // Seed 202 belongs to patient 100, is still SCHEDULED, and is dated in the past.
+        MvcResult result = mockMvc.perform(put("/api/v1/patient/me/appointments/202/cancel")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isConflict())
+                .andReturn();
+        assertEquals("Cannot cancel past appointments",
+                objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    // ── payment rules (BillService.payByPatient) ──
+
+    @Test
+    void patientPayOwnBill_shouldSettleIt() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "paymentAmount", 37.80, "paymentMethod", "CREDIT_CARD"));
+        mockMvc.perform(put("/api/v1/patient/me/bills/501/pay")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me/bills")
+                        .param("page", "1").param("size", "50")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode records = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("records");
+        JsonNode bill = null;
+        for (JsonNode row : records) {
+            if (row.get("id").asLong() == 501L) bill = row;
+        }
+        assertNotNull(bill);
+        assertEquals("PAID", bill.get("claimStatus").asText());
+    }
+
+    @Test
+    void patientPayOtherPatientsBill_shouldBeForbidden() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "paymentAmount", 5.00, "paymentMethod", "CREDIT_CARD"));
+        mockMvc.perform(put("/api/v1/patient/me/bills/502/pay")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+    }
+
+    // ── credential rules (PatientAccountService.changePassword) ──
+
+    @Test
+    void patientChangePassword_wrongOldPassword_shouldBeRejected() throws Exception {
+        MvcResult result = changePassword("not-my-password", "N3wPatientPass!")
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertEquals("Old password is incorrect",
+                objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    @Test
+    void patientChangePassword_shouldApplyAndBlockReuse() throws Exception {
+        changePassword("patient123", "Pw!One2345").andExpect(status().isOk());
+        assertNotNull(patientLogin("patient1", "Pw!One2345"));
+
+        // Second change makes Pw!One2345 part of the recorded history.
+        changePassword("Pw!One2345", "Pw!Two2345").andExpect(status().isOk());
+
+        MvcResult result = changePassword("Pw!Two2345", "Pw!One2345")
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertEquals("New password must not match any of the last 3 passwords",
+                objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    private ResultActions changePassword(String oldPassword, String newPassword)
+            throws Exception {
+        Map<String, String> body = Map.of("oldPassword", oldPassword, "newPassword", newPassword);
+        return mockMvc.perform(put("/api/v1/patient/me/password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body))
+                .header("Authorization", "Bearer " + patientToken));
     }
 }

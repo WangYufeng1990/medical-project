@@ -43,6 +43,20 @@ UPDATE appointment SET status = 0 WHERE id IN (202, 203);
 -- Fix: set bill 502 to PAID so there are 2 PAID bills at test time.
 UPDATE bill SET claim_status = 'PAID' WHERE id = 502;
 
+-- The portal payment test settles seeded bill 501 (patient 100, PENDING). Leaving
+-- it PAID would make the "2 PAID bills" assertion above fail in any run where
+-- PatientPortalIntegrationTest happens to run first.
+UPDATE bill SET claim_status = 'PENDING', patient_paid_amount = 0.00,
+    pay_time = NULL, payment_method = NULL WHERE id = 501;
+
+-- The portal password-change test consumes patient1's credential and writes a
+-- history row. Restore both: otherwise the reuse check rejects patient123 and
+-- every class that logs in as patient1 fails from the second run onwards.
+UPDATE patient_auth SET password = '$2a$10$wUtLALNHg3ppHxQ07.GrzedgdMqKb6.sTO7/T7OOTQeyPAL.brda2',
+    password_changed_at = NULL, failed_attempts = 0, locked_until = NULL
+WHERE username = 'patient1';
+DELETE FROM password_history WHERE user_type = 'PATIENT';
+
 -- Restore prescription items (may have been deleted by previous tests)
 DELETE FROM prescription_item WHERE prescription_id IN (300, 301, 302);
 INSERT INTO prescription_item (id, prescription_id, drug_name, ndc_code, rxnorm_code, specification, dosage, route, frequency, sig, duration, days_supply, quantity, refills, daw, unit_price, create_time, update_time) VALUES

@@ -12,6 +12,7 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,11 +109,40 @@ public class BillService {
         billRepository.save(b);
     }
 
+    /** The patient portal's own view: no doctor scope, the id comes from the token. */
+    public Page<BillVO> pageForPatient(Long patientId, long page, long size) {
+        Pageable pageable = Pages.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
+        return billRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                pageable).map(this::toVO);
+    }
+
     @Transactional
     @Auditable(module = "billing", action = "PAY", phiAccess = true)
     public void pay(Long id, BigDecimal paymentAmount, String paymentMethod) {
-        Bill b = billRepository.findById(id)
+        applyPayment(findBill(id), paymentAmount, paymentMethod);
+    }
+
+    /**
+     * Patient-initiated payment of their own bill. Ownership is checked here so
+     * this entry point cannot be used against another patient's bill.
+     */
+    @Transactional
+    @Auditable(module = "billing", action = "PAY", phiAccess = true)
+    public void payByPatient(Long id, Long patientId, BigDecimal paymentAmount, String paymentMethod) {
+        Bill b = findBill(id);
+        if (!b.getPatientId().equals(patientId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
+        }
+        applyPayment(b, paymentAmount, paymentMethod);
+    }
+
+    private Bill findBill(Long id) {
+        return billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
+    }
+
+    private void applyPayment(Bill b, BigDecimal paymentAmount, String paymentMethod) {
         if (!"PENDING".equals(b.getClaimStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Bill must be in PENDING state to accept payment");
         }
