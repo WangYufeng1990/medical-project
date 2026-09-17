@@ -1,10 +1,9 @@
 package com.example.medical.module.patient.dto;
 
-import com.example.medical.module.appointment.entity.Appointment;
-import com.example.medical.module.billing.entity.Bill;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.prescription.entity.Prescription;
-import com.example.medical.module.prescription.entity.PrescriptionItem;
+import com.example.medical.module.appointment.dto.AppointmentVO;
+import com.example.medical.module.billing.dto.BillVO;
+import com.example.medical.module.prescription.dto.PrescriptionItemVO;
+import com.example.medical.module.prescription.dto.PrescriptionVO;
 import lombok.Data;
 
 import java.util.List;
@@ -19,20 +18,14 @@ public class PatientDataExport {
     private String exportDate;
     private String dataUseNotice;
 
-    public static PatientDataExport of(Patient patient,
-                                        List<Appointment> appointments,
-                                        List<Prescription> prescriptions,
-                                        List<PrescriptionItem> allItems,
-                                        List<Bill> bills) {
+    public static PatientDataExport of(PatientVO demographics,
+                                        List<AppointmentVO> appointments,
+                                        List<PrescriptionVO> prescriptions,
+                                        List<BillVO> bills) {
         PatientDataExport export = new PatientDataExport();
-        export.demographics = PatientVO.fromEntity(patient);
+        export.demographics = demographics;
         export.appointments = appointments.stream().map(AppointmentSummary::from).toList();
-        export.prescriptions = prescriptions.stream()
-                .map(p -> PrescriptionSummary.from(p,
-                        allItems.stream()
-                                .filter(i -> i.getPrescriptionId().equals(p.getId()))
-                                .toList()))
-                .toList();
+        export.prescriptions = prescriptions.stream().map(PrescriptionSummary::from).toList();
         export.bills = bills.stream().map(BillSummary::from).toList();
         export.exportDate = java.time.LocalDateTime.now().toString();
         export.dataUseNotice = "This data is provided pursuant to HIPAA 45 CFR 164.524. "
@@ -50,7 +43,7 @@ public class PatientDataExport {
         private String description;
         private String status;
 
-        static AppointmentSummary from(Appointment a) {
+        static AppointmentSummary from(AppointmentVO a) {
             AppointmentSummary s = new AppointmentSummary();
             s.id = a.getId();
             s.appointmentTime = a.getAppointmentTime() != null ? a.getAppointmentTime().toString() : null;
@@ -72,14 +65,15 @@ public class PatientDataExport {
         private String rxStatus;
         private List<ItemSummary> items;
 
-        static PrescriptionSummary from(Prescription p, List<PrescriptionItem> items) {
+        static PrescriptionSummary from(PrescriptionVO p) {
             PrescriptionSummary s = new PrescriptionSummary();
             s.id = p.getId();
             s.diagnosis = p.getDiagnosis();
             s.icd10Codes = p.getIcd10Codes();
             s.prescriptionDate = p.getPrescriptionDate() != null ? p.getPrescriptionDate().toString() : null;
             s.rxStatus = p.getRxStatus();
-            s.items = items.stream().map(ItemSummary::from).toList();
+            s.items = p.getItems() == null ? List.of()
+                    : p.getItems().stream().map(ItemSummary::from).toList();
             return s;
         }
     }
@@ -93,7 +87,7 @@ public class PatientDataExport {
         private Integer daysSupply;
         private Integer refills;
 
-        static ItemSummary from(PrescriptionItem i) {
+        static ItemSummary from(PrescriptionItemVO i) {
             ItemSummary s = new ItemSummary();
             s.drugName = i.getDrugName();
             s.dosage = i.getDosage();
@@ -116,7 +110,7 @@ public class PatientDataExport {
         private String icd10Codes;
         private String insurancePayerName;
 
-        static BillSummary from(Bill b) {
+        static BillSummary from(BillVO b) {
             BillSummary s = new BillSummary();
             s.id = b.getId();
             s.billType = b.getBillType();

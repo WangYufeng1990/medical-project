@@ -80,6 +80,15 @@ public class PrescriptionService {
                 pageable).map(this::toVO);
     }
 
+    /** Unpaged patient-scoped read, for the HIPAA export. */
+    public List<PrescriptionVO> listForPatient(Long patientId) {
+        return prescriptionRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "prescriptionDate"))
+                .stream().map(this::toVO).toList();
+    }
+
     @Transactional
     @Auditable(module = "prescription", action = "CREATE", phiAccess = true)
     public void create(PrescriptionFormDTO dto, com.example.medical.security.LoginUser loginUser) {

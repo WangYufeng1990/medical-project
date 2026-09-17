@@ -8,6 +8,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -258,6 +260,51 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
                 .andReturn();
         assertEquals("New password must not match any of the last 3 passwords",
                 objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    /**
+     * The export is a document the patient downloads under HIPAA 45 CFR 164.524,
+     * so its shape is pinned here: M8.6 rewired the assembly from entities to
+     * VOs and the file had to come out byte-identical (verified live by diffing
+     * the response before and after, ignoring {@code exportDate}).
+     */
+    @Test
+    void exportMyData_shouldKeepTheRightOfAccessDocumentShape() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/patient/me/export")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+
+        assertEquals(Set.of("appointments", "bills", "dataUseNotice", "demographics", "exportDate",
+                "prescriptions"), fieldNames(data));
+        assertNotNull(data.get("dataUseNotice").asText());
+        assertFalse(data.get("demographics").get("name").asText().isBlank());
+
+        JsonNode appointment = data.get("appointments").get(0);
+        assertEquals(Set.of("appointmentTime", "chiefComplaint", "department", "description", "id",
+                "status", "visitType"), fieldNames(appointment));
+        assertEquals(Set.of("diagnosis", "icd10Codes", "id", "items", "prescriptionDate", "rxStatus"),
+                fieldNames(data.get("prescriptions").get(0)));
+        assertEquals(Set.of("daysSupply", "dosage", "drugName", "frequency", "refills", "sig"),
+                fieldNames(data.get("prescriptions").get(0).get("items").get(0)));
+        assertEquals(Set.of("billType", "claimStatus", "cptCodes", "icd10Codes", "id",
+                "insurancePayerName", "patientResponsibility", "totalCharge"),
+                fieldNames(data.get("bills").get(0)));
+
+        for (String section : new String[]{"appointments", "prescriptions", "bills"}) {
+            for (JsonNode row : data.get(section)) {
+                for (String leaked : new String[]{"isDeleted", "version", "updateTime"}) {
+                    assertFalse(row.has(leaked), section + " exposes " + leaked);
+                }
+            }
+        }
+    }
+
+    private static Set<String> fieldNames(JsonNode node) {
+        Set<String> names = new TreeSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 
     private ResultActions changePassword(String oldPassword, String newPassword)

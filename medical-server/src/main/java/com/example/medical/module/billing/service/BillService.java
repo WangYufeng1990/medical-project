@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import com.example.medical.common.base.Pages;
 import org.springframework.data.domain.Pageable;
@@ -115,6 +116,14 @@ public class BillService {
         return billRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
                 pageable).map(this::toVO);
+    }
+
+    /** Unpaged patient-scoped read, for the HIPAA export. */
+    public List<BillVO> listForPatient(Long patientId) {
+        return billRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                Sort.by(Sort.Direction.DESC, "createTime"))
+                .stream().map(this::toVO).toList();
     }
 
     @Transactional

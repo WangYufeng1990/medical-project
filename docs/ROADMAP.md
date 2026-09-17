@@ -3121,9 +3121,9 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 🟡 planned (2026-09-16)** — the export stops reaching across modules; the plan below records the decisions. **M8.5 ⬜ still open.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 ✅ complete (2026-09-16)** — the portal export assembles from VOs and owning services, and its live response is byte-identical to before. **M8.5 ⬜ still open.**
 
-### M8.6 — the export stops reaching across modules 🟡 (planned, not yet written)
+### M8.6 — the export stops reaching across modules ✅
 
 **The last two cross-module shortcuts in the portal.** `GET /api/v1/patient/me/export` is the only endpoint left whose controller injects other modules' repositories (`AppointmentRepository`, `PrescriptionRepository`, `PrescriptionItemRepository`, `BillRepository` — plus its own `PatientRepository`), and `PatientDataExport` is the only DTO in `patient/dto` that imports other modules' **entities** (`Appointment`, `Prescription`, `PrescriptionItem`, `Bill`) to build its summaries. M8.3 left both deliberately; this slice closes them.
 
@@ -3139,11 +3139,33 @@ Every batch that touches a request or response payload, traced field-by-field (C
 | M8.6.2 | `PatientDataExport`: `of(PatientVO, List<AppointmentVO>, List<PrescriptionVO>, List<BillVO>)`; the four entity imports are gone; `ItemSummary.from` takes a `PrescriptionItemVO` | `module/patient/dto/PatientDataExport.java` |
 | M8.6.3 | `PatientPortalExportController`: five repositories → four services (`PatientService`, `AppointmentService`, `PrescriptionService`, `BillService`); the missing-patient case still answers `Result.ok(null)` | `PatientPortalExportController` |
 
-**Invariants:** no path/verb/parameter/response-shape change; `patient/dto` no longer imports a foreign entity; no controller in the codebase injects another module's repository (checked mechanically by grep after the change).
+**Invariants:** no path/verb/parameter/response-shape change; `patient/dto` no longer imports a foreign entity; the *portal* no longer injects a foreign repository.
 
-**Out of scope:** `common → module` reverse dependencies (M8.5).
+**What landed:** the portal export controller went from five repositories to four services, `PatientDataExport` from four foreign entity imports to four VO imports, and the assembly to three owning-service reads.
 
-**Files:** the three services, `PatientDataExport.java`, `PatientPortalExportController.java`, `PatientPortalIntegrationTest.java` (one export-shape test), `docs/ROADMAP.md`. No API-LAYOUT change: the surface does not move.
+**One planned claim was wrong, and the grep that was supposed to confirm it disproved it.** "No controller in the codebase injects another module's repository" is false: `module/export/controller/ExportController` (CSV streaming, 156 lines, injects `PatientRepository` + `BillRepository` and runs its paged queries inside the `StreamingResponseBody` lambda) and `module/system/controller/EmergencyAccessController` (`PatientRepository`, for a 404 existence check) still do. Foreign-repository injections in controllers: **7 across 3 controllers → 3 across 2 controllers**. Both leftovers are recorded as follow-ups rather than silently claimed fixed:
+
+| Remaining controller → foreign repository | Why it is not a 3-line move |
+|---|---|
+| `ExportController` → `PatientRepository`, `BillRepository` | The queries execute on the streaming thread, so moving them behind services means settling the transaction boundary there too — its own slice |
+| `EmergencyAccessController` → `PatientRepository` | It only needs "does this patient exist"; the honest fix is a `PatientService` existence method, which is a `system → patient` service edge — M8.5's territory |
+
+**Out of scope:** `common → module` reverse dependencies (M8.5), the two controllers above.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **176 tests, 0 failures** (175 → 176), enforcer clean |
+| **The exported document, live, before vs. after** | **byte-identical** (both responses parsed and compared with `exportDate` removed): 4 appointments, 2 prescriptions with items, 2 bills, 31 demographics fields, same notice |
+| Document shape pinned in the suite | New test asserts the six top-level sections and the exact field set of an appointment summary (7), a prescription summary (6), an item summary (6) and a bill summary (8), plus the absence of `isDeleted`/`version`/`updateTime` |
+| `patient/dto` foreign-entity imports (grep) | 4 → **0** |
+| Foreign-repository injections in controllers (grep) | 7 across 3 → **3 across 2**, the rest being the two documented leftovers |
+| Portal export with a patient token (live) | 200, correct rows (4/2/2) |
+
+**Trade-off accepted and measured:** the summaries now go through the shared VOs, so the export loads patient/doctor names it discards and issues one items query per prescription where the old controller batched a single one (`PrescriptionService.toVO`). For one patient's own record on a right-of-access request this is immaterial; a lean `*ExportVO` per module would have duplicated four field maps to avoid it.
+
+**Files:** `AppointmentService`, `PrescriptionService`, `BillService`, `module/patient/dto/PatientDataExport.java`, `PatientPortalExportController`, `PatientPortalIntegrationTest.java`. No API-LAYOUT change: the surface does not move.
 
 ### M8.4 — the portal controller becomes six resource controllers ✅
 
@@ -3325,7 +3347,7 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 | M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**, and the dependency *count* did not drop either (18 fields before, 18 after — the foreign repositories that left were replaced by services): `patient` still imports `system`/`appointment`/`billing`/`prescription`. What changed is the **kind** of dependency — the portal's operations go through owner services. The one exception is `GET /patient/me/export`, which still queries four foreign repositories (`AppointmentRepository`, `PrescriptionRepository`, `PrescriptionItemRepository`, `BillRepository`) to assemble `PatientDataExport`; that is M8.6's target and the code says so | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
 | M8.4 ✅ | Split `PatientPortalController` (18 deps, 18 endpoints) by resource — **delivered as six controllers**, not the five groups listed here, which left `/disclosures`, `/referrals`, `/prior-auths` and `/export` without a home. Also fixed the systemic wrong-role → 500 found by its guard test | `module/patient/controller/PatientPortal*Controller.java`; `common/exception/GlobalExceptionHandler.java` |
 | M8.5 | Remove `common → module` reverse deps: relocate `common/job/AppointmentScheduler`, `QualityScheduler` into their modules (and `DataRetentionJob` into a dedicated retention component that owns its cross-module queries); reassess `DoctorPatientScope`'s location | `common/job/*`; affected module packages |
-| M8.6 🟡 | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → reduced to **VOs + three owning-service reads**; a `common`-level DTO was rejected (it would put module DTOs in `common`, the opposite of M8.5) | `PatientDataExport.java`; `PatientPortalExportController`; `AppointmentService`/`PrescriptionService`/`BillService` |
+| M8.6 ✅ | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → reduced to **VOs + three owning-service reads**; a `common`-level DTO was rejected (it would put module DTOs in `common`, the opposite of M8.5). Two other controllers still inject foreign repositories and are recorded as follow-ups | `PatientDataExport.java`; `PatientPortalExportController`; `AppointmentService`/`PrescriptionService`/`BillService` |
 
 ### Verification
 

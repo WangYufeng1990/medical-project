@@ -68,6 +68,14 @@ public class AppointmentService {
                 pageable).map(this::toVO);
     }
 
+    /** Unpaged patient-scoped read, for the HIPAA export. */
+    public List<AppointmentVO> listForPatient(Long patientId) {
+        return appointmentRepository.findAll(
+                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
+                Sort.by(Sort.Direction.DESC, "appointmentTime"))
+                .stream().map(this::toVO).toList();
+    }
+
     /**
      * Patient-initiated cancellation. Ownership is checked here rather than in
      * the portal controller, so no other caller can cancel someone else's
