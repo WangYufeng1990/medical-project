@@ -3121,7 +3121,44 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 ✅ complete (2026-09-16)** — the portal export assembles from VOs and owning services, and its live response is byte-identical to before. **M8.5 ⬜ still open.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 ✅ complete (2026-09-16)** — the portal export assembles from VOs and owning services, and its live response is byte-identical to before. **M8.5 🟡 planned (2026-09-16)** — the last reverse dependencies, measured before being touched; three of the five are genuine import cycles. **This is the final slice of M8.**
+
+### M8.5 — nothing outside a module imports a module 🟡 (planned, not yet written)
+
+**Measured first, not remembered.** The inventory below is the output of `grep -rn "import com.example.medical.module." common/ security/`, which is also the check that has to come back empty when this slice lands:
+
+| File | What it imports from a module | Disposition |
+|---|---|---|
+| `common/job/AppointmentScheduler` (52 lines) | `appointment.entity.Appointment`, `AppointmentStatus`, `appointment.repository.AppointmentRepository` | **relocate** to `module/appointment/service/` |
+| `common/job/QualityScheduler` (21 lines) | `quality.service.QualityMeasureService` | **relocate** to `module/quality/service/` |
+| `common/job/DataRetentionJob` (47 lines) | five module repositories | **five of the six are dead injections** — only `AuditLogRepository` is ever used, and `softDeleteRetentionDays` is never read. Delete the dead ones |
+| `common/security/DoctorPatientScope` | `appointment` + `prescription` repositories | **invert**: a provider interface in `common`, one implementation per module |
+| `security/JwtClaimMapper` | `system.repository.SysUserRepository` | **invert**: a revocation-check interface in `common`, implemented in `system` |
+
+**Two of these are cycles, not just odd shapes.** `module/system/controller/*` imports `security.LoginUser`, so `security → system` closes a loop that already exists in the other direction; likewise `AppointmentService`, `PrescriptionService` and `BillService` import `common.security.DoctorPatientScope`, so `common ↔ appointment` and `common ↔ prescription` are loops too. The other three are one-way reverse dependencies.
+
+**Why the two cyclic ones are inverted rather than relocated:**
+
+- `DoctorPatientScope` cannot move into `module/patient`: it needs appointment and prescription repositories, which from `patient` is a reverse dependency again, and it cannot call those modules' *services* because those services inject it — a bean cycle.
+- `JwtClaimMapper` cannot move into `module/system`: `common/config/SecurityConfig` wires it as the JWT converter, so the edge would simply reappear from the other side.
+
+**Decisions:**
+
+1. The two schedulers go into each module's existing `service/` package rather than a new `job/` package, so "every module has the identical internal layout" keeps holding. `common/job/` keeps `DataRetentionJob`, which is genuinely cross-cutting: it archives the audit table `common` owns.
+2. `app.retention.soft-delete-days` is **deleted, not implemented.** Nothing reads it, and API-LAYOUT plus `backend-architecture-explained.md` currently describe a soft-delete purge policy that does not exist ("soft-deleted records are retained 365 days before permanent removal"). Deleting a patient's medical rows on a timer is a compliance decision, not a cleanup task, so the honest fix is to delete the knob and correct the two documents. ROADMAP's Round 47 review had already flagged the same job as half-implemented.
+3. Inversion shape: the provider returns the patient ids a doctor is related to through that module's records; `DoctorPatientScope` unions all providers plus the break-glass patient, so `requireAccess` semantics are untouched (null = ADMIN, unscoped; empty set = no patients).
+
+**Verification plan**
+
+| Check | Expected |
+|-------|----------|
+| `grep -rn "import com.example.medical.module." common/ security/` | **empty** |
+| New `LayeringGuardTest` (source scan, no new dependency) | fails the build if any future `common/` or `security/` class imports a module |
+| New `AuthIntegrationTest` case for the inverted revocation seam | create a user, log in, admin disables the account, reuse the old token → **401** (this branch had **no test at all** before) |
+| Live, after restart | in-scope doctor read 200 / out-of-scope 403 (proves the provider union), startup no-show check still fires, portal + export unaffected |
+| `mvn clean verify` | all green |
+
+**Files:** `common/job/{AppointmentScheduler,QualityScheduler}.java` (moved into `module/*/service/`), `common/job/DataRetentionJob.java`, `common/security/DoctorPatientScope.java` + `DoctorPatientScopeProvider.java` (new), `module/appointment/service/AppointmentScopeProvider.java` (new), `module/prescription/service/PrescriptionScopeProvider.java` (new), `common/security/AccountRevocationCheck.java` (new), `module/system/service/SysUserRevocationCheck.java` (new), `security/JwtClaimMapper.java`, `application.yml`, `docs/API-LAYOUT.md`, `docs/backend-architecture-explained.md`, `AuthIntegrationTest.java`, `LayeringGuardTest.java` (new).
 
 ### M8.6 — the export stops reaching across modules ✅
 
@@ -3346,7 +3383,7 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 | M8.2 | `PUT /api/v1/patient/me`: `Map<String,Object>` → `PatientSelfUpdateFormDTO` (the 12 allowed fields + `@Size`); frontend sends only the editable fields | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController:103-127`; `medical-web/src/views/patient/profile/index.tsx:44,73` |
 | M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**, and the dependency *count* did not drop either (18 fields before, 18 after — the foreign repositories that left were replaced by services): `patient` still imports `system`/`appointment`/`billing`/`prescription`. What changed is the **kind** of dependency — the portal's operations go through owner services. The one exception is `GET /patient/me/export`, which still queries four foreign repositories (`AppointmentRepository`, `PrescriptionRepository`, `PrescriptionItemRepository`, `BillRepository`) to assemble `PatientDataExport`; that is M8.6's target and the code says so | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
 | M8.4 ✅ | Split `PatientPortalController` (18 deps, 18 endpoints) by resource — **delivered as six controllers**, not the five groups listed here, which left `/disclosures`, `/referrals`, `/prior-auths` and `/export` without a home. Also fixed the systemic wrong-role → 500 found by its guard test | `module/patient/controller/PatientPortal*Controller.java`; `common/exception/GlobalExceptionHandler.java` |
-| M8.5 | Remove `common → module` reverse deps: relocate `common/job/AppointmentScheduler`, `QualityScheduler` into their modules (and `DataRetentionJob` into a dedicated retention component that owns its cross-module queries); reassess `DoctorPatientScope`'s location | `common/job/*`; affected module packages |
+| M8.5 🟡 | Remove `common → module` reverse deps — **measured at five files** (2 schedulers to relocate, 1 job whose cross-module half is dead code, 2 to invert because relocating them would recreate the cycle); `DataRetentionJob` stays in `common` because archiving the audit table is genuinely cross-cutting | `common/job/*`; `common/security/*`; `security/JwtClaimMapper`; affected module packages |
 | M8.6 ✅ | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → reduced to **VOs + three owning-service reads**; a `common`-level DTO was rejected (it would put module DTOs in `common`, the opposite of M8.5). Two other controllers still inject foreign repositories and are recorded as follow-ups | `PatientDataExport.java`; `PatientPortalExportController`; `AppointmentService`/`PrescriptionService`/`BillService` |
 
 ### Verification
