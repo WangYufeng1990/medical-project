@@ -1,13 +1,13 @@
 package com.example.medical.security;
 
-import com.example.medical.module.system.repository.SysUserRepository;
+import com.example.medical.common.security.AccountRevocationCheck;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtValidationException;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,7 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
 
-    private final SysUserRepository sysUserRepository;
+    private final AccountRevocationCheck accountRevocationCheck;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -30,9 +30,7 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         List<String> refreshCheck = jwt.getClaimAsStringList("scp");
         if (refreshCheck == null) refreshCheck = jwt.getClaimAsStringList("scope");
         if (refreshCheck != null && refreshCheck.contains("refresh")) {
-            throw new JwtValidationException("Refresh token cannot be used as an access token",
-                    List.of(new org.springframework.security.oauth2.core.OAuth2Error(
-                            "invalid_token", "Refresh tokens are not valid access tokens", null)));
+            throw reject("Refresh tokens are not valid access tokens");
         }
 
         String username = jwt.getClaimAsString("sub");
@@ -48,13 +46,11 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         // sys_user force-logout, ids overlap between the two tables (R2-1).
         boolean isPatient = groups.stream().anyMatch("PATIENT"::equalsIgnoreCase);
         if (userId != null && userId > 0 && !isPatient) {
-            LocalDateTime forceLogout = sysUserRepository.findForceLogoutAfterByUserId(userId);
+            LocalDateTime forceLogout = accountRevocationCheck.forceLogoutAfter(userId);
             if (forceLogout != null && jwt.getIssuedAt() != null) {
                 LocalDateTime issuedAt = LocalDateTime.ofInstant(jwt.getIssuedAt(), ZoneId.systemDefault());
                 if (issuedAt.isBefore(forceLogout)) {
-                    throw new JwtValidationException("Token issued before force logout",
-                            List.of(new org.springframework.security.oauth2.core.OAuth2Error(
-                                    "token_revoked", "Account was disabled or credentials changed after token issuance", null)));
+                    throw reject("Account was disabled or credentials changed after token issuance");
                 }
             }
         }
@@ -81,6 +77,20 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
 
         LoginUser loginUser = new LoginUser(userId, username, "", scopes, emergencyPatientId, scope);
         return new UsernamePasswordAuthenticationToken(loginUser, null, authorities);
+    }
+
+    /**
+     * Rejects a token as an authentication failure rather than a bare JWT error.
+     * {@code JwtValidationException} escapes {@code BearerTokenAuthenticationFilter}
+     * (which only handles {@code AuthenticationException}), so the container
+     * logged an ERROR stack trace on every request from a revoked client and the
+     * {@code WWW-Authenticate} header lost its reason. An
+     * {@code OAuth2AuthenticationException} is caught by the filter and answered
+     * properly: 401 with the description below.
+     */
+    private static OAuth2AuthenticationException reject(String reason) {
+        return new OAuth2AuthenticationException(
+                new org.springframework.security.oauth2.core.OAuth2Error("invalid_token", reason, null));
     }
 
     private static Long toLong(Object claim) {

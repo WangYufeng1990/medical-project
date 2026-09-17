@@ -2,8 +2,6 @@ package com.example.medical.common.security;
 
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
-import com.example.medical.module.appointment.repository.AppointmentRepository;
-import com.example.medical.module.prescription.repository.PrescriptionRepository;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -11,6 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -23,8 +22,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class DoctorPatientScope {
 
-    private final AppointmentRepository appointmentRepository;
-    private final PrescriptionRepository prescriptionRepository;
+    private final List<DoctorPatientScopeProvider> providers;
 
     /**
      * null = ADMIN, no filter. Otherwise the allowed patient-id set — possibly
@@ -41,8 +39,9 @@ public class DoctorPatientScope {
         if (isAdmin) return null;
 
         Set<Long> ids = new HashSet<>();
-        ids.addAll(appointmentRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
-        ids.addAll(prescriptionRepository.findDistinctPatientIdsByDoctor(user.getUserId()));
+        for (DoctorPatientScopeProvider provider : providers) {
+            ids.addAll(provider.patientIdsFor(user.getUserId()));
+        }
         if (user.getEmergencyPatientId() != null) ids.add(user.getEmergencyPatientId());
         return ids;
     }

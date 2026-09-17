@@ -497,8 +497,8 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 - Security headers: HSTS (1yr), X-Content-Type-Options, X-Frame-Options DENY, XSS Protection, Cache-Control
 
 ### Data Retention
-- Audit logs: nightly purge of records older than `app.retention.audit-log-days` (default 2190 = 6 years)
-- Soft-deleted records: retained for `app.retention.soft-delete-days` (default 365 days) before permanent removal
+- Audit logs: nightly **archival** (flag flip, not a delete) of rows older than `app.retention.audit-log-days` (default 2190 = 6 years), by `common/job/DataRetentionJob` at `app.retention.cron`
+- Soft-deleted records: **no purge runs.** An earlier version of this document described a `app.retention.soft-delete-days` policy; the knob existed in `application.yml`, nothing read it, and it has been removed (M8.5). Physically removing a patient's soft-deleted clinical rows on a timer is a compliance decision, not a clean-up task, so it is left unimplemented rather than half-configured
 
 ## Infrastructure
 

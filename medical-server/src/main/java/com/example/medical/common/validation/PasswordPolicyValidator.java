@@ -3,6 +3,14 @@ package com.example.medical.common.validation;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
+/**
+ * Checks the strength of a supplied password. Whether a password must be
+ * supplied at all is the caller's business ({@code @NotBlank}), because some
+ * payloads carry it optionally: {@code SysUserUpdateFormDTO.password} means
+ * "keep the current password" when it is absent or blank, and rejecting null
+ * here made every staff-account edit require a password reset — an admin could
+ * not correct a phone number without silently rotating the user's credentials.
+ */
 public class PasswordPolicyValidator implements ConstraintValidator<ValidPassword, String> {
 
     private static final int MIN_LENGTH = 8;
@@ -13,7 +21,7 @@ public class PasswordPolicyValidator implements ConstraintValidator<ValidPasswor
 
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
-        if (value == null || value.isBlank()) return false;
+        if (value == null || value.isBlank()) return true;
         return value.length() >= MIN_LENGTH
                 && UPPERCASE.matcher(value).find()
                 && LOWERCASE.matcher(value).find()

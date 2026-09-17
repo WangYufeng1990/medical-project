@@ -130,8 +130,10 @@ class SystemIntegrationTest extends IntegrationTestSupport {
 
     @Test
     @Order(17)
-    void updateUser_withBlankPassword_shouldFailValidation() throws Exception {
-        // Backend requires @NotBlank password even on update — this is a known issue
+    void updateUser_withBlankPassword_shouldKeepTheCurrentPassword() throws Exception {
+        // Was: "backend requires @NotBlank password even on update — known issue".
+        // M8.5 made the documented optional-password semantics real, so an admin
+        // can edit an account (or disable it) without rotating its credentials.
         String body = objectMapper.writeValueAsString(Map.of(
                 "username", "doctor2",
                 "password", "",
@@ -140,7 +142,47 @@ class SystemIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(put("/api/v1/users/3")
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .header("Authorization", "Bearer " + adminToken))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
+
+        // Self-contained proof that the credentials survived: a probe account
+        // whose password this test knows, edited with a blank password.
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "blank-pass-probe",
+                                "password", "KeepMe@123",
+                                "realName", "Probe",
+                                "status", 1)))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        long probeId = userIdOf("blank-pass-probe");
+        mockMvc.perform(put("/api/v1/users/" + probeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "blank-pass-probe",
+                                "password", "",
+                                "realName", "Probe Renamed")))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        MvcResult after = mockMvc.perform(get("/api/v1/users/" + probeId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("Probe Renamed", objectMapper.readTree(after.getResponse().getContentAsString())
+                .get("data").get("realName").asText());
+        assertNotNull(login("blank-pass-probe", "KeepMe@123"));
+    }
+
+    private long userIdOf(String username) throws Exception {
+        MvcResult page = mockMvc.perform(get("/api/v1/users")
+                        .param("page", "1").param("size", "200")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn();
+        for (var node : objectMapper.readTree(page.getResponse().getContentAsString())
+                .get("data").get("records")) {
+            if (username.equals(node.get("username").asText())) return node.get("id").asLong();
+        }
+        throw new AssertionError("user not found: " + username);
     }
 
     @Test

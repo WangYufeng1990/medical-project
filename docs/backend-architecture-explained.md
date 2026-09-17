@@ -744,9 +744,9 @@ Patient ePHI is **NOT cached** in Redis. Only cached:
 
 ### 11.5 Data Retention
 
-`DataRetentionJob` (`@Scheduled cron="0 0 3 * * ?"`) runs daily at 3 AM to purge expired audit logs:
-- `app.retention.audit-log-days=2190` (6-year HIPAA requirement)
-- Soft-deleted records retained for `app.retention.soft-delete-days=365` days
+`DataRetentionJob` (`common/job`, `@Scheduled cron="0 0 3 * * ?"`) runs daily at 3 AM and archives expired audit logs:
+- `app.retention.audit-log-days=2190` (6-year HIPAA requirement) — sets the `archived` flag, never deletes the row
+- Soft-deleted clinical records: **not purged.** The job used to inject five module repositories and a `app.retention.soft-delete-days` property without reading any of them (M8.5 removed both); it now depends only on the audit repository, which is `common`'s own table
 
 ### 11.6 Consent Management
 

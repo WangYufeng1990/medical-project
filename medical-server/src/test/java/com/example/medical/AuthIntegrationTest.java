@@ -85,5 +85,56 @@ class AuthIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * Disabling an account must invalidate tokens already handed out: the check
+     * runs inside the JWT claim mapper, which reads the account's
+     * {@code forceLogoutAfter}. M8.5 inverted that read behind
+     * {@code AccountRevocationCheck} and this was the branch's first test.
+     * <p>
+     * The probe account is created without roles, so the healthy answer for it is
+     * 403 (authenticated, not authorized) — which is exactly what makes the last
+     * assertion meaningful: 401 there can only come from authentication failing.
+     */
+    @Test
+    void tokenIssuedBeforeAccountDisabled_shouldBeRejected() throws Exception {
+        String username = "revocation-probe";
+        String password = "Revoked@123";
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password,
+                                "realName", "Revocation Probe",
+                                "status", 1)))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        String probeToken = login(username, password);
+        mockMvc.perform(get("/api/v1/users/doctors")
+                        .header("Authorization", "Bearer " + probeToken))
+                .andExpect(status().isForbidden());
+
+        Long probeId = null;
+        var page = mockMvc.perform(get("/api/v1/users")
+                        .param("page", "1").param("size", "200")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn();
+        for (var node : objectMapper.readTree(page.getResponse().getContentAsString())
+                .get("data").get("records")) {
+            if (username.equals(node.get("username").asText())) probeId = node.get("id").asLong();
+        }
+        assertNotNull(probeId, "created user not found");
+
+        mockMvc.perform(put("/api/v1/users/" + probeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("status", 0)))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/users/doctors")
+                        .header("Authorization", "Bearer " + probeToken))
+                .andExpect(status().isUnauthorized());
+    }
+
     // ──────────────────────────────────────────────────────
 }

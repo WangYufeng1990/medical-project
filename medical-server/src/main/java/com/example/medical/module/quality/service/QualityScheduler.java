@@ -1,6 +1,5 @@
-package com.example.medical.common.job;
+package com.example.medical.module.quality.service;
 
-import com.example.medical.module.quality.service.QualityMeasureService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

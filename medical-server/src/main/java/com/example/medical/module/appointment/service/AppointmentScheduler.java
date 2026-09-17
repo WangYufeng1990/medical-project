@@ -1,6 +1,7 @@
-package com.example.medical.common.job;
+package com.example.medical.module.appointment.service;
 
 import com.example.medical.module.appointment.entity.Appointment;
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import com.example.medical.module.appointment.entity.AppointmentStatus;
 
 @Slf4j
 @Component

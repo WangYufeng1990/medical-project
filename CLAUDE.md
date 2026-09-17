@@ -22,7 +22,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok | latest |
-| Testing | JUnit 5 + Spring Boot Test | 176 tests (137 integration + 39 unit) |
+| Testing | JUnit 5 + Spring Boot Test | 178 tests (138 integration + 40 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**
@@ -97,6 +97,7 @@ medical-project/
 - Every business module lives under `module/<module-name>/` with an identical internal layout.
 - `common/` is strictly for cross-cutting concerns. Business logic goes into modules.
 - No cyclic references between modules. If two modules need the same thing, it belongs in `common/`.
+- `common/` and `security/` must never import `module.*` — the shared kernel is depended upon, it does not depend. When a cross-cutting component needs module data, invert it with an interface in `common/security` (see `DoctorPatientScopeProvider`, `AccountRevocationCheck`); `LayeringGuardTest` fails the build otherwise.
 - DTOs go in the module's own `dto/` directory, not a global one.
 - JPA repositories live in each module's `repository/` directory. Naming: `{Entity}Repository`.
 

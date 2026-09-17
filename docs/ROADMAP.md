@@ -28,7 +28,7 @@
 >
 > **Round 50 M1 ✅ complete (2026-09-11) — h2 quick-start correctness.** The documented h2 quick start (`SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run`) now really is dependency-free: `app.rate-limit.enabled: false` alone was **not** enough (Redisson's auto-config builds its client eagerly, so boot still died at `redisTemplate → redissonConnectionFactory → redisson`) — `spring.autoconfigure.exclude: org.redisson.spring.starter.RedissonAutoConfigurationV2` in `application-h2.yml` is what fixes it. New `DevSchemaGuard` (+ `schema_version` table) turns silent `schema.sql` drift into a loud startup failure; README documents prerequisites, the reset procedure, `H2_DB_PATH` and how to re-enable rate limiting. **166 tests, 0 failures** (162 prior + 4 new). Remaining: M2–M9. See the Round 50 section at the end.**
 >
-> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 9 of 10 batches done (M1–M7, M9, M10; M8 in progress — 3 of its 6 slices landed) — F15 closed by M10, F3 by M4, F4 by M5, F6+F10 by M6, F8+F11 by M7, F12 by M9. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
+> **Maintainability review (2026-09-11): independent code-quality review (backend 212 main + 7 test Java files; frontend 81 TS/TSX + 6 CSS; schema, pom and all config) → 15 findings (4 🟡 HIGH, 10 🟠 MEDIUM, 1 ⚪ LOW), tracked as Round 50: Maintainability Pass — 10 of 10 batches done (M1–M10; M8's six slices all landed 2026-09-16) — F15 closed by M10, F3 by M4, F4 by M5, F6+F10 by M6, F8+F11 by M7, F12 by M9. Scope decision: H2-only learning demo ⇒ DB migration tooling out of scope (finding withdrawn; only H2-file hygiene kept as F14/M1). Headline finding, verified at boot: the documented h2 quick start could not boot without Redis (README claimed "no external dependencies") — fixed in M1. See the Round 50 section at the end.**
 
 ---
 
@@ -2791,7 +2791,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 >
 > **Scope decision (user, 2026-09-11): H2-only learning demo.** DB migration tooling is **out of scope** — no Flyway/Liquibase, no MySQL schema-evolution work, no prod deployment hardening. The review's "no migration mechanism" finding is withdrawn on that basis; only the H2-file-staleness footgun it implies survives (F14/M1).
 >
-> Status: **M1–M7, M9, M10 ✅ complete (2026-09-11 → 2026-09-15); M8 🟠 in progress (M8.1–M8.3 ✅ 2026-09-16, M8.4–M8.6 ⬜).** M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
+> Status: **M1–M10 ✅ all complete (2026-09-11 → 2026-09-16).** M8 (M8.1–M8.6) finished on 2026-09-16. M10 was pulled ahead of M4–M9 because it is a functional defect, not cleanup. Each batch below flips to ✅ individually when it lands.
 
 ## Summary
 
@@ -3117,13 +3117,13 @@ Every batch that touches a request or response payload, traced field-by-field (C
 - The patient portal's self-update endpoint still took an untyped body, so its fields could not carry `@Size` — **closed in M8.2**, which replaced it with `PatientSelfUpdateFormDTO` carrying the derived bounds.
 - `Pages` bounds are enforced in the service layer for the raw-parameter endpoints rather than at the web layer; if a future round migrates them all to `@Valid PageQuery`, the builder stays the single authority either way.
 
-## Batch M8 — Layering: VO/DTO extraction + controller split 🟠 (in progress)
+## Batch M8 — Layering: VO/DTO extraction + controller split ✅
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 ✅ complete (2026-09-16)** — the portal export assembles from VOs and owning services, and its live response is byte-identical to before. **M8.5 🟡 planned (2026-09-16)** — the last reverse dependencies, measured before being touched; three of the five are genuine import cycles. **This is the final slice of M8.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 ✅ complete (2026-09-16)** — the portal controller is six resource controllers, and its guard test caught a systemic 500: every wrong-role request in the API answered `500 Internal server error` instead of 403 (fixed). **M8.6 ✅ complete (2026-09-16)** — the portal export assembles from VOs and owning services, and its live response is byte-identical to before. **M8.5 ✅ complete (2026-09-16)** — nothing outside a module imports a module any more, and a guard test keeps it that way. **Batch M8 is complete.**
 
-### M8.5 — nothing outside a module imports a module 🟡 (planned, not yet written)
+### M8.5 — nothing outside a module imports a module ✅
 
 **Measured first, not remembered.** The inventory below is the output of `grep -rn "import com.example.medical.module." common/ security/`, which is also the check that has to come back empty when this slice lands:
 
@@ -3148,15 +3148,34 @@ Every batch that touches a request or response payload, traced field-by-field (C
 2. `app.retention.soft-delete-days` is **deleted, not implemented.** Nothing reads it, and API-LAYOUT plus `backend-architecture-explained.md` currently describe a soft-delete purge policy that does not exist ("soft-deleted records are retained 365 days before permanent removal"). Deleting a patient's medical rows on a timer is a compliance decision, not a cleanup task, so the honest fix is to delete the knob and correct the two documents. ROADMAP's Round 47 review had already flagged the same job as half-implemented.
 3. Inversion shape: the provider returns the patient ids a doctor is related to through that module's records; `DoctorPatientScope` unions all providers plus the break-glass patient, so `requireAccess` semantics are untouched (null = ADMIN, unscoped; empty set = no patients).
 
-**Verification plan**
+**What landed**
 
-| Check | Expected |
-|-------|----------|
-| `grep -rn "import com.example.medical.module." common/ security/` | **empty** |
-| New `LayeringGuardTest` (source scan, no new dependency) | fails the build if any future `common/` or `security/` class imports a module |
-| New `AuthIntegrationTest` case for the inverted revocation seam | create a user, log in, admin disables the account, reuse the old token → **401** (this branch had **no test at all** before) |
-| Live, after restart | in-scope doctor read 200 / out-of-scope 403 (proves the provider union), startup no-show check still fires, portal + export unaffected |
-| `mvn clean verify` | all green |
+| # | Change |
+|---|--------|
+| M8.5.1 | `AppointmentScheduler` → `module/appointment/service/`, `QualityScheduler` → `module/quality/service/` (same class names, same crons, same `ApplicationReadyEvent` listener) |
+| M8.5.2 | `DataRetentionJob` lost five never-read repository injections and the never-read `app.retention.soft-delete-days`; it is now a `common`-only job, which is what it always was |
+| M8.5.3 | `DoctorPatientScopeProvider` (in `common/security`) + `AppointmentScopeProvider` and `PrescriptionScopeProvider`; `DoctorPatientScope` unions the providers instead of querying two foreign repositories |
+| M8.5.4 | `AccountRevocationCheck` (in `common/security`) + `SysUserRevocationCheck` (in `module/system`); `security/JwtClaimMapper` no longer reads `SysUserRepository` |
+| M8.5.5 | `LayeringGuardTest`: a source scan that fails the build when any `common/` or `security/` file imports a business module |
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `grep -rn "import com.example.medical.module." common/ security/` | **empty** — the end state this slice promised |
+| `mvn clean verify` | **178 tests, 0 failures** (176 → 178), enforcer clean |
+| Relocated scheduler still runs (live, after restart) | `c.e.m.m.a.s.AppointmentScheduler - Running no-show check on startup` |
+| Provider union still enforces scope (live, doctor1 token) | in scope `/patients/100/vitals` **200**; out of scope `/patients/102/vitals` **403** `Access denied: patient outside your scope` |
+| Inverted revocation seam (live) | token issued before the account was disabled → **401**, and the branch now has its first test |
+| Portal unaffected (live) | vitals / bills / appointments / prescriptions 200; export still 6 sections, 4/2/2 rows |
+
+### M8.5.6 — two defects the new tests surfaced ✅
+
+**1. `@ValidPassword` rejected "no password", so every staff-account edit demanded one.** `PasswordPolicyValidator.isValid` returned false for null *and* blank, which made the optional field on `SysUserUpdateFormDTO` mandatory — and `SysUserService.update` rotates the password whenever one is supplied, so an admin fixing a typo in a phone number silently reset that user's credentials and wrote a password-history row. `SystemIntegrationTest` had even recorded the accident as intentional: *"Backend requires @NotBlank password even on update — this is a known issue"*. The validator now ignores absent/blank values (presence stays the caller's job, and all four required sites carry `@NotBlank`), the DTO's documented "blank keeps the current password" is real, and that test was rewritten to prove the credentials survive an edit.
+
+**2. A revoked token threw instead of failing authentication.** `JwtClaimMapper` rejected a stale token with `JwtValidationException`, which is not an `AuthenticationException` — so `BearerTokenAuthenticationFilter` did not catch it and the exception escaped to the DispatcherServlet. Measured on the running server before the fix: the client still saw 401 (by accident, through the container's error path), but each request appended **194 log lines including an ERROR stack trace**, and the `WWW-Authenticate` header carried no reason at all. It now throws `OAuth2AuthenticationException` with an `OAuth2Error`, which the filter answers cleanly: **401**, `error_description="Account was disabled or credentials changed after token issuance"`, and **10 log lines, 0 errors**. The same change covers the refresh-token-as-access-token rejection in the same class, which had the identical flaw.
+
+Neither defect was in this slice's scope; both were in code the slice had to touch, and both are now covered by tests that would fail if the behaviour regressed.
 
 **Files:** `common/job/{AppointmentScheduler,QualityScheduler}.java` (moved into `module/*/service/`), `common/job/DataRetentionJob.java`, `common/security/DoctorPatientScope.java` + `DoctorPatientScopeProvider.java` (new), `module/appointment/service/AppointmentScopeProvider.java` (new), `module/prescription/service/PrescriptionScopeProvider.java` (new), `common/security/AccountRevocationCheck.java` (new), `module/system/service/SysUserRevocationCheck.java` (new), `security/JwtClaimMapper.java`, `application.yml`, `docs/API-LAYOUT.md`, `docs/backend-architecture-explained.md`, `AuthIntegrationTest.java`, `LayeringGuardTest.java` (new).
 
@@ -3383,7 +3402,7 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 | M8.2 | `PUT /api/v1/patient/me`: `Map<String,Object>` → `PatientSelfUpdateFormDTO` (the 12 allowed fields + `@Size`); frontend sends only the editable fields | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController:103-127`; `medical-web/src/views/patient/profile/index.tsx:44,73` |
 | M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**, and the dependency *count* did not drop either (18 fields before, 18 after — the foreign repositories that left were replaced by services): `patient` still imports `system`/`appointment`/`billing`/`prescription`. What changed is the **kind** of dependency — the portal's operations go through owner services. The one exception is `GET /patient/me/export`, which still queries four foreign repositories (`AppointmentRepository`, `PrescriptionRepository`, `PrescriptionItemRepository`, `BillRepository`) to assemble `PatientDataExport`; that is M8.6's target and the code says so | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
 | M8.4 ✅ | Split `PatientPortalController` (18 deps, 18 endpoints) by resource — **delivered as six controllers**, not the five groups listed here, which left `/disclosures`, `/referrals`, `/prior-auths` and `/export` without a home. Also fixed the systemic wrong-role → 500 found by its guard test | `module/patient/controller/PatientPortal*Controller.java`; `common/exception/GlobalExceptionHandler.java` |
-| M8.5 🟡 | Remove `common → module` reverse deps — **measured at five files** (2 schedulers to relocate, 1 job whose cross-module half is dead code, 2 to invert because relocating them would recreate the cycle); `DataRetentionJob` stays in `common` because archiving the audit table is genuinely cross-cutting | `common/job/*`; `common/security/*`; `security/JwtClaimMapper`; affected module packages |
+| M8.5 ✅ | Remove `common → module` reverse deps — **measured at five files** (2 schedulers relocated, 1 job whose cross-module half was dead code, 2 inverted because relocating them would recreate the cycle); `DataRetentionJob` stays in `common` because archiving the audit table is genuinely cross-cutting. `LayeringGuardTest` makes the end state permanent, and the slice's tests surfaced two more defects | `common/job/*`; `common/security/*`; `security/JwtClaimMapper`; affected module packages |
 | M8.6 ✅ | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → reduced to **VOs + three owning-service reads**; a `common`-level DTO was rejected (it would put module DTOs in `common`, the opposite of M8.5). Two other controllers still inject foreign repositories and are recorded as follow-ups | `PatientDataExport.java`; `PatientPortalExportController`; `AppointmentService`/`PrescriptionService`/`BillService` |
 
 ### Verification
