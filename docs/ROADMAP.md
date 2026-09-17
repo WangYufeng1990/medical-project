@@ -3121,7 +3121,35 @@ Every batch that touches a request or response payload, traced field-by-field (C
 
 **Goal:** no raw entity on the wire, no untyped request body, and the module graph becomes acyclic.
 
-> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4–M8.6 ⬜ still open.**
+> **M8.1 ✅ complete (2026-09-15)** — everything that returned a JPA entity now returns a VO, and staff reads of a patient's record are audited. **M8.2 ✅ complete (2026-09-16)** — the portal's untyped self-update body is a typed, validated DTO. **M8.3 ✅ complete (2026-09-16)** — the portal's business logic lives in services. **M8.4 🟡 planned (2026-09-16)** — the portal controller splits into six resource controllers; the plan below records the two decisions taken before any code was written. **M8.5–M8.6 ⬜ still open.**
+
+### M8.4 — the portal controller becomes six resource controllers 🟡 (planned, not yet written)
+
+**Decisions taken before any code (2026-09-16):**
+
+1. **All six controllers stay in `module/patient/controller/`** (option A). A resource-follows-module split — portal appointments in `appointment`, bills in `billing`, prescriptions in `prescription`, the way `RefillController` and `PatientChatController` already sit — was considered and rejected: it would scatter one portal surface across four modules for no dependency win, because the `patient ↔ appointment/billing/prescription` coupling that remains after M8.3 is a *data* dependency (a VO needs the patient's name), not a controller-placement one. Cycle治理 belongs to M8.5/M8.6.
+2. **The four patient-module repositories the portal reads directly are not folded behind services in this batch** (`VitalSignRepository`, `ProblemRepository`, `ImmunizationRepository`, `CarePlanRepository`). The staff controllers read those same repositories directly, so wrapping only the portal would leave two entry shapes for one table; doing it properly means four new services plus four staff controllers, which is its own batch (candidate for M11).
+
+**Why six and not the five groups in the Round 50 row:** 18 endpoints do not fit five homes — `/disclosures`, `/referrals`, `/prior-auths` and `/export` had no assigned owner. `/export` alone needs five repositories (it assembles `PatientDataExport`, M8.6), so it cannot be folded into a read controller without dragging them along. Six classes with disjoint paths cover all 18 endpoints and leave no residual god-class.
+
+| Controller (all `@RequestMapping("/api/v1/patient/me")`) | Endpoints | Dependencies |
+|---|---|---|
+| `PatientPortalProfileController` | GET `/`, PUT `/`, PUT `/password`, GET `/disclosures` | `PatientService`, `PatientAccountService`, `AuditLogRepository` (3) |
+| `PatientPortalClinicalController` | GET `/observations`, `/observations/trend`, `/vitals`, `/problems`, `/immunizations`, `/care-plans` | `LabAnalysisService` + 4 own-module repositories (5) |
+| `PatientPortalAppointmentController` | GET `/appointments`, PUT `/appointments/{id}/cancel`, GET `/referrals`, GET `/prior-auths` | `AppointmentService`, `ReferralService`, `PriorAuthService` (3) |
+| `PatientPortalPrescriptionController` | GET `/prescriptions` | `PrescriptionService` (1) |
+| `PatientPortalBillingController` | GET `/bills`, PUT `/bills/{id}/pay` | `BillService` (1) |
+| `PatientPortalExportController` | GET `/export` | 5 repositories — deliberately visible, this is M8.6's target (5) |
+
+**Invariants that must not move** (the split is a file move, not a behaviour change):
+
+- Every class carries class-level `@PreAuthorize("hasRole('PATIENT')")` — six places to get right where there was one. A new test calls one endpoint of **each** controller with an ADMIN token and expects 403, so a forgotten annotation fails the suite instead of opening an endpoint.
+- Paths, verbs, `@RequestParam`s, response types and status codes unchanged; every `@Auditable(module, action, phiAccess)` stays on the same operation with the same values, so the audit trail is byte-identical.
+- Mechanical proof of no surface change: the 18 `@*Mapping` annotations are captured before and after the move and diffed (verb + path pairs must be identical), and the 13 portal integration tests must pass untouched.
+
+**Out of scope for M8.4:** `PatientDataExport`'s cross-module assembly (M8.6), the four repository-backed reads (see decision 2), `common → module` (M8.5).
+
+**Files:** `module/patient/controller/PatientPortal*Controller.java` (6 new), `PatientPortalController.java` (deleted), `PatientPortalIntegrationTest.java` (one new role-boundary test), `docs/ROADMAP.md`. No API-LAYOUT change: the documented surface does not move.
 
 ### M8.3 — the portal's business logic moves into services ✅
 
@@ -3241,8 +3269,8 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 |---|--------|-------|
 | M8.1 | Add VOs (+ `fromEntity`) for the endpoints currently returning entities: portal `vitals/problems/immunizations/referrals/care-plans/prior-auths/disclosures`, `ConsentController`, `QualityController`, `PharmacyController`, `FormularyController` | new DTOs under each module's `dto/`; `PatientPortalController:314-359`; `ConsentController:31,64`; `QualityController:23,39`; `PharmacyController:21`; `FormularyController:40` |
 | M8.2 | `PUT /api/v1/patient/me`: `Map<String,Object>` → `PatientSelfUpdateFormDTO` (the 12 allowed fields + `@Size`); frontend sends only the editable fields | `module/patient/dto/PatientSelfUpdateFormDTO.java` (new); `PatientPortalController:103-127`; `medical-web/src/views/patient/profile/index.tsx:44,73` |
-| M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**: `patient` still imports `system`/`appointment`/`billing`/`prescription`, but only their *services* now (plus `PatientDataExport`, M8.6) — no foreign repository is reachable from the portal controller any more | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
-| M8.4 | Split `PatientPortalController` (18 deps) by resource: profile / observations / appointments / prescriptions / bills (+ chat untouched) | `module/patient/controller/PatientPortal*Controller.java` |
+| M8.3 ✅ | Move portal business logic out of the controller: password change (+ history), appointment cancel rules, bill payment → services. **Delivered differently than planned:** there was no `AuthService` password-history pattern to reuse — the policy was copied in *three* places, so M8.3.1 extracted `PasswordHistoryService` instead. The module **cycles are not gone**, and the dependency *count* did not drop either (18 fields before, 18 after — the foreign repositories that left were replaced by services): `patient` still imports `system`/`appointment`/`billing`/`prescription`. What changed is the **kind** of dependency — the portal's operations go through owner services. The one exception is `GET /patient/me/export`, which still queries four foreign repositories (`AppointmentRepository`, `PrescriptionRepository`, `PrescriptionItemRepository`, `BillRepository`) to assemble `PatientDataExport`; that is M8.6's target and the code says so | `module/system/service/PasswordHistoryService.java` (new); `PatientAccountService` (new); `AppointmentService`; `BillService`; `PrescriptionService`; `PatientService`; `ReferralService`/`PriorAuthService` (new); `PatientPortalController` |
+| M8.4 🟡 | Split `PatientPortalController` (18 deps, 18 endpoints) by resource — **refined below into six controllers**; the five groups listed here left `/disclosures`, `/referrals`, `/prior-auths` and `/export` without a home | `module/patient/controller/PatientPortal*Controller.java` |
 | M8.5 | Remove `common → module` reverse deps: relocate `common/job/AppointmentScheduler`, `QualityScheduler` into their modules (and `DataRetentionJob` into a dedicated retention component that owns its cross-module queries); reassess `DoctorPatientScope`'s location | `common/job/*`; affected module packages |
 | M8.6 | `patient/dto/PatientDataExport.java` assembling appointment/prescription/billing entities → move assembly to a service or a `common`-level DTO to break the cycle | `module/patient/dto/PatientDataExport.java`; `PatientPortalController.exportMyData` |
 
