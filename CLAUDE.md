@@ -63,6 +63,8 @@ medical-project/
 │       │   ├── exception/             # GlobalExceptionHandler, BusinessException
 │       │   ├── job/                    # DataRetentionJob (scheduled audit archive)
 │       │   ├── result/                 # Result<T>, PageResult<T>
+│       │   ├── security/               # DoctorPatientScope + the interfaces that let it
+│       │   │                           # read module data without importing a module
 │       │   └── validation/            # @ValidPassword, PasswordPolicyValidator
 │       ├── module/
 │       │   ├── system/                 # users, roles, menus, auth, emergency access
@@ -156,6 +158,24 @@ medical-project/
   summed to 294 for a 166-test suite). CI must use `clean` for the same reason.
 - Integration tests: one class per module extending `IntegrationTestSupport`; log in per class
   (`@BeforeAll`), never in a suite-wide static — see `docs/ROADMAP.md` M4.
+
+### 8b. Live verification (probing a running instance)
+- **A live probe is only trustworthy on an instance started after the last build.** `mvn spring-boot:run`
+  puts `target/classes` — a *directory* — on the runtime classpath, so the JVM loads classes lazily
+  from disk: a class already loaded keeps its bytes, a class first touched later reads whatever the
+  last build wrote. Rebuilding under a live instance therefore produces a half-old/half-new process.
+  Measured in an isolated copy: one source tree answered the same request **400** in the process whose
+  validator had loaded after a mid-flight recompile and **200** in a process restarted from the very
+  same bytes, and recompiling again did not change the first process back.
+- **Order: edit → stop the instance → `mvn clean verify` → start → probe.** Never build while an
+  instance you intend to probe is running: `clean` deletes `target/` under it, which turns a later
+  first-load into a `ClassNotFoundException` instead of a stale read, and a build that fails midway
+  leaves a genuinely partial `target/classes`.
+- **Confirm the probe hit the instance you started** (fresh `Started MedicalApplication` /
+  `Local schema version` line plus the port you launched), and remember only one instance can write a
+  given H2 file — a second one on the same DB degrades to read-only.
+- Prefer `h2` only for questions that do not depend on profile config: rate limiting, `dev-mode` and
+  Redis behave differently per profile, so say which configuration you probed.
 
 ### 9. Git
 - Do not init or commit unless explicitly asked.
