@@ -268,4 +268,29 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
                 .content(objectMapper.writeValueAsString(body))
                 .header("Authorization", "Bearer " + patientToken));
     }
+
+    /**
+     * The portal surface is six controllers now (M8.4), each carrying its own
+     * class-level {@code @PreAuthorize}. One endpoint per controller is probed
+     * with a staff token: a class that forgets the annotation answers 200 here
+     * instead of 403, which is how the split would silently open the portal.
+     */
+    @Test
+    void staffToken_shouldBeRejectedOnEveryPortalController() throws Exception {
+        String[] oneEndpointPerController = {
+                "/api/v1/patient/me",
+                "/api/v1/patient/me/observations",
+                "/api/v1/patient/me/appointments",
+                "/api/v1/patient/me/prescriptions",
+                "/api/v1/patient/me/bills",
+                "/api/v1/patient/me/export",
+        };
+        for (String path : oneEndpointPerController) {
+            MvcResult result = mockMvc.perform(get(path).header("Authorization", "Bearer " + adminToken))
+                    .andReturn();
+            assertEquals(403, result.getResponse().getStatus(),
+                    path + " answered " + result.getResponse().getStatus()
+                            + " for a staff token: " + result.getResponse().getContentAsString());
+        }
+    }
 }

@@ -31,4 +31,17 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<?> response = handler.handleBusinessException(ex);
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
     }
+
+    /**
+     * A method-level {@code @PreAuthorize} denial used to reach the catch-all and
+     * be reported as 500; {@code AuthorizationDeniedException} is what the method
+     * interceptor actually throws.
+     */
+    @Test
+    void shouldReturn403ForMethodSecurityDenial() {
+        var denied = new org.springframework.security.authorization.AuthorizationDeniedException("Access Denied");
+        com.example.medical.common.result.Result<Void> response = handler.handleAccessDenied(denied);
+        assertEquals(403, response.getCode());
+        assertEquals("Access denied", response.getMessage());
+    }
 }

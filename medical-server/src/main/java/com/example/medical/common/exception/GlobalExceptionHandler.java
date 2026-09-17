@@ -107,6 +107,24 @@ public class GlobalExceptionHandler {
         return Result.fail(405, "Method not allowed");
     }
 
+    /**
+     * A role check that says no. {@code SecurityConfig} guards the URL tree with
+     * {@code authenticated()} only, so every role check in this application is a
+     * {@code @PreAuthorize} on a controller method: the denial is thrown by the
+     * method interceptor inside the DispatcherServlet, where the catch-all below
+     * used to turn it into a 500 "Internal server error" and an ERROR stack trace.
+     * Every wrong-role request in the API answered 500 before this handler
+     * (patient token on /patients, doctor token on an ADMIN-only endpoint, staff
+     * token on the patient portal). {@code AuthorizationDeniedException} extends
+     * this class, so one handler covers both.
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        log.warn("Access denied: {}", e.getMessage());
+        return Result.fail(403, "Access denied");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleUnknown(Exception e) {

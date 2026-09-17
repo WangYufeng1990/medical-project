@@ -546,6 +546,8 @@ present were touched. The portal submits all twelve.
 
 An unrecognised path or verb used to answer 500 because the catch-all handler swallowed Spring's `NoResourceFoundException`/`HttpRequestMethodNotSupportedException` — clients saw a server error for their own mistake (fixed in M6).
 
+**The 403 row above was aspirational until M8.4.** `SecurityConfig` guards the URL tree with `authenticated()` only, so every role check in this application is a `@PreAuthorize` on a controller method — and its `AuthorizationDeniedException` was thrown *inside* the DispatcherServlet, where the catch-all turned it into `500 Internal server error` plus an ERROR stack trace. Measured before the fix: a patient token on `/api/v1/patients`, a doctor token on the ADMIN-only `/api/v1/audit-logs`, and a staff token on `/api/v1/patient/me` all answered 500. A dedicated handler now maps it to `403 Access denied` (body identical to a `BusinessException(FORBIDDEN)`, so the frontend cannot tell the two apart — which is the point).
+
 ### Pagination (all list endpoints)
 
 `?page` is 1-based; `?size` is capped at **200** (`common/base/Pages.java`, also referenced by `PageQuery`). Out-of-range values are **rejected with 400**, never clamped — a client asking for 10 000 rows is told no rather than silently given 200. Two message shapes exist because two mechanisms enforce the same limit: raw `@RequestParam` endpoints answer `{"code":400,"message":"Size must be between 1 and 200"}`, `PageQuery`-bound endpoints answer `size: Size must be at most 200` (bean validation). FHIR endpoints use their own `_count` cap of 500, per the FHIR contract.
