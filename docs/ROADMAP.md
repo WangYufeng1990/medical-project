@@ -230,7 +230,7 @@ Build a LOINC coding knowledge base on top of Round 6's `observation` table, sup
 | # | Feature | Description |
 |---|---------|-------------|
 | 7.1 | **LOINC Code Dictionary Table** | `loinc_catalog` table stores LOINC code/display/unit/reference range for common lab tests |
-| 7.2 | **Automated Abnormal Flagging** | Auto-set `abnormal_flag` (N/L/H/LL/HH/AA) based on reference range, supporting age/gender-stratified reference ranges. **Still not wired**: `LabAnalysisService.autoFlag()` has no caller, and its `LL`/`HH` levels would not fit the column — see Round 51.5 |
+| 7.2 | **Automated Abnormal Flagging** | Auto-set `abnormal_flag` (N/L/H/LL/HH/AA) based on reference range, supporting age/gender-stratified reference ranges. **Never wired, and deleted in Round 51.6**: `LabAnalysisService.autoFlag()` had no caller and its `LL`/`HH` levels could not fit the column |
 | 7.3 | **Lab Trend Query** | `GET /api/v1/patients/{id}/observations?loinc=` returns historical trend for a patient's lab test (ordered by time) |
 | 7.4 | **Panel Support** | CBC = WBC+RBC+HGB+HCT+PLT; BMP = Glucose+Ca+Na+K+CO2+Cl+BUN+Creatinine. Supports panel expansion |
 
@@ -3546,7 +3546,21 @@ Prompted by "are the docs in sync?", every claim touched by Rounds 50–51 was r
 
 **Verification:** frontend `npm run check` clean (tsc + eslint, same 4 pre-existing warnings); both lab pages re-checked in the browser and now render the identical legend; `mvn clean verify` unaffected (no backend change in this slice) — the last full run stands at 181 green.
 
-**Open decision left by 51.5.3:** `LabAnalysisService.autoFlag()` is dead code that cannot store what it returns. Either wire it into the lab intake with the same folding, or delete it. Not decided here because it is a feature question (does the demo want derived flags?), not drift.
+### Round 51.6 — the two open decisions closed ✅
+
+**1. `LabAnalysisService.autoFlag()` deleted.** It had no caller anywhere in the codebase, and the five levels it returned (`LL`/`L`/`H`/`HH`/`N`) could not be stored in `abnormal_flag CHAR(1)` — it was documented as a feature while being unreachable code that could only have produced the same 500 the intake used to. Removing it also removed its only dependency (`LoincCatalogRepository`). Round 7.2's row now records that the feature was never wired; if derived flags are ever wanted, the intake is the place (it already folds HL7's two-character levels).
+
+**2. The two lab pages now share one implementation.** `views/lab/LabResults.tsx` and `views/patient/lab/index.tsx` each carried their own copy of the date grouping, the trend calculation, the trend banner, the results table, the pagination and the flag legend — ~70 lines twice over, and the duplication had already caused a miss (51.5.6: only one page's legend got fixed). Both now render `views/lab/LabResultsTable.tsx`, which owns the grouping, the trend arrow, the table and the pager, and exports `LabFlagLegend` and `LAB_PAGE_SIZE`. The pages keep only what differs: where the data comes from (staff selects a patient, the portal reads its own token), the heading and the empty-message wording. `LabResults.tsx` 181 → 92 lines, `patient/lab/index.tsx` 154 → 66, component 154.
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **181 tests, 0 failures** — unchanged by the dead-code removal |
+| `npm run check` | tsc clean; eslint 0 errors (it caught the three imports the extraction orphaned) |
+| Staff `/lab`, patient selected | 20 rows, `Total: 30 … Page 1`, dates grouped, legend rendered |
+| Staff `/lab`, **Next** | page 2, 10 rows, first group `2026-03-20` — the moved `onPageChange` wiring works |
+| Staff `/lab` with no patient | no rows and no empty message (`emptyMessage` is suppressed rather than shown) |
+| Both pages, filter = Glucose | trend banner with 4 points and a `↓` arrow — page 1 pager correctly hidden in trend mode |
+| Browser console / network | 0 console errors, 0 responses ≥ 400 across the whole walk |
 
 ## Round completion criteria
 

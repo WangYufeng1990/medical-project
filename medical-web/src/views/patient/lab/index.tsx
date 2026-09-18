@@ -3,11 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { http } from '../../../api/patientRequest'
 import { PageResult } from '../../../types/common'
 import { ObservationVO, LoincEntry } from '../../../types/entities'
-import styles from '../../shared.module.css'
-import { ABNORMAL_FLAG_COLOR, ABNORMAL_FLAG_LEGEND } from '../../../utils/labels'
 import { readPatientInfo } from '../../../utils/auth'
-
-const LAB_PAGE_SIZE = 20
+import LabResultsTable, { LAB_PAGE_SIZE, LabFlagLegend } from '../../lab/LabResultsTable'
 
 export default function PatientLab() {
   const info = readPatientInfo()
@@ -34,24 +31,6 @@ export default function PatientLab() {
   const allObservations = (loincFilter ? trendData : pageData?.records) ?? []
   const total = pageData?.total ?? 0
 
-  const grouped: Record<string, ObservationVO[]> = {}
-  allObservations.forEach(o => {
-    const date = o.effectiveDate ? o.effectiveDate.substring(0, 16) : 'Unknown'
-    if (!grouped[date]) grouped[date] = []
-    grouped[date].push(o)
-  })
-
-  const dateEntries = Object.entries(grouped)
-  const trendDirection = loincFilter && dateEntries.length >= 2
-    ? (() => {
-        const dates = Object.keys(grouped).sort()
-        const first = parseFloat(grouped[dates[0]][0]?.obsValue ?? '')
-        const last = parseFloat(grouped[dates[dates.length - 1]][0]?.obsValue ?? '')
-        if (isNaN(first) || isNaN(last)) return null
-        return last > first ? '↑' : last < first ? '↓' : '→'
-      })()
-    : null
-
   const handleLoincChange = (code: string) => {
     setLoincFilter(code)
     setPage(1)
@@ -68,87 +47,19 @@ export default function PatientLab() {
           <option value="">All tests</option>
           {(catalog ?? []).map(c => <option key={c.loincCode} value={c.loincCode}>{c.display}</option>)}
         </select>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: '#909399', alignItems: 'center' }}>
-          Flag: {ABNORMAL_FLAG_LEGEND.map((f, i) => (
-          <span key={f.text} style={{ color: f.color, marginLeft: i ? 10 : 0 }}>{f.text}</span>
-        ))}
-        </div>
+        <LabFlagLegend />
       </div>
 
-      {isLoading && <p style={{ color: '#909399', fontSize: 13 }}>Loading...</p>}
-
-      {!isLoading && allObservations.length === 0 && (
-        <p style={{ color: '#909399', fontSize: 13 }}>No lab results found.</p>
-      )}
-
-      {!isLoading && allObservations.length > 0 && (
-        <>
-          {loincFilter && trendDirection && dateEntries.length >= 2 && (
-            <div style={{ marginBottom: 16, padding: 16, background: '#f0f9ff', borderRadius: 8, borderLeft: '3px solid #409EFF' }}>
-              <div style={{ fontSize: 13, color: '#606266', marginBottom: 8 }}>
-                Trend for <strong>{allObservations[0]?.loincDisplay ?? loincFilter}</strong>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-                {dateEntries.sort(([a], [b]) => a.localeCompare(b)).map(([date, obs]) => {
-                  const val = parseFloat(obs[0]?.obsValue ?? '')
-                  return (
-                    <div key={date} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : ABNORMAL_FLAG_COLOR[obs[0]?.abnormalFlag || ''] || '#409EFF' }}>
-                        {obs[0]?.obsValue}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
-                      <div style={{ fontSize: 10, color: '#909399', marginTop: 4 }}>{date?.substring(0, 10)}</div>
-                    </div>
-                  )
-                })}
-                <div style={{ textAlign: 'center' }}>
-                  <div role="img" aria-label={trendDirection === '↑' ? 'Trend increasing' : trendDirection === '↓' ? 'Trend decreasing' : 'Trend stable'}
-                    style={{ fontSize: 24, color: trendDirection === '↓' ? '#67C23A' : trendDirection === '↑' ? '#E6A23C' : '#909399' }}>
-                    {trendDirection}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Collection Date</th><th>Test</th><th>Value</th><th>Unit</th><th>Reference Range</th><th>Flag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dateEntries.sort(([a], [b]) => b.localeCompare(a)).map(([date, obs]) =>
-                obs.map((o, i) => (
-                  <tr key={o.id}>
-                    {i === 0 && <td rowSpan={obs.length} style={{ verticalAlign: 'top', fontWeight: 600 }}>{date}</td>}
-                    <td>{o.loincDisplay || o.loincCode}</td>
-                    <td>{o.obsValue}</td>
-                    <td>{o.unit || '-'}</td>
-                    <td>{o.referenceRange || '-'}</td>
-                    <td>
-                      {o.abnormalFlag && o.abnormalFlag !== 'N' ? (
-                        <span style={{ color: ABNORMAL_FLAG_COLOR[o.abnormalFlag] || '#909399', fontWeight: 600 }}>{o.abnormalFlag}</span>
-                      ) : (
-                        <span style={{ color: '#67C23A' }}>N</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-
-          {!loincFilter && total > LAB_PAGE_SIZE && (
-            <div className={styles.pagination}>
-              <span>Total: {total}</span>
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</button>
-              <span>Page {page}</span>
-              <button disabled={page * LAB_PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</button>
-            </div>
-          )}
-        </>
-      )}
+      <LabResultsTable
+        observations={allObservations}
+        isLoading={isLoading}
+        trendMode={!!loincFilter}
+        trendLabel={loincFilter}
+        page={page}
+        total={total}
+        onPageChange={setPage}
+        emptyMessage="No lab results found."
+      />
     </div>
   )
 }

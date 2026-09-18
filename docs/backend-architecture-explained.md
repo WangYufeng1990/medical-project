@@ -665,7 +665,7 @@ BillService provides complete claim lifecycle: `submitClaim()` → `adjudicate()
 
 `loinc_catalog` table stores 29 common LOINC codes (CBC/BMP/Lipid/HbA1c/TSH/UA), each with unit, reference range, panel_parent_code.
 
-`LabAnalysisService.autoFlag()` computes a five-level flag: `LL` (<80% of the lower limit) / `L` / `H` / `HH` (>150% of the upper limit) / `N`. **It has no caller** — nothing derives a flag today; the only writer of `observation.abnormal_flag` is the lab intake — and its two-character levels could not be stored anyway (`CHAR(1)`). Left in place pending a decision to wire it (with the same folding the intake now does) or delete it (Round 51.5).
+`LabAnalysisService.autoFlag()` — which computed a five-level flag (`LL`/`L`/`H`/`HH`/`N`) from the catalog's reference range — **was deleted in Round 51.6**: it had no caller, and its two-character levels could not be stored in `abnormal_flag CHAR(1)` anyway. The only writer of that column today is the lab intake, which folds the incoming HL7 flag to one character.
 
 Trend query: `GET /api/v1/patients/{id}/observations?loinc=CODE`. Panel expansion: `GET /api/v1/loinc/panel/CBC`.
 
