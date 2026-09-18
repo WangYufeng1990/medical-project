@@ -124,7 +124,7 @@ channelMap.put('adtPayload', JSON.stringify(json));
 | `results[].value` | string | No | Result value (OBX-5) |
 | `results[].unit` | string | No | Unit (OBX-6) |
 | `results[].referenceRange` | string | No | Reference range (OBX-7) |
-| `results[].abnormalFlag` | string | No | Abnormal flag: L=low H=high N=normal A=abnormal |
+| `results[].abnormalFlag` | string | No | Abnormal flag. HL7's set is accepted and **folded to one character** at the intake (`HH`/`HU` → `H`, `LL`/`LU` → `L`, `N` and `A` kept, anything unrecognised → null), because the column is `abnormal_flag CHAR(1)`: sending `HH` used to fail the whole message with a 500 (Round 51.4) |
 
 ### Destination Connector Configuration
 

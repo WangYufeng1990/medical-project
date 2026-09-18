@@ -232,7 +232,7 @@ Requires `ADMIN` or `DOCTOR`. Charge capture linked to appointments, convertible
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=10&patientId=` | Paginated charge list (`ChargeVO`; DOCTOR scoped to own patients) |
 | POST | `/` | body: {patientId*, chargeAmount*, appointmentId?, cptCodes?, icd10Codes?, units?, visitType?, notes?} | Create charge (DRAFT). `patientId` and `chargeAmount` required (400 otherwise; amount must be ≥ 0) |
-| PUT | `/{id}/convert` | path | Convert DRAFT charge → bill (`BillVO`; status → BILLED, creates Bill). Non-DRAFT → 409 |
+| PUT | `/{id}/convert` | path | Convert DRAFT charge → bill (`BillVO`; status → BILLED, creates Bill, copies `appointmentId` onto it). Non-DRAFT → 409; an appointment that **already has any bill** → 409 `Appointment 201 is already billed (bill 500)` — a visit is billed once (Round 51.1) |
 
 ### Referrals — `/api/v1/referrals`
 
@@ -408,7 +408,7 @@ Requires `ADMIN` or `DOCTOR`. Mirth Connect JSON integration for ADT and lab res
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | POST | `/adt` | body: AdtEventDTO | ADT event (A01/A03/A08) — upsert Patient by MRN |
-| POST | `/lab-results` | body: LabResultDTO | Batch lab results with sourceMessageId dedup |
+| POST | `/lab-results` | body: LabResultDTO, header `X-Integration-Key` | Batch lab results with sourceMessageId dedup. `results[].abnormalFlag` accepts the HL7 set and is **normalised to one character** before storage (`HH/HU → H`, `LL/LU → L`, `N`, `A`; anything else → null) because the column is `CHAR(1)` (Round 51.4) |
 
 ### Lab Results — `/api/v1/patients/{id}/observations` + `/api/v1/loinc`
 
@@ -476,7 +476,7 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 
 ### DOCTOR Patient Scoping (Round 47)
 
-For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own patients (defined as patients where the doctor has appointments or prescriptions — `DoctorPatientScope` in `common/security`):
+For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own patients (defined as patients where the doctor has appointments or prescriptions — `DoctorPatientScope` in `common/security`, fed by a `DoctorPatientScopeProvider` per module so that the shared kernel never imports a module):
 
 - **List endpoints** (`appointments`, `prescriptions`, `charges`, `referrals`, `prior-auths`, refill pending list) filter rows to in-scope patients; ADMIN sees all.
 - **By-patient read/update endpoints** (vitals, observations + trend, problems, care-plans, immunizations, patient history/allergies, FHIR case, referral/prior-auth lists, appointment/prescription/bill detail, charge convert, refill approve/deny) return **403** for out-of-scope patients.
@@ -485,7 +485,7 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 - **Emergency break-glass tokens** (`scope=EMERGENCY`, `patientId` claim) bypass the scope for the named patient.
 
 ### Data Encryption
-- **Passwords**: BCrypt hashed + complexity policy (8+ chars, upper/lower/digit/special) + history enforcement (last 3 cannot be reused)
+- **Passwords**: BCrypt hashed + complexity policy (8+ chars, upper/lower/digit/special) + history enforcement (last 3 cannot be reused). The complexity rule applies to a password that is **supplied**: where the field is optional (`PUT /api/v1/users/{id}`), an absent or blank value keeps the current password rather than failing validation (M8.5) — required fields carry `@NotBlank` of their own
 - **PHI fields**: AES-256-GCM via `@Convert(converter = AesAttributeConverter.class)`, versioned key format supporting rotation (`app.aes.key` / `app.aes.key.previous`)
 - **Redis cache safety**: `PhiMaskingRedisSerializer` automatically redacts `@PhiField`-annotated DTO fields to `[PHI-REDACTED]`
 - **Token validation**: External IdP JWKS; no local secret management needed

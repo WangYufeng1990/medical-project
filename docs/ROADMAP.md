@@ -191,7 +191,7 @@ CREATE TABLE observation (
     value VARCHAR(50),
     unit VARCHAR(20),
     reference_range VARCHAR(50),
-    abnormal_flag CHAR(1),                -- N/L/H/LL/HH
+    abnormal_flag CHAR(1),                -- N/L/H/LL/HH  (the column only ever held one character: Round 51.4 folds HH/LL down at the intake)
     status VARCHAR(20) DEFAULT 'final',
     source_message_id VARCHAR(100),       -- Mirth message ID for dedup
     effective_date TIMESTAMP,
@@ -230,7 +230,7 @@ Build a LOINC coding knowledge base on top of Round 6's `observation` table, sup
 | # | Feature | Description |
 |---|---------|-------------|
 | 7.1 | **LOINC Code Dictionary Table** | `loinc_catalog` table stores LOINC code/display/unit/reference range for common lab tests |
-| 7.2 | **Automated Abnormal Flagging** | Auto-set `abnormal_flag` (N/L/H/LL/HH/AA) based on reference range, supporting age/gender-stratified reference ranges |
+| 7.2 | **Automated Abnormal Flagging** | Auto-set `abnormal_flag` (N/L/H/LL/HH/AA) based on reference range, supporting age/gender-stratified reference ranges. **Still not wired**: `LabAnalysisService.autoFlag()` has no caller, and its `LL`/`HH` levels would not fit the column — see Round 51.5 |
 | 7.3 | **Lab Trend Query** | `GET /api/v1/patients/{id}/observations?loinc=` returns historical trend for a patient's lab test (ordered by time) |
 | 7.4 | **Panel Support** | CBC = WBC+RBC+HGB+HCT+PLT; BMP = Glucose+Ca+Na+K+CO2+Cl+BUN+Creatinine. Supports panel expansion |
 
@@ -3530,6 +3530,23 @@ The first attempt put that rule on every disabled control in a form grid — `.f
 > "the patient sidebar lists 7 destinations while the router defines 15, leaving vitals, problems, immunizations, care-plans, referrals, prior-auths, consent and disclosures reachable only by typing the URL"
 
 The same browser pass disproved it: the patient Dashboard carries three card groups (OVERVIEW / HEALTH RECORDS / ACCOUNT) linking to **all 15** portal pages, so nothing is unreachable. The sidebar was inspected and the dashboard was not, even though its screenshot was already in hand — the lesson is to trace the actual navigation graph (or open the screenshot) before claiming something cannot be reached. Deliberately unchanged: a 15-item sidebar would duplicate the cards, which *are* the portal's navigation.
+
+### Round 51.5 — documentation audit against the code ✅
+
+Prompted by "are the docs in sync?", every claim touched by Rounds 50–51 was re-grepped against the code rather than trusted. What the audit found:
+
+| # | Drift | Fix |
+|---|-------|-----|
+| 51.5.1 | `API-LAYOUT.md`'s `PUT /charges/{id}/convert` row still described only "Non-DRAFT → 409" | Documents the second 409 (appointment already billed, with the bill id in the message) and that `appointmentId` is copied onto the new bill |
+| 51.5.2 | Neither `API-LAYOUT.md` nor `MIRTH-CONNECT-INTEGRATION.md` mentioned that the lab intake **folds** the flag vocabulary | Both now state the accepted HL7 set, the normalisation, and that the column is `CHAR(1)` (the 500 this used to cause) |
+| 51.5.3 | `backend-architecture-explained.md` presented `LabAnalysisService.autoFlag()` as a working feature | It **has no caller** and returns two-character levels the column cannot store. The doc now says so and the ROADMAP's Round 7.2 row points at it — wiring or deleting it is an open decision, listed below |
+| 51.5.4 | Password docs described the complexity policy as unconditional | Noted that it applies to a **supplied** password, and that an absent/blank one on the optional field means "keep" (M8.5's fix) |
+| 51.5.5 | `API-LAYOUT.md` placed `DoctorPatientScope` correctly but not how it reaches module data | Notes the per-module `DoctorPatientScopeProvider` that keeps `common` free of module imports (M8.5) |
+| 51.5.6 | **My own miss from 51.4**: the patient portal's lab page carries a *second* copy of the flag colour map and legend, so fixing the staff page left `/patient/lab` showing the old `HH/LL Critical … A` legend | Both pages now read `ABNORMAL_FLAG_COLOR` / `ABNORMAL_FLAG_LEGEND` from `utils/labels.ts`, where this project's other colour maps already live — the duplication is what made the first fix incomplete, so it is gone rather than copied a third time |
+
+**Verification:** frontend `npm run check` clean (tsc + eslint, same 4 pre-existing warnings); both lab pages re-checked in the browser and now render the identical legend; `mvn clean verify` unaffected (no backend change in this slice) — the last full run stands at 181 green.
+
+**Open decision left by 51.5.3:** `LabAnalysisService.autoFlag()` is dead code that cannot store what it returns. Either wire it into the lab intake with the same folding, or delete it. Not decided here because it is a feature question (does the demo want derived flags?), not drift.
 
 ## Round completion criteria
 
