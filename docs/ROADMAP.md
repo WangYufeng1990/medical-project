@@ -3505,7 +3505,29 @@ The first real browser pass over the post-M8 tree — headless Chrome driven ove
 | Routing regression after adding `path="*"` | **all 33 pages re-swept**: every one renders, zero horizontal overflow, 0 console errors, 0 API responses ≥ 400 |
 | Frontend checks | tsc clean; eslint 0 errors, the same 4 pre-existing warnings |
 
-**Left open deliberately** (all cosmetic or navigation, none functional): the Lab results legend's last entry is a bare **"A"** with no description (source: `Flag: HH/LL Critical H/L Abnormal N Normal A`); read-only fields in the patient profile have **no `:disabled` styling** (no `input:disabled` rule exists anywhere, so they rely on the browser default and are nearly indistinguishable from editable ones); and the patient sidebar lists 7 destinations while the router defines 15, leaving **vitals, problems, immunizations, care-plans, referrals, prior-auths, consent and disclosures reachable only by typing the URL**.
+### Round 51.4 — the Lab flag vocabulary disagreed with its own column ✅
+
+The bare "A" in the Lab results legend turned out to be the visible tip of a four-layer disagreement, and one layer was a **500 on a live ingest path**:
+
+| Layer | What it said |
+|-------|--------------|
+| Storage | `abnormal_flag CHAR(1)` (`schema.sql`) — room for exactly one character |
+| Intake | `LabResultService` copied the external flag through untouched |
+| FHIR mapper | tested `H` **or `HH`**, `L` or `LL` — assuming two-character values exist |
+| Frontend | colours for `N/H/L/HH/LL/A`, but the legend labelled only four of them and left `A` bare |
+| Seed data | only ever wrote `H` and `N`, which is why nothing had failed yet |
+
+Measured through `POST /api/v1/integration/lab-results` (isolated instance, throwaway DB): `H`, `N`, `A` → **200 ACK**; `HH` and `LL` → **500**, `Value too long for column "ABNORMAL_FLAG CHARACTER(1)"` (H2 `SQLState 22001`). One critical-value message from an interface engine took the whole ingest down.
+
+Fixed by **folding the vocabulary down to what the column can hold**, at the intake: `HH/HU → H`, `LL/LU → L` (case-insensitive), `N` and `A` kept, anything unrecognised → null rather than a guess. The frontend legend and colour map now describe only storable values (`A Abnormal`, `H High / L Low`, `N Normal`) and the FHIR mapper's `HH`/`LL` branches — unreachable once nothing two-character is stored — are gone. Widening the column to `VARCHAR(2)` was rejected: it would need a schema change and therefore a local database rebuild, for a distinction that normalising at the boundary preserves better.
+
+Also fixed here: read-only fields in the patient profile now have a `:disabled` style in `views/shared.module.css` (grey background, muted text, `not-allowed` cursor) — six of the eighteen fields are staff-maintained and looked exactly like the editable ones.
+
+**Nothing from this pass is left open.** Of the three items originally listed here, two are fixed in 51.4 above (the legend, the read-only styling) and the third was **wrong**:
+
+> "the patient sidebar lists 7 destinations while the router defines 15, leaving vitals, problems, immunizations, care-plans, referrals, prior-auths, consent and disclosures reachable only by typing the URL"
+
+The same browser pass disproved it: the patient Dashboard carries three card groups (OVERVIEW / HEALTH RECORDS / ACCOUNT) linking to **all 15** portal pages, so nothing is unreachable. The sidebar was inspected and the dashboard was not, even though its screenshot was already in hand — the lesson is to trace the actual navigation graph (or open the screenshot) before claiming something cannot be reached. Deliberately unchanged: a 15-item sidebar would duplicate the cards, which *are* the portal's navigation.
 
 ## Round completion criteria
 

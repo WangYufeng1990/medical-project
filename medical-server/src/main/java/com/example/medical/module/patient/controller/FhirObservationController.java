@@ -100,11 +100,11 @@ public class FhirObservationController {
             }
         }
 
-        if ("H".equals(o.getAbnormalFlag()) || "HH".equals(o.getAbnormalFlag())) {
+        if ("H".equals(o.getAbnormalFlag())) {
             fhirObs.addInterpretation().addCoding()
                     .setSystem("http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation")
                     .setCode("H").setDisplay("High");
-        } else if ("L".equals(o.getAbnormalFlag()) || "LL".equals(o.getAbnormalFlag())) {
+        } else if ("L".equals(o.getAbnormalFlag())) {
             fhirObs.addInterpretation().addCoding()
                     .setSystem("http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation")
                     .setCode("L").setDisplay("Low");

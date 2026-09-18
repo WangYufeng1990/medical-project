@@ -57,5 +57,29 @@ class MirthIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * HL7 sends two-character critical flags (HH/LL) while the column is
+     * {@code CHAR(1)}: before normalisation the whole message failed with a 500
+     * "Value too long for column ABNORMAL_FLAG". The intake now folds them down,
+     * so a real lab feed cannot take the ingest endpoint out.
+     */
+    @Test
+    void integrationLabResults_shouldAcceptTwoCharacterCriticalFlags() throws Exception {
+        for (String flag : List.of("HH", "LL", "hu", "LU")) {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "sourceMessageId", "test-critical-" + flag + "-" + System.currentTimeMillis(),
+                    "patientMrn", "MRN-10001",
+                    "results", List.of(Map.of(
+                            "loincCode", "2345-7", "display", "Glucose",
+                            "value", "220", "unit", "mg/dL",
+                            "referenceRange", "70-99", "abnormalFlag", flag))));
+            mockMvc.perform(post("/api/v1/integration/lab-results")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("Authorization", "Bearer " + adminToken)
+                            .header("X-Integration-Key", "dev-integration-key"))
+                    .andExpect(status().isOk());
+        }
+    }
+
     // ──────────────────────────────────────────────────────
 }

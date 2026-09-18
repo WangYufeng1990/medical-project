@@ -6,8 +6,10 @@ import { getObservations, getObservationTrend, getLoincCatalog } from '../../api
 import { ObservationVO, LoincEntry } from '../../types/entities'
 import styles from '../shared.module.css'
 
+// Stored values are single characters (abnormal_flag CHAR(1)): the intake
+// normalises HL7's two-character HH/LL down before storage.
 const FLAG_COLOR: Record<string, string> = {
-  N: '#67C23A', H: '#E6A23C', L: '#E6A23C', HH: '#F56C6C', LL: '#F56C6C', A: '#F56C6C',
+  N: '#67C23A', H: '#E6A23C', L: '#E6A23C', A: '#F56C6C',
 }
 
 const LAB_PAGE_SIZE = 20
@@ -97,7 +99,7 @@ export default function LabResults() {
           </>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: '#909399', alignItems: 'center' }}>
-          Flag: <span style={{ color: '#F56C6C' }}>HH/LL Critical</span> <span style={{ color: '#E6A23C' }}>H/L Abnormal</span> <span style={{ color: '#909399' }}>N Normal</span> <span style={{ color: '#409EFF' }}>A</span>
+          Flag: <span style={{ color: '#F56C6C' }}>A Abnormal</span> <span style={{ color: '#E6A23C' }}>H High / L Low</span> <span style={{ color: '#67C23A' }}>N Normal</span>
         </div>
       </div>
 
