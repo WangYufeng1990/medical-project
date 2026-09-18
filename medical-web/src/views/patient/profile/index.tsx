@@ -84,6 +84,7 @@ export default function PatientProfile() {
             <div key={f.key} className={styles.formGroup}>
               <label>{f.label}</label>
               <input value={form[f.key] ?? ''} disabled={f.readonly}
+                className={f.readonly ? styles.readonlyField : undefined}
                 onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }) as Partial<PatientProfileVO>)} />
               {f.note && <span style={{ fontSize: 11, color: '#e6a23c' }}>{f.note}</span>}
             </div>

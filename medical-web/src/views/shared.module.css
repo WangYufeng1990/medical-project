@@ -17,6 +17,9 @@
 .formGroup input, .formGroup select { padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; }
 /* Read-only fields: the patient profile's six staff-maintained values (name, MRN,
    DOB, sex at birth, insurance payer, allergies) are disabled inputs and used to
-   look identical to the editable ones. */
-.formGroup input:disabled, .formGroup select:disabled, .formGroup textarea:disabled { background: #f5f7fa; color: #909399; cursor: not-allowed; }
+   look identical to the editable ones. Scoped to that page's own class rather than
+   to every disabled input in a form grid — the sheet is shared with the staff
+   views, whose read-only forms (patient view, appointment view, prescription view)
+   must keep their existing look. */
+.readonlyField:disabled { background: #f5f7fa; color: #909399; cursor: not-allowed; }
 .formActions { grid-column: span 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
