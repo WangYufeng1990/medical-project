@@ -29,7 +29,7 @@ Three compliance goals run through the entire architecture:
 | **MySQL** | 8.0+ | Primary database |
 | **Redis + Redisson** | 7.x / 3.40 | Cache + rate limiting |
 | **Springdoc OpenAPI** | 2.7.0 | API documentation (Swagger UI at /doc.html) |
-| **Lombok / Hutool** | latest | Boilerplate reduction + utilities |
+| **Lombok** | latest | Boilerplate reduction (Hutool was removed in M9 — three `StrUtil.isBlank` calls did not justify a dependency) |
 
 **Explicitly excluded technologies:** MyBatis/MyBatis-Plus, Spring Cloud microservices, gRPC/GraphQL, MongoDB/Elasticsearch, message queues, Shiro, self-issued JWT.
 
@@ -56,9 +56,6 @@ medical-server/src/main/java/com/example/medical/
 │   ├── JwtUtils        (Okta token parsing)
 │   ├── JwtClaimMapper  (Okta claims → Spring Security)
 │   └── LoginUser       (Current user principal)
-│
-├── util/                                 ← Utilities
-│   └── CsvUtil
 │
 └── module/                               ← Business modules
     ├── system/       Users/Roles/Menus/Login (Okta OAuth2)
@@ -501,7 +498,7 @@ the whole chain via `GET /api/v1/audit-logs/verify` → `{intact, brokenRowId}`.
 
 ### 7.5 Audit Coverage
 
-`@Auditable` annotation covers: PatientService (CRUD), AppointmentService (CRUD), PrescriptionService (CRUD), BillService (lifecycle), SysUserService (CRUD), ExportController (CSV exports), PatientPortalController (self-service export, profile update).
+`@Auditable` annotation covers: PatientService (CRUD), AppointmentService (CRUD), PrescriptionService (CRUD), BillService (lifecycle), SysUserService (CRUD), ExportController (CSV exports) and the patient portal controllers (self-service export, profile update — six of them since M8.4).
 
 ---
 

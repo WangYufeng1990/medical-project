@@ -12,7 +12,7 @@
 | Auth | Spring Boot OAuth2 Resource Server — issuer-routed: Okta JWKS (staff) + local HS256 (patient/emergency/refresh) |
 | FHIR | HAPI FHIR R4 7.x |
 | API Doc | Springdoc OpenAPI 2.7.0 |
-| Util | Lombok, Hutool 5.8.34 |
+| Util | Lombok |
 
 ## Directory Structure
 
@@ -38,7 +38,7 @@ src/main/java/com/example/medical/
 │   ├── export/          CSV export (patients, bills)
 │   ├── integration/     ADT + lab results JSON API
 │   └── quality/         eCQM clinical quality measures
-├── security/            JwtClaimMapper, SecurityConfig
+├── security/            JwtClaimMapper, LoginUser, DevJwtEncoder
 ```
 
 ## Response Envelope

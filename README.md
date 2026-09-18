@@ -207,8 +207,10 @@ medical-server/src/main/java/com/example/medical/
 │   ├── base/            BaseEntity, PageQuery
 │   ├── config/          SecurityConfig, AesCryptoUtil, FhirConfig,
 │   │                    CacheConfig, RateLimiterConfig, DataInitializer
-│   ├── job/             DataRetentionJob, AppointmentScheduler,
-│   │                     QualityScheduler
+│   ├── job/             DataRetentionJob (audit archival; the module
+│   │                     schedulers live in their own modules)
+│   ├── security/        DoctorPatientScope + the provider interfaces that let
+│   │                     it read module data without importing a module
 │   ├── validation/      @ValidPassword, PasswordPolicyValidator
 │   ├── exception/       GlobalExceptionHandler, BusinessException
 │   ├── result/          Result<T>, PageResult<T>
@@ -217,15 +219,14 @@ medical-server/src/main/java/com/example/medical/
 ├── module/
 │   ├── system/          users, roles, menus, auth, emergency access
 │   ├── patient/         patients, patient portal, FHIR, consent, FHIR Observation
-│   ├── appointment/     scheduling
+│   ├── appointment/     scheduling, no-show scheduler
 │   ├── prescription/    prescriptions + items, CDS, ePrescribing, EPCS, pharmacy
 │   ├── billing/         bills + payments lifecycle
 │   ├── chat/            patient-doctor messaging
 │   ├── dashboard/       aggregate stats
 │   ├── export/          CSV export
 │   ├── integration/     Mirth Connect ADT + lab results JSON API
-│   └── quality/         CMS eCQM quality measures
-└── util/                CsvUtil
+│   └── quality/         CMS eCQM quality measures (daily eCQM scheduler)
 ```
 
 ## Configuration
@@ -272,7 +273,7 @@ app:
 ## Checks before committing
 
 ```bash
-# Backend — 166 tests plus the build-environment guardrails (enforcer).
+# Backend — 181 tests plus the build-environment guardrails (enforcer).
 # Use `clean`: Surefire never deletes old reports, so `target/surefire-reports`
 # keeps counting test classes that no longer exist.
 cd medical-server && mvn clean verify
