@@ -213,5 +213,52 @@ class BillingIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
+    // ── charge → bill conversion ────────────────────────────
+
+    private long createCharge(long patientId, long appointmentId, double amount) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/charges")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "patientId", patientId,
+                                "appointmentId", appointmentId,
+                                "chargeAmount", amount,
+                                "cptCodes", "99213")))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+    }
+
+    @Test
+    @Order(70)
+    void convertCharge_shouldRefuseWhenTheVisitIsAlreadyBilled() throws Exception {
+        // Appointment 201 already carries seeded bill 500, so converting a charge
+        // for it must not produce a second bill for the same visit.
+        long chargeId = createCharge(100L, 201L, 20.85);
+        MvcResult result = mockMvc.perform(put("/api/v1/charges/" + chargeId + "/convert")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isConflict())
+                .andReturn();
+        String message = objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText();
+        assertTrue(message.contains("already billed"), message);
+        assertTrue(message.contains("500"), message);
+    }
+
+    @Test
+    @Order(71)
+    void convertCharge_shouldCarryTheAppointmentOntoTheBill() throws Exception {
+        // Appointment 203 has no bill yet.
+        long chargeId = createCharge(100L, 203L, 45.00);
+        MvcResult result = mockMvc.perform(put("/api/v1/charges/" + chargeId + "/convert")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode bill = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+        assertEquals(203L, bill.get("appointmentId").asLong());
+        assertEquals("DRAFT", bill.get("claimStatus").asText());
+        assertEquals(45.00, bill.get("totalCharge").asDouble());
+    }
+
     // ──────────────────────────────────────────────────────
 }

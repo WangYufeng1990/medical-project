@@ -805,14 +805,17 @@ public class DataInitializer implements CommandLineRunner {
         if (count != null && count > 0) return;
 
         String sql = "INSERT INTO charge (patient_id, appointment_id, doctor_id, cpt_codes, icd10_codes, " +
-                "units, charge_amount, visit_type, status, notes, create_time) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                "units, charge_amount, visit_type, status, bill_id, notes, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
         LocalDateTime now = LocalDateTime.now();
+        // Both visits already carry a bill (500 for appointment 201, 502 for 204),
+        // so their charges are seeded BILLED: a DRAFT charge tells the Billing page
+        // it is "ready to convert", and converting it now answers 409.
         jdbcTemplate.update(sql, 100L, 201L, 2L, "99213", "I10;E11.9",
-                1, 20.85, "FOLLOW_UP", "DRAFT",
+                1, 20.85, "FOLLOW_UP", "BILLED", 500L,
                 AesCryptoUtil.encrypt("Hypertension + diabetes follow-up; captured from appointment #201"), now);
         jdbcTemplate.update(sql, 101L, 204L, 2L, "99214", "J45.30",
-                1, 100.00, "FOLLOW_UP", "DRAFT",
+                1, 100.00, "FOLLOW_UP", "BILLED", 502L,
                 AesCryptoUtil.encrypt("Asthma follow-up with pulmonary function assessment"), now);
     }
 

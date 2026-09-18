@@ -14,6 +14,7 @@ import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.repository.ChargeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -64,8 +65,21 @@ public class ChargeService {
         if (!"DRAFT".equals(c.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Charge is not in DRAFT status");
         }
+        // A visit can only be billed once. Converting a charge whose appointment
+        // already carries a bill used to create a second bill for the same visit
+        // — and dropped the appointment link on the way.
+        if (c.getAppointmentId() != null) {
+            Bill existing = billRepository.findAll(
+                    (root, query, cb) -> cb.equal(root.get("appointmentId"), c.getAppointmentId()),
+                    PageRequest.of(0, 1)).getContent().stream().findFirst().orElse(null);
+            if (existing != null) {
+                throw new BusinessException(ResultCode.CONFLICT,
+                        "Appointment " + c.getAppointmentId() + " is already billed (bill " + existing.getId() + ")");
+            }
+        }
         Bill bill = new Bill();
         bill.setPatientId(c.getPatientId());
+        bill.setAppointmentId(c.getAppointmentId());
         bill.setCptCodes(c.getCptCodes());
         bill.setIcd10Codes(c.getIcd10Codes());
         bill.setTotalCharge(c.getChargeAmount());

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { getUserRoles } from './utils/auth'
 import { tokenStore } from './utils/auth'
 import Login from './views/login'
+import NotFound from './views/NotFound'
 import StaffLayout from './layout/StaffLayout'
 import Dashboard from './views/dashboard'
 import Patients from './views/patients'
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="system/keys" element={<AdminGuard><AdminKeys /></AdminGuard>} />
         <Route path="referrals" element={<Referrals />} />
         <Route path="prior-auths" element={<PriorAuths />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient/forgot-password" element={<PatientForgotPassword />} />
@@ -87,6 +89,7 @@ export default function App() {
         <Route path="referrals" element={<PatientReferrals />} />
         <Route path="care-plans" element={<PatientCarePlans />} />
         <Route path="prior-auths" element={<PatientPriorAuths />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   )

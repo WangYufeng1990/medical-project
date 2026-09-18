@@ -3485,6 +3485,28 @@ Before the change the same five reads produced **0** rows — and 0 rows were vi
 - Only `export-per-hour` is configurable today; the other three rates are literals in the factory. Making them `@Value`s is now a one-line change each if it is ever wanted.
 - Limits stay per-IP (`getRemoteAddr()`), so behind a proxy they key on the proxy address — pre-existing, out of scope here.
 
+## Round 51 — UI-pass follow-ups (2026-09-17)
+
+The first real browser pass over the post-M8 tree — headless Chrome driven over CDP, 33 pages, both logins, a bill created through the form, the export downloaded — came back clean: **0 console errors, 0 uncaught exceptions, 0 API responses ≥ 400, no horizontal overflow anywhere**, and the M8-specific changes were visible exactly as intended (a DRAFT bill with no *Pay Now* next to a PENDING one that has it; the export downloading a 6-section document). Four issues did surface; three are fixed here, and the two cosmetic ones plus one navigation gap are left open on purpose.
+
+| # | Finding | Fix |
+|---|---------|-----|
+| 51.1 | **`PUT /charges/{id}/convert` billed the same visit twice.** It created a bill without checking whether the appointment already had one, and never copied `appointmentId` onto the new bill. Reachable in two clicks: the Billing page's "Draft Charges — Ready to Convert (2)" box listed exactly the two seeded charges whose appointments already carried paid bills 500/502 | convert answers **409 `Appointment 201 is already billed (bill 500)`** when the appointment carries any bill, and copies `appointmentId` onto the new bill. The seeded charges for appointments 201/204 are now `BILLED` with `bill_id` 500/502, so a fresh database no longer advertises a conversion that would duplicate |
+| 51.2 | **An unknown URL rendered a completely blank page** — no shell, no sidebar, no message, nothing to click. `App.tsx` had no catch-all route | New `views/NotFound.tsx` plus a `path="*"` child inside **both** layouts, so the shell survives and the page names the path and offers a link home |
+| 51.3 | **A dev server on any port other than 5173 could not log in.** The backend's origin allowlist is a single value, so every login answered `403 Invalid CORS request` and the UI showed only a generic failure — easy to misread as a backend fault (measured directly: `Origin: http://localhost:5173` → 200, `Origin: http://localhost:5174` → 403, no `Origin` header → 200) | README documents the constraint and the `CORS_ORIGINS` override |
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **180 tests, 0 failures** (178 → 180: two convert cases in `BillingIntegrationTest`), enforcer clean |
+| 51.1, live on a fresh database | seed shows charges `BILLED` (bill_id 500/502); a DRAFT charge for the billed appointment 201 → **409 `Appointment 201 is already billed (bill 500)`**; a charge for the unbilled appointment 203 → **200**, bill carries `appointmentId=203`, status DRAFT; converting that charge again → 409 `Charge is not in DRAFT status` |
+| 51.2, in the browser | `/nope-does-not-exist`, `/system/nope` and (logged in) `/patient/nope` all render the shell plus "Page not found … Go back to …"; logged-out `/patient/nope` redirects to the patient login |
+| Routing regression after adding `path="*"` | **all 33 pages re-swept**: every one renders, zero horizontal overflow, 0 console errors, 0 API responses ≥ 400 |
+| Frontend checks | tsc clean; eslint 0 errors, the same 4 pre-existing warnings |
+
+**Left open deliberately** (all cosmetic or navigation, none functional): the Lab results legend's last entry is a bare **"A"** with no description (source: `Flag: HH/LL Critical H/L Abnormal N Normal A`); read-only fields in the patient profile have **no `:disabled` styling** (no `input:disabled` rule exists anywhere, so they rely on the browser default and are nearly indistinguishable from editable ones); and the patient sidebar lists 7 destinations while the router defines 15, leaving **vitals, problems, immunizations, care-plans, referrals, prior-auths, consent and disclosures reachable only by typing the URL**.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

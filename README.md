@@ -18,6 +18,14 @@ cd medical-web && npm run dev
 # API docs: http://localhost:8080/doc.html
 ```
 
+**Run the frontend on port 5173.** The backend only accepts that origin
+(`app.cors.allowed-origins`, default `http://localhost:5173`); a dev server on any
+other port gets `403 Invalid CORS request` on **login**, which the UI surfaces as a
+generic failure and is easy to mistake for a backend fault. Vite picks the next free
+port silently when 5173 is taken, so check the URL it prints. To use a different
+port, pass `CORS_ORIGINS=http://localhost:<port>` to the backend (comma-separated
+list supported) and restart it.
+
 Prerequisites: JDK 17+ and Maven (3.8+) for the backend, **Node 20.9+** for the
 frontend (`medical-web/.nvmrc` pins it — `nvm use` in that directory). Node 16
 and below fail with `structuredClone is not defined` from inside ESLint rather
