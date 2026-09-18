@@ -5,12 +5,7 @@ import { getPatientPage } from '../../api/patient'
 import { getObservations, getObservationTrend, getLoincCatalog } from '../../api/observation'
 import { ObservationVO, LoincEntry } from '../../types/entities'
 import styles from '../shared.module.css'
-
-// Stored values are single characters (abnormal_flag CHAR(1)): the intake
-// normalises HL7's two-character HH/LL down before storage.
-const FLAG_COLOR: Record<string, string> = {
-  N: '#67C23A', H: '#E6A23C', L: '#E6A23C', A: '#F56C6C',
-}
+import { ABNORMAL_FLAG_COLOR, ABNORMAL_FLAG_LEGEND } from '../../utils/labels'
 
 const LAB_PAGE_SIZE = 20
 
@@ -99,7 +94,9 @@ export default function LabResults() {
           </>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: '#909399', alignItems: 'center' }}>
-          Flag: <span style={{ color: '#F56C6C' }}>A Abnormal</span> <span style={{ color: '#E6A23C' }}>H High / L Low</span> <span style={{ color: '#67C23A' }}>N Normal</span>
+          Flag: {ABNORMAL_FLAG_LEGEND.map((f, i) => (
+          <span key={f.text} style={{ color: f.color, marginLeft: i ? 10 : 0 }}>{f.text}</span>
+        ))}
         </div>
       </div>
 
@@ -121,7 +118,7 @@ export default function LabResults() {
                   const val = parseFloat(obs[0]?.obsValue ?? '')
                   return (
                     <div key={date} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : FLAG_COLOR[obs[0]?.abnormalFlag || ''] || '#409EFF' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: isNaN(val) ? '#909399' : ABNORMAL_FLAG_COLOR[obs[0]?.abnormalFlag || ''] || '#409EFF' }}>
                         {obs[0]?.obsValue}
                       </div>
                       <div style={{ fontSize: 10, color: '#909399' }}>{obs[0]?.unit ?? ''}</div>
@@ -156,7 +153,7 @@ export default function LabResults() {
                     <td>{o.referenceRange || '-'}</td>
                     <td>
                       {o.abnormalFlag && o.abnormalFlag !== 'N' ? (
-                        <span style={{ color: FLAG_COLOR[o.abnormalFlag] || '#909399', fontWeight: 600 }}>
+                        <span style={{ color: ABNORMAL_FLAG_COLOR[o.abnormalFlag] || '#909399', fontWeight: 600 }}>
                           {o.abnormalFlag}
                         </span>
                       ) : (

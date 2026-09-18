@@ -63,3 +63,16 @@ export const CONSENT_STATUS_COLOR: Record<string, string> = {
   active: '#67C23A',
   revoked: '#909399',
 }
+
+// Stored values are one character (abnormal_flag CHAR(1)): the lab intake folds
+// HL7's two-character critical flags (HH/LL) down before storage, so nothing here
+// needs to describe them. Kept here rather than copied into both lab views.
+export const ABNORMAL_FLAG_COLOR: Record<string, string> = {
+  N: '#67C23A', H: '#E6A23C', L: '#E6A23C', A: '#F56C6C',
+}
+
+export const ABNORMAL_FLAG_LEGEND: { text: string; color: string }[] = [
+  { text: 'A Abnormal', color: '#F56C6C' },
+  { text: 'H High / L Low', color: '#E6A23C' },
+  { text: 'N Normal', color: '#67C23A' },
+]
