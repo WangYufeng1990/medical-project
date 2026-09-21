@@ -9,6 +9,7 @@ import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.dto.ChargeForm;
 import com.example.medical.module.billing.dto.ChargeVO;
 import com.example.medical.module.billing.entity.Bill;
+import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.billing.entity.Charge;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.repository.ChargeRepository;
@@ -85,7 +86,7 @@ public class ChargeService {
         bill.setTotalCharge(c.getChargeAmount());
         bill.setCopayAmount(BigDecimal.ZERO);
         bill.setBillType("PROFESSIONAL");
-        bill.setClaimStatus("DRAFT");
+        bill.setClaimStatus(BillClaimStatus.DRAFT.value());
         bill = billRepository.save(bill);
 
         c.setStatus("BILLED");

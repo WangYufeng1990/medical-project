@@ -4,6 +4,7 @@ import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.billing.dto.BillFormDTO;
 import com.example.medical.module.billing.dto.BillVO;
+import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.billing.service.BillService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -31,7 +32,11 @@ public class BillController {
                                            @RequestParam(defaultValue = "10") long size,
                                            @RequestParam(required = false) String claimStatus,
                                            @RequestParam(required = false) Long patientId) {
-        Page<BillVO> result = billService.page(page, size, claimStatus, patientId);
+        // A filter value that is not a status used to be passed straight through and
+        // answered 200 with an empty list; the enum makes it a 400.
+        String statusFilter = claimStatus == null || claimStatus.isBlank()
+                ? null : BillClaimStatus.parse(claimStatus).value();
+        Page<BillVO> result = billService.page(page, size, statusFilter, patientId);
         return Result.ok(PageResult.of(result.getTotalElements(), result.getSize(),
                 result.getNumber() + 1, result.getContent()));
     }

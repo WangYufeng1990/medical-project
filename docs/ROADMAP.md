@@ -3668,6 +3668,34 @@ The restart itself surfaced a second, unrelated annoyance worth writing down: st
 
 **Still standing, and now visibly so:** the rest of the formulary read surface is also uncalled from the UI — `GET /api/v1/formulary/{rxnormCode}` (`FormularyEntryVO`), the client-side `FormularyEntry` interface in `types/entities.ts`, and the 9 seeded `formulary_entry` rows. Unlike `/check`, that endpoint is a plain read of seeded reference data, so it is reported rather than removed: deleting the whole feature (endpoint, entity, seed, `cds` fallback) is a product decision, not cleanup.
 
+### Round 51.11 — claim statuses are named (F4, first of four) ✅
+
+The status strings in the billing lifecycle were the ones that had already caused a real defect: the UI offered "Pay Now" for a `DRAFT` bill while the service accepted only `PENDING`, because both sides wrote the same five strings independently. `BillClaimStatus` (DRAFT / SUBMITTED / PENDING / PAID / DENIED, with `value()`, `matches()`, `anyOf()`, `isTerminal()`, `isPayable()`, `of()` and a `parse()` that rejects unknown values) is now the only place they are written down — the same shape `AppointmentStatus` has had since M5.
+
+| Site | Change |
+|------|--------|
+| `BillService` | 8 literals → enum calls: `submitClaim` (DRAFT only), `adjudicate` (SUBMITTED/PENDING only, lands PENDING or PAID), `applyPayment` (`isPayable`), `denyClaim` (`isTerminal`) |
+| `ChargeService`, `BillFormDTO` | newly created bills take `BillClaimStatus.DRAFT.value()` |
+| `DashboardService` | the three raw-SQL counters (`claim_status = 'PAID'` / `'PENDING'`) are built from the enum, so a rename cannot leave the dashboard quietly counting nothing |
+| `BillController` | `?claimStatus=` is parsed through the enum: an unknown value is now **400 `Unknown claim status: PENDNG`** instead of 200 with an empty list |
+
+**Nothing changes on the wire or in the database** — the column stays `VARCHAR`, the payload keeps the same strings, the frontend is untouched — which is the point: this is de-risking, not behaviour.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **187 tests, 0 failures** (183 → 187: 3 new `BillClaimStatusTest` cases + the 400 integration case), enforcer clean |
+| Lifecycle, live on a throwaway database | create `DRAFT` (resp 80.00) → `submit` `SUBMITTED` → `adjudicate` `PENDING` (resp 50.00) → pay 10 stays `PENDING` → pay 40 **`PAID`** → paying again 409 `Bill must be in PENDING state to accept payment` → denying 409 `Cannot deny a bill that is already paid or denied`; a second bill went `SUBMITTED` → `DENIED` |
+| Charge conversion | convert on an unbilled appointment produced a bill in `DRAFT`; converting an already-billed appointment still answers 409 (Round 51.1's guard) |
+| Dashboard counters after the SQL change | `pendingBills=1`, `monthlyRevenue=0` — identical to the pre-change reading |
+| Dev instance, after restart | `?claimStatus=PAID` → 2 rows; `?claimStatus=PENDNG` → **400**; dashboard unchanged |
+| Unit tests | `onlyPendingIsPayable`, `paidAndDeniedAreTerminal`, `unknownStatusIsRejected` (including `of("paid")` → null: the wire values are upper case) |
+
+**A verification mistake worth recording:** the first lifecycle run reported the bill stuck at `PENDING` after a full payment, and I nearly filed it as a regression. It was my own payload — the adjudicate request takes `adjustment`, not `insuranceAdjustment`, so both numbers were silently treated as zero, the patient responsibility stayed at 80.00 and 50.00 paid was simply not enough. The rule here: when a live check disagrees with the code, check the request shape before believing the finding.
+
+**Remaining in F4** (next commits): `prescription.rx_status` (lower-case vocabulary, and the update path currently stores whatever the client sends), `charge.status` (DRAFT/BILLED), then `sys_user.status` (0/1 integers wired into force-logout and the login rejection) — plus the purely presentational statuses (consent, care plan, problem, referral, prior auth, refill, patient) that sit outside F4.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

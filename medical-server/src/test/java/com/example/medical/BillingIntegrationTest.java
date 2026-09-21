@@ -55,6 +55,22 @@ class BillingIntegrationTest extends IntegrationTestSupport {
         assertEquals(2, node.get("data").get("total").asInt());
     }
 
+    /**
+     * The filter used to forward the raw string to the query, so a typo answered
+     * 200 with an empty list — indistinguishable from "no such bills".
+     */
+    @Test
+    @Order(56)
+    void billPage_unknownClaimStatus_shouldReturn400() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/bills")
+                        .param("claimStatus", "PENDNG")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        String message = objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText();
+        assertTrue(message.contains("Unknown claim status"), message);
+    }
+
     @Test
     @Order(57)
     void getBillById_shouldReturnBill() throws Exception {

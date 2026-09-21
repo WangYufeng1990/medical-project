@@ -1,6 +1,7 @@
 package com.example.medical.module.billing.dto;
 
 import com.example.medical.module.billing.entity.Bill;
+import com.example.medical.module.billing.entity.BillClaimStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -39,7 +40,7 @@ public class BillFormDTO {
         b.setAppointmentId(appointmentId);
         b.setTotalCharge(totalCharge);
         b.setBillType(billType != null ? billType : "PROFESSIONAL");
-        b.setClaimStatus("DRAFT");
+        b.setClaimStatus(BillClaimStatus.DRAFT.value());
         b.setCptCodes(cptCodes);
         b.setIcd10Codes(icd10Codes);
         b.setPlaceOfServiceCode(placeOfServiceCode);

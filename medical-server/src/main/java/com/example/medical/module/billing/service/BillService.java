@@ -7,6 +7,7 @@ import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.billing.dto.BillFormDTO;
 import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.entity.Bill;
+import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
@@ -78,10 +79,10 @@ public class BillService {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
         doctorPatientScope.requireAccess(b.getPatientId());
-        if (!"DRAFT".equals(b.getClaimStatus())) {
+        if (!BillClaimStatus.DRAFT.matches(b.getClaimStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Only draft bills can be submitted");
         }
-        b.setClaimStatus("SUBMITTED");
+        b.setClaimStatus(BillClaimStatus.SUBMITTED.value());
         b.setClaimFilingDate(LocalDate.now());
         billRepository.save(b);
     }
@@ -92,7 +93,7 @@ public class BillService {
                            String claimNumber, LocalDate adjudicationDate) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
-        if (!"SUBMITTED".equals(b.getClaimStatus()) && !"PENDING".equals(b.getClaimStatus())) {
+        if (!BillClaimStatus.anyOf(b.getClaimStatus(), BillClaimStatus.SUBMITTED, BillClaimStatus.PENDING)) {
             throw new BusinessException(ResultCode.CONFLICT, "Bill must be submitted or pending to adjudicate");
         }
 
@@ -107,7 +108,8 @@ public class BillService {
         b.setPatientResponsibility(patientResp);
         b.setInsuranceClaimNumber(claimNumber);
         b.setAdjudicationDate(adjudicationDate != null ? adjudicationDate : LocalDate.now());
-        b.setClaimStatus(patientResp.compareTo(BigDecimal.ZERO) > 0 ? "PENDING" : "PAID");
+        b.setClaimStatus(patientResp.compareTo(BigDecimal.ZERO) > 0
+                ? BillClaimStatus.PENDING.value() : BillClaimStatus.PAID.value());
         billRepository.save(b);
     }
 
@@ -167,7 +169,7 @@ public class BillService {
     }
 
     private void applyPayment(Bill b, BigDecimal paymentAmount, String paymentMethod) {
-        if (!"PENDING".equals(b.getClaimStatus())) {
+        if (!BillClaimStatus.isPayable(b.getClaimStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Bill must be in PENDING state to accept payment");
         }
 
@@ -180,7 +182,7 @@ public class BillService {
         b.setPaymentMethod(paymentMethod);
 
         if (newPaid.compareTo(responsibility) >= 0) {
-            b.setClaimStatus("PAID");
+            b.setClaimStatus(BillClaimStatus.PAID.value());
         }
         billRepository.save(b);
     }
@@ -190,10 +192,10 @@ public class BillService {
     public void denyClaim(Long id, String reason) {
         Bill b = billRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Bill not found"));
-        if ("PAID".equals(b.getClaimStatus()) || "DENIED".equals(b.getClaimStatus())) {
+        if (BillClaimStatus.isTerminal(b.getClaimStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Cannot deny a bill that is already paid or denied");
         }
-        b.setClaimStatus("DENIED");
+        b.setClaimStatus(BillClaimStatus.DENIED.value());
         b.setAdjudicationDate(LocalDate.now());
         billRepository.save(b);
     }

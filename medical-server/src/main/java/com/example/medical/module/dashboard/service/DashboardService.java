@@ -1,6 +1,7 @@
 package com.example.medical.module.dashboard.service;
 
 import com.example.medical.common.security.DoctorPatientScope;
+import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.dashboard.dto.DashboardStats;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -61,7 +62,8 @@ public class DashboardService {
                 Long.class, scopedIds);
 
         BigDecimal monthlyRevenue = query(
-                "SELECT COALESCE(SUM(patient_paid_amount), 0) FROM bill WHERE claim_status = 'PAID' AND pay_time >= ? AND is_deleted = 0" + byPatientId,
+                "SELECT COALESCE(SUM(patient_paid_amount), 0) FROM bill WHERE claim_status = '"
+                        + BillClaimStatus.PAID.value() + "' AND pay_time >= ? AND is_deleted = 0" + byPatientId,
                 BigDecimal.class, concat(LocalDate.now().withDayOfMonth(1).toString(), scopedIds));
 
         long monthlyPrescriptions = query(
@@ -69,7 +71,8 @@ public class DashboardService {
                 Long.class, concat(LocalDate.now().withDayOfMonth(1).toString(), scopedIds));
 
         long pendingBills = query(
-                "SELECT COUNT(*) FROM bill WHERE claim_status = 'PENDING' AND is_deleted = 0" + byPatientId,
+                "SELECT COUNT(*) FROM bill WHERE claim_status = '" + BillClaimStatus.PENDING.value()
+                        + "' AND is_deleted = 0" + byPatientId,
                 Long.class, scopedIds);
 
         List<Map<String, Object>> appointmentStatusDist = jdbcTemplate.queryForList(
@@ -108,7 +111,8 @@ public class DashboardService {
     private List<Map<String, Object>> computeRevenueTrend(Set<Long> scoped) {
         LocalDate start = LocalDate.now().minusMonths(5).withDayOfMonth(1);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT pay_time, patient_paid_amount FROM bill WHERE claim_status = 'PAID' AND pay_time >= ? AND is_deleted = 0"
+                "SELECT pay_time, patient_paid_amount FROM bill WHERE claim_status = '"
+                        + BillClaimStatus.PAID.value() + "' AND pay_time >= ? AND is_deleted = 0"
                         + filterFor("patient_id", scoped) + " ORDER BY pay_time",
                 concat(start.toString(), scoped == null ? new Object[0] : scoped.toArray()));
 

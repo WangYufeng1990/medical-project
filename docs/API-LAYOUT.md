@@ -211,6 +211,8 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 
 ### Billing — `/api/v1/bills`
 
+Claim status vocabulary: `DRAFT` → `SUBMITTED` → `PENDING` → `PAID`, or `DENIED`. Only `PENDING` accepts a payment, and `PAID`/`DENIED` are terminal — both rules live in `BillClaimStatus` (Round 51.11). The `?claimStatus=` filter now **rejects an unknown value with 400** (`Unknown claim status: …`); it previously answered 200 with an empty list, which is indistinguishable from "no such bills".
+
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
 | GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&patientId=` | Paginated list (DOCTOR scoped to own patients) |
