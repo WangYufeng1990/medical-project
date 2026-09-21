@@ -333,7 +333,9 @@ Requires `ADMIN` or `DOCTOR`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/stats` | Aggregate stats (cached 30 min): totals, revenue, trends |
+| GET | `/stats` | Aggregate stats (cached 30 min): `totalPatients`, `todayAppointments`, `scheduledAppointments`, `monthlyRevenue`, `monthlyPrescriptions`, `pendingBills`, `appointmentStatusDistribution`, `revenueTrend` |
+
+**The counters follow the same doctor scoping as the lists** — a `DOCTOR`'s `totalPatients` is the size of `/api/v1/patients` for that same token, `pendingBills` matches `/api/v1/bills?claimStatus=PENDING`, `scheduledAppointments` matches `/api/v1/appointments?status=0`; `ADMIN` sees the whole practice. These are raw `JdbcTemplate` queries, so unlike the JPA-backed lists they do **not** inherit `@SQLRestriction` or scoping automatically — both are applied by hand in `DashboardService`, and `DashboardIntegrationTest` asserts the agreement for both roles (before Round 51.7 a doctor was told "Total Patients 4" while their own list held 2).
 
 ### Export — `/api/v1/export`
 
@@ -508,7 +510,9 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 |-------|-----|-----|----------|
 | `patients` | `#id` | 30 min | on create → all; on update/delete → by id |
 | `users` | `#id` | 30 min | same pattern |
-| `dashboard` | `'stats'` | 30 min | none |
+| `dashboard` | `stats:<scope>` — `ALL` for ADMIN, the sorted patient-id list for a DOCTOR | 30 min | none |
+
+> The dashboard key must carry the scope: it used to be the constant `'stats'`, which is harmless while `spring.cache.type: none` (the h2 profile) but under Redis handed the first caller's numbers to everyone else (Round 51.7).
 
 ### Audit Logging
 AOP-based via `@Auditable(module, action)`. Captures userId, username, module, action, targetId, patientId, IP, timestamp → `audit_log` table. Applied to all CUD service operations, and to **reads that target a single patient**: opening a patient (`patient:VIEW`), their history/allergies (`VIEW_HISTORY`/`VIEW_ALLERGIES`), vitals/problems/immunizations/care-plans/referrals/consent/observations/prescriptions (`VIEW`), the FHIR patient and observation reads (`FHIR_VIEW`) and the FHIR case bundle. The row carries the `patientId`, so the portal's own access history (`GET /api/v1/patient/me/disclosures`) can show who opened the record. Unaudited by design: list/search endpoints with no single patient (patient search, FHIR search) and reference data (LOINC catalog). **21 CFR Part 11 compliant:** SHA-256 `row_hash` for tamper detection, soft-delete (`archived` flag) instead of physical deletion, login success/failure audited with reason codes.

@@ -3562,6 +3562,33 @@ Prompted by "are the docs in sync?", every claim touched by Rounds 50–51 was r
 | Both pages, filter = Glucose | trend banner with 4 points and a `↓` arrow — page 1 pager correctly hidden in trend mode |
 | Browser console / network | 0 console errors, 0 responses ≥ 400 across the whole walk |
 
+### Round 51.7 — the dashboard counted patients the caller cannot open ✅
+
+Reported from the UI: the overview card said **Total Patients 4** while the patient list showed **2**. Reproduced per role:
+
+| Caller | `/dashboard/stats` → `totalPatients` | `/patients` → `total` |
+|--------|--------------------------------------|----------------------|
+| admin | 4 | 4 |
+| doctor1 | **4** | **2** |
+
+Root cause: `DashboardService` is the one aggregate built on raw `JdbcTemplate` rather than JPA, so it inherits neither `@SQLRestriction` nor `DoctorPatientScope` — every counter was practice-wide regardless of who asked, while every list the same user can open is doctor-scoped. The existing test only asserted `200` for a doctor, which is why the numbers were never compared.
+
+A second defect sat behind it: `@Cacheable(value = "dashboard", key = "'stats'")` used a **constant** key, so one caller's stats were served to everybody. It is invisible in the h2 profile (`spring.cache.type: none`) and would have kept the doctor's card at the practice-wide number under Redis even after the scoping fix — the key now carries the scope (`stats:ALL` / `stats:[100, 101]`).
+
+**Fix:** every patient-scoped query in `DashboardService` now appends a scope filter (`patient_id IN (…)`, `id IN (…)` for the patient table itself), with an explicit `AND 1 = 0` for an empty scope — "no patients" must mean zero rows, and `IN ()` is not valid SQL. The cache key is derived from the resolved scope (`scopeKey()`), for the same reason.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| Live, admin | `totalPatients=4` and `/patients total=4`; `pendingBills=1` and `/bills?claimStatus=PENDING total=1`; `scheduledAppointments=0` and `/appointments?status=0 total=0` |
+| Live, doctor1 | `totalPatients=**2**` and `/patients total=2` (was 4 vs 2) |
+| In the UI, doctor1 | Dashboard card reads **2** and the patient list holds exactly 2 rows (100, 101) — the path the report came from |
+| New test | `dashboardStats_shouldAgreeWithTheListsForTheSameCaller` asserts the three comparable counters against the corresponding list endpoint **for both roles**, so this class of bug fails the build from now on |
+| `mvn clean verify` | **182 tests, 0 failures** (181 → 182) |
+
+**Not verified locally:** the Redis-backed cache path. The h2 profile sets `spring.cache.type: none`, so `@Cacheable` is inert in every local run; the scope-aware key is by inspection, and no Redis is available here to exercise it.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

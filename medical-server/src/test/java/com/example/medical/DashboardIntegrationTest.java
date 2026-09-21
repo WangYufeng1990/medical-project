@@ -42,6 +42,41 @@ class DashboardIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * The dashboard runs raw SQL, so doctor scoping is not free. It used to count
+     * every patient while /patients showed only the doctor's own — the counters
+     * must agree with the list the caller can actually open.
+     */
+    @Test
+    void dashboardStats_shouldAgreeWithTheListsForTheSameCaller() throws Exception {
+        assertCountersMatchLists(adminToken);
+        assertCountersMatchLists(doctorToken);
+    }
+
+    private void assertCountersMatchLists(String token) throws Exception {
+        JsonNode stats = objectMapper.readTree(mockMvc.perform(get("/api/v1/dashboard/stats")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("data");
+
+        assertEquals(listTotal("/api/v1/patients", token),
+                stats.get("totalPatients").asInt(), "totalPatients vs /patients");
+        assertEquals(listTotal("/api/v1/bills?claimStatus=PENDING", token),
+                stats.get("pendingBills").asInt(), "pendingBills vs /bills?claimStatus=PENDING");
+        assertEquals(listTotal("/api/v1/appointments?status=0", token),
+                stats.get("scheduledAppointments").asInt(), "scheduledAppointments vs /appointments?status=0");
+    }
+
+    private int listTotal(String path, String token) throws Exception {
+        MvcResult result = mockMvc.perform(get(path)
+                        .param("page", "1").param("size", "200")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("total").asInt();
+    }
+
     @Test
     void dashboardStats_asPatient_shouldBeDenied() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/v1/dashboard/stats")
