@@ -5,6 +5,8 @@ import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
+import com.example.medical.module.prescription.dto.TransmitResultVO;
+import com.example.medical.module.prescription.entity.PrescriptionRxStatus;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
@@ -78,13 +80,13 @@ public class PrescriptionController {
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "prescription", action = "TRANSMIT", phiAccess = true)
-    public Result<Map<String, Object>> transmit(@PathVariable Long id,
-                                                @RequestParam Long pharmacyId) {
+    public Result<TransmitResultVO> transmit(@PathVariable Long id,
+                                             @RequestParam Long pharmacyId) {
         Prescription p = prescriptionRepository.findById(id)
                 .orElseThrow(() -> new com.example.medical.common.exception.BusinessException(
                         com.example.medical.common.enums.ResultCode.NOT_FOUND, "Prescription not found"));
         doctorPatientScope.requireAccess(p.getPatientId());
-        if (!"active".equals(p.getRxStatus())) {
+        if (!PrescriptionRxStatus.isActive(p.getRxStatus())) {
             throw new com.example.medical.common.exception.BusinessException(
                     com.example.medical.common.enums.ResultCode.CONFLICT,
                     "Only active prescriptions can be transmitted");
@@ -99,11 +101,10 @@ public class PrescriptionController {
 
         // Do NOT claim "transmitted" — there is no transmission channel yet.
         // "generated" keeps rx_status honest (draft XML ready for review).
-        p.setRxStatus("generated");
+        p.setRxStatus(PrescriptionRxStatus.GENERATED.value());
         prescriptionRepository.save(p);
 
-        return Result.ok(Map.of("status", "generated", "format", "NCPDP SCRIPT (draft)",
-                "messageId", "RX-" + id, "xml", xml));
+        return Result.ok(TransmitResultVO.generated(id, xml));
     }
 
     @PutMapping("/{id}/cancel")

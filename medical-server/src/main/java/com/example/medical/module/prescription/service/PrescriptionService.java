@@ -9,6 +9,7 @@ import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionItemVO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
+import com.example.medical.module.prescription.entity.PrescriptionRxStatus;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
@@ -108,7 +109,9 @@ public class PrescriptionService {
                 ? dto.getPrescriptionDate() : LocalDate.now());
         p.setPrescriptionType(dto.getPrescriptionType() != null
                 ? dto.getPrescriptionType() : "MEDICATION");
-        p.setRxStatus(dto.getRxStatus() != null ? dto.getRxStatus() : "active");
+        p.setRxStatus(dto.getRxStatus() != null
+                ? PrescriptionRxStatus.parse(dto.getRxStatus()).value()
+                : PrescriptionRxStatus.ACTIVE.value());
         p.setControlledSchedule(dto.getControlledSchedule());
         p.setPharmacyName(dto.getPharmacyName());
         p.setPharmacyPhone(dto.getPharmacyPhone());
@@ -180,10 +183,10 @@ public class PrescriptionService {
         Prescription p = prescriptionRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Prescription not found"));
         doctorPatientScope.requireAccess(p.getPatientId());
-        if (!"active".equals(p.getRxStatus())) {
+        if (!PrescriptionRxStatus.isActive(p.getRxStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Only active prescriptions can be cancelled");
         }
-        p.setRxStatus("cancelled");
+        p.setRxStatus(PrescriptionRxStatus.CANCELLED.value());
         prescriptionRepository.save(p);
     }
 

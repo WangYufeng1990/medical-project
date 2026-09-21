@@ -168,5 +168,38 @@ class PrescriptionIntegrationTest extends IntegrationTestSupport {
         assertEquals("generated", node.get("data").get("status").asText());
     }
 
+    /**
+     * The create path used to store whatever status the client sent, so a typo
+     * produced a row that no guard could ever match. Unknown values are now a 400.
+     */
+    @Test
+    void createPrescription_unknownStatus_shouldReturn400() throws Exception {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("drugName", "Amoxicillin");
+        item.put("dosage", "500mg");
+        item.put("route", "PO");
+        item.put("frequency", "TID");
+        item.put("duration", 7);
+        item.put("daysSupply", 7);
+        item.put("quantity", 21);
+
+        String body = objectMapper.writeValueAsString(Map.of(
+                "patientId", 100,
+                "doctorId", 2,
+                "diagnosis", "Status probe",
+                "prescriptionDate", LocalDate.now().toString(),
+                "prescriptionType", "MEDICATION",
+                "rxStatus", "actve",
+                "items", List.of(item)
+        ));
+        MvcResult result = mockMvc.perform(post("/api/v1/prescriptions")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertTrue(objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("message").asText().contains("Unknown prescription status"));
+    }
+
     // ──────────────────────────────────────────────────────
 }

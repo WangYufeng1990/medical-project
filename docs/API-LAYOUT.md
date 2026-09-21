@@ -191,13 +191,15 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 
 ### Prescriptions — `/api/v1/prescriptions`
 
+Prescription status vocabulary: `active` → `cancelled`, `completed`, or `generated` (the draft `/transmit` produces). All four are lower-case and live in `PrescriptionRxStatus` (Round 51.12). Only `active` is actionable — transmit, cancel and the patient-side refill request all refuse anything else with 409 — and `generated`/`completed`/`cancelled` are not deletable from the UI. `POST /` **rejects an unknown status with 400** (`Unknown prescription status: …`) instead of storing it as-is, which it used to do: a typo, or a value guessed from the UI's own dropdown, produced a row no guard could match. Case and surrounding space are forgiven and only the canonical value is stored (`"  Active "` → `active`).
+
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
 | GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&patientId=` | Paginated list (DOCTOR scoped to own patients) |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Prescription detail with items |
 | GET | `/by-patient/{patientId}` | ADMIN,DOCTOR | path | All prescriptions for a patient (used by emergency break-glass) |
 | POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO (+optional `overrideReason`) | Create + items. CDS (drug-drug, active-medication, allergy incl. cross-reactive) runs BEFORE save; severe/contraindicated warnings block (409) unless `overrideReason` is provided (persisted to cds_override). Prescriber identity (doctorId/NPI/DEA) is server-derived from the authenticated user |
-| DELETE | `/{id}` | ADMIN | path | Soft-delete + items (hidden for transmitted/dispensed/cancelled) |
+| DELETE | `/{id}` | ADMIN | path | Soft-delete + items (button hidden in the UI for `generated`/`completed`/`cancelled`) |
 | PUT | `/{id}/transmit` | ADMIN,DOCTOR | `?pharmacyId=` | Generate draft NCPDP XML for active prescriptions (non-controlled only). Returns `TransmitResultVO` `{status:"generated", format, messageId, xml}` — controlled substances are rejected (409, EPCS fail-closed) and nothing is ever marked "transmitted" (Review III C4) |
 | PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409). Prescriptions are cancel-reissue — no in-place edit endpoint (Round 28/34) |
 

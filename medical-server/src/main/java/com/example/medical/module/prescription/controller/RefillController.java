@@ -6,6 +6,7 @@ import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.result.Result;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.prescription.dto.RefillRequestVO;
+import com.example.medical.module.prescription.entity.PrescriptionRxStatus;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.entity.RefillRequest;
@@ -48,7 +49,7 @@ public class RefillController {
         if (!p.getPatientId().equals(loginUser.getUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Access denied");
         }
-        if (!"active".equals(p.getRxStatus())) {
+        if (!PrescriptionRxStatus.isActive(p.getRxStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Only active prescriptions can be refilled");
         }
         if (refillRequestRepository.existsByPrescriptionIdAndStatus(form.getPrescriptionId(), "PENDING")) {

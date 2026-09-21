@@ -3,6 +3,8 @@ package com.example.medical.module.billing.entity;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 
+import java.util.Locale;
+
 /**
  * Insurance-claim lifecycle, and the single place these five strings are written
  * down. Every one of them used to be a literal scattered across {@code BillService},
@@ -53,7 +55,10 @@ public enum BillClaimStatus {
         return PENDING.matches(value);
     }
 
-    /** The status for {@code value}, or null when it is missing or unrecognised. */
+    /**
+     * The status for {@code value}, or null when it is missing or unrecognised.
+     * Exact: this is what stored values are compared against.
+     */
     public static BillClaimStatus of(String value) {
         if (value == null) return null;
         for (BillClaimStatus status : values()) {
@@ -62,9 +67,13 @@ public enum BillClaimStatus {
         return null;
     }
 
-    /** Parses a client-supplied status, rejecting anything unknown with a 400. */
+    /**
+     * Parses a client-supplied status and stores nothing but the canonical value.
+     * Lenient about case and surrounding space — a caller sending "paid" gets PAID,
+     * not a confusing "unknown status" — and a 400 for anything else.
+     */
     public static BillClaimStatus parse(String value) {
-        BillClaimStatus status = of(value);
+        BillClaimStatus status = value == null ? null : of(value.trim().toUpperCase(Locale.ROOT));
         if (status == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Unknown claim status: " + value);
         }

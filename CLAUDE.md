@@ -22,7 +22,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok | latest |
-| Testing | JUnit 5 + Spring Boot Test | 181 tests (141 integration + 40 unit) |
+| Testing | JUnit 5 + Spring Boot Test | 191 tests (146 integration + 45 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**
@@ -174,6 +174,11 @@ medical-project/
 - **Confirm the probe hit the instance you started** (fresh `Started MedicalApplication` /
   `Local schema version` line plus the port you launched), and remember only one instance can write a
   given H2 file — a second one on the same DB degrades to read-only.
+- **A read-only dev instance means the *directory* is not writable, not that the app is broken.** The `h2`
+  profile's database is `~/.medical-dev/data/medical_dev` — outside the repo, so a sandboxed shell can read
+  it but not write it, and H2 opens it read-only *without failing*: the app starts normally, `DataInitializer`
+  logs `The database is read only` as an ERROR, and every write (including `POST /auth/login`) answers 500.
+  Check with `touch` in that directory; or start with `H2_DB_PATH` pointing at a writable path.
 - Prefer `h2` only for questions that do not depend on profile config: rate limiting, `dev-mode` and
   Redis behave differently per profile, so say which configuration you probed.
 

@@ -8,7 +8,7 @@ import { checkCds, lookupDrug } from '../../api/cds'
 import CdsWarningModal from './CdsWarningModal'
 import { getPendingRefillRequests, approveRefillRequest, denyRefillRequest } from '../../api/refill'
 import { PrescriptionForm, PrescriptionItemForm, PrescriptionVO, PrescriptionCreatePayload, PharmacyVO, CdsWarning } from '../../types/entities'
-import { PAGE_SIZE } from '../../utils/labels'
+import { PAGE_SIZE, NON_DELETABLE_RX_STATUSES } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
@@ -256,7 +256,7 @@ export default function Prescriptions() {
             <td onClick={e => e.stopPropagation()}>
               {r.rxStatus === 'active' && <button className={styles.btnSm} onClick={() => openTransmit(r.id)}>Transmit</button>}
               {r.rxStatus === 'active' && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Cancel prescription?')) cancelMutation.mutate(r.id) }}>Cancel</button>}
-              {!['transmitted', 'dispensed', 'cancelled'].includes(r.rxStatus || '') && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
+              {!NON_DELETABLE_RX_STATUSES.includes(r.rxStatus || '') && <button className={styles.btnSmDanger} onClick={async () => { if (await confirm('Delete?')) deleteMutation.mutate(r.id) }}>Del</button>}
             </td></tr>
         ))}</tbody>
       </table>
@@ -289,9 +289,7 @@ export default function Prescriptions() {
             </div>
             {editId && <div className={styles.formGroup}>
               <label>Status</label>
-              <select disabled value={form.rxStatus} onChange={e => setForm({ ...form, rxStatus: e.target.value })}>
-                <option value="active">Active</option><option value="transmitted">Transmitted</option><option value="dispensed">Dispensed</option><option value="cancelled">Cancelled</option>
-              </select>
+              <div>{form.rxStatus}</div>
             </div>}
           </div>
 

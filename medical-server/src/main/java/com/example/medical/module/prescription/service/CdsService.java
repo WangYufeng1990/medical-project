@@ -5,6 +5,7 @@ import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.prescription.dto.CdsWarning;
 import com.example.medical.module.prescription.entity.DrugAllergyClass;
 import com.example.medical.module.prescription.entity.DrugInteraction;
+import com.example.medical.module.prescription.entity.PrescriptionRxStatus;
 import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.repository.DrugAllergyClassRepository;
@@ -71,7 +72,7 @@ public class CdsService {
         if (patientId == null || newItems == null || newItems.isEmpty()) return warnings;
 
         List<PrescriptionItem> existing = prescriptionRepository
-                .findByPatientIdAndRxStatus(patientId, "active")
+                .findByPatientIdAndRxStatus(patientId, PrescriptionRxStatus.ACTIVE.value())
                 .stream()
                 .flatMap(rx -> prescriptionItemRepository.findByPrescriptionId(rx.getId()).stream())
                 .toList();

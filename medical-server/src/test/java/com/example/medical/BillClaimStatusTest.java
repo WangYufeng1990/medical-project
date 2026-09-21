@@ -31,8 +31,10 @@ class BillClaimStatusTest {
     @Test
     void unknownStatusIsRejected() {
         assertEquals(BillClaimStatus.PAID, BillClaimStatus.of("PAID"));
-        assertNull(BillClaimStatus.of("paid"), "the wire values are upper case");
+        assertNull(BillClaimStatus.of("paid"), "of() is exact — it guards stored values");
         assertNull(BillClaimStatus.of(null));
+        assertEquals(BillClaimStatus.PAID, BillClaimStatus.parse(" paid "),
+                "parse() forgives case and space, and stores only the canonical value");
         BusinessException e = assertThrows(BusinessException.class,
                 () -> BillClaimStatus.parse("PENDNG"));
         assertEquals(400, e.getCode());

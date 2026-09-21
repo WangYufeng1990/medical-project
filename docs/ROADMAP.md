@@ -3626,6 +3626,8 @@ Writing the interface also caught my own mistake immediately: I first marked the
 
 Read-only calls were made against the dev instance, the three mutating ones against a throwaway database. `mvn clean verify` **182 tests green**, `npm run check` clean, and the eCQM page re-checked in the browser (heading `HbA1c Poor Control (>9%)`, target paragraph, four metrics, 0 console errors).
 
+**Correction (Round 51.12):** the `PUT /prescriptions/{id}/transmit` row above is wrong — `TransmitResultVO` was *created* here but the controller kept building its four-key `Map.of(...)`, so only seven of the eight were actually typed and the class was dead code until 51.12 wired it. The live check in this table could not catch it because the map carried exactly the same four keys.
+
 **Still open from this slice:** `tier` on the formulary is a **String** holding "1"/"2" (seed values), which a real formulary would model as an int or an enum; and `api/formulary.ts` + `/formulary/check` have no UI caller at all — deleting both is still on the table rather than typing an endpoint nothing uses.
 
 ### Round 51.9 — the export stops reaching across modules ✅
@@ -3695,6 +3697,43 @@ The status strings in the billing lifecycle were the ones that had already cause
 **A verification mistake worth recording:** the first lifecycle run reported the bill stuck at `PENDING` after a full payment, and I nearly filed it as a regression. It was my own payload — the adjudicate request takes `adjustment`, not `insuranceAdjustment`, so both numbers were silently treated as zero, the patient responsibility stayed at 80.00 and 50.00 paid was simply not enough. The rule here: when a live check disagrees with the code, check the request shape before believing the finding.
 
 **Remaining in F4** (next commits): `prescription.rx_status` (lower-case vocabulary, and the update path currently stores whatever the client sends), `charge.status` (DRAFT/BILLED), then `sys_user.status` (0/1 integers wired into force-logout and the login rejection) — plus the purely presentational statuses (consent, care plan, problem, referral, prior auth, refill, patient) that sit outside F4.
+
+### Round 51.12 — prescription statuses are named (F4, second of four) ✅
+
+The second F4 vocabulary, and the one with the worse failure mode: `prescription.rx_status` was **stored exactly as the client sent it** (`p.setRxStatus(dto.getRxStatus())`), while every guard in the codebase compared it against `"active"`. A client that sent `actve`, or guessed a value from the UI's own dropdown (`transmitted`, `dispensed`), produced a row that was neither active nor terminal — invisible to transmit, cancel and refill at once, and impossible to list as "finished". `PrescriptionRxStatus` (`active` / `generated` / `cancelled` / `completed`) is now the single vocabulary, in the shape `BillClaimStatus` (51.11) and `AppointmentStatus` already have: `value()`, `matches()`, `anyOf()`, `isActive()`, `isTerminal()`, `of()` and `parse()`.
+
+| Site | Change |
+|------|--------|
+| `PrescriptionService.create` | stored whatever arrived → `PrescriptionRxStatus.parse(...)`, and the default is `ACTIVE.value()`. Unknown values are now **400 `Unknown prescription status: actve`** |
+| `PrescriptionService.cancel` | `!"active".equals(...)` → `!isActive(...)`; the new status is `CANCELLED.value()` |
+| `PrescriptionController.transmit` | `"active"` guard → `isActive(...)`; on success the row becomes `GENERATED.value()` instead of the literal `"generated"` |
+| `RefillController.create` | the patient-side refill guard is `isActive(...)` rather than a string compare — the third copy of the same rule |
+| `CdsService` | the active-medication query takes `ACTIVE.value()` |
+| `medical-web` | `NON_DELETABLE_RX_STATUSES` in `utils/labels.ts` replaces the inline `['transmitted','dispensed','cancelled']`; the detail modal's read-only status dropdown (which offered the two invented values) is now plain text |
+
+**The frontend's ghost list was not hypothetical, it was on screen.** The Del button hid for `transmitted`/`dispensed` — values no code path has ever written — and therefore *offered* deletion for `generated` and `completed`, while the detail modal displayed the same invented pair as the current status. Both are gone; `labels.ts` now says where the real values come from.
+
+**A dead class found on the way.** `TransmitResultVO` was created in 51.8 (see the correction below) but never used: `transmit` still built its four-key `Map.of(...)` by hand. The endpoint now returns the VO — the JSON is unchanged, which is why 51.8's live check could not tell the difference.
+
+**One rule for both enums.** 51.11's `BillClaimStatus` matched exactly, while this one trimmed and lower-cased inside `of()` — two answers to the same question. Both now split it the same way: **`of()` is exact** (it guards stored values, where a near-miss is a bug worth seeing) and **`parse()` is lenient** (it accepts what a caller types, then stores only the canonical value). `of("paid")` and `of("Completed")` are null; `parse(" paid ")` is `PAID` and `parse("  Active ")` stores `active`. `BillClaimStatusTest` and `PrescriptionRxStatusTest` both assert the split.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **191 tests, 0 failures** (187 → 191: 3 `PrescriptionRxStatusTest` cases + `createPrescription_unknownStatus_shouldReturn400`), enforcer clean |
+| Create, live on a throwaway database | `rxStatus:"actve"` → **400 `Unknown prescription status: actve`**; `"dispensed"` → 400; absent → 200 `active`; `"  Active "` and `"ACTIVE"` → 200, **stored as `active`**. Row count after five calls: 7 = the 3 seeded + exactly the 4 accepted — the two rejected calls wrote nothing |
+| Transmit | 303 (`active`) → 200 with exactly `{status, format, messageId, xml}`, `status:"generated"`; 300 (`completed`) → **409 `Only active prescriptions can be transmitted`** |
+| Cancel | 304 (`active`) → 200; the same call again → **409 `Only active prescriptions can be cancelled`**; 300 (`completed`) → 409 |
+| Refill (patient token) | prescription 300 → **409 `Only active prescriptions can be refilled`**; 301 → 200, request `PENDING` |
+| Browser, `/prescriptions` | row 300 (`completed`) shows **no action buttons at all**; 301/302 (`active`) show Transmit / Cancel / Del. Screenshot `/tmp/ui-shots/93-rx-list-del-hidden.png` |
+| Browser, "View Prescription" on 300 | Status reads `completed` as text — the dropdown with `Active/Transmitted/Dispensed/Cancelled` is gone. `/tmp/ui-shots/94-rx-detail-status.png`. 0 console errors, 0 failed API calls |
+| 51.11's filter, re-checked after the rule change | `?claimStatus=PAID`, `=paid` and `= paid ` all → 200 with the same 2 rows; `=PENDNG` still → **400** |
+| `npm run check` | clean (0 errors, the 4 pre-existing warnings) |
+
+**Environment finding worth recording:** the first restart of the dev instance came up against a **read-only** database — `The database is read only` during `DataInitializer`, and a 500 on every login, with only one process holding the H2 file. The cause was not the app: this session's file sandbox permits writes inside the workspace, and the `h2` profile's database lives at `~/.medical-dev/data/medical_dev.mv.db`, outside it (`touch` there → `Operation not permitted`), so H2 fell back to read-only. Confirmed by contrast — the same bytes on a `/tmp` database accepted every write above. Nothing in the code changed for it; the dev instance simply has to be started with write access to its own data directory.
+
+**Remaining in F4:** `charge.status` (DRAFT/BILLED) and `sys_user.status` (the 0/1 integers behind force-logout and the login rejection), plus the presentational statuses outside F4 (consent, care plan, problem, referral, prior auth, refill, patient).
 
 ## Round completion criteria
 

@@ -76,3 +76,8 @@ export const ABNORMAL_FLAG_LEGEND: { text: string; color: string }[] = [
   { text: 'H High / L Low', color: '#E6A23C' },
   { text: 'N Normal', color: '#67C23A' },
 ]
+
+// The prescription statuses that stop a deletion in the UI. These are the real
+// values the backend writes (PrescriptionRxStatus); the previous list named
+// 'transmitted' and 'dispensed', which no code path has ever produced.
+export const NON_DELETABLE_RX_STATUSES = ['generated', 'completed', 'cancelled']
