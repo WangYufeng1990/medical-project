@@ -1,5 +1,6 @@
 package com.example.medical.module.prescription.controller;
 
+import com.example.medical.module.prescription.dto.FormularyCheckVO;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.prescription.dto.FormularyEntryVO;
 import com.example.medical.module.prescription.entity.FormularyEntry;
@@ -20,20 +21,12 @@ public class FormularyController {
 
     @GetMapping("/formulary/check")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<Map<String, Object>> check(@RequestParam String rxnormCode, @RequestParam String insurancePayer) {
+    public Result<FormularyCheckVO> check(@RequestParam String rxnormCode, @RequestParam String insurancePayer) {
         var entry = formularyEntryRepository.findByRxnormCodeAndInsurancePayer(rxnormCode, insurancePayer);
         if (entry.isEmpty()) {
-            return Result.ok(Map.of("found", false, "message", "Not in formulary or unknown insurance"));
+            return Result.ok(FormularyCheckVO.notFound());
         }
-        FormularyEntry e = entry.get();
-        return Result.ok(Map.of(
-                "found", true,
-                "drugName", e.getDrugName(),
-                "tier", e.getTier(),
-                "priorAuthRequired", e.getPriorAuthRequired() != null && e.getPriorAuthRequired(),
-                "stepTherapyRequired", e.getStepTherapyRequired() != null && e.getStepTherapyRequired(),
-                "alternatives", e.getAlternatives() != null ? e.getAlternatives() : ""
-        ));
+        return Result.ok(FormularyCheckVO.fromEntity(entry.get()));
     }
 
     @GetMapping("/formulary/{rxnormCode}")

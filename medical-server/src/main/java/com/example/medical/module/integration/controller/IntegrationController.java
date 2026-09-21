@@ -2,6 +2,7 @@ package com.example.medical.module.integration.controller;
 
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.module.integration.dto.IntegrationAckVO;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.integration.dto.AdtEventPayload;
 import com.example.medical.module.integration.dto.LabResultPayload;
@@ -41,19 +42,18 @@ public class IntegrationController {
     }
 
     @PostMapping("/adt")
-    public Result<Map<String, Object>> receiveAdt(@Valid @RequestBody AdtEventPayload event,
+    public Result<IntegrationAckVO> receiveAdt(@Valid @RequestBody AdtEventPayload event,
                                                    HttpServletRequest request) {
         checkApiKey(request);
         adtService.processAdt(event);
-        return Result.ok(Map.of("status", "ACK", "sourceMessageId", event.getSourceMessageId()));
+        return Result.ok(IntegrationAckVO.accepted(event.getSourceMessageId()));
     }
 
     @PostMapping("/lab-results")
-    public Result<Map<String, Object>> receiveLabResults(@Valid @RequestBody LabResultPayload dto,
+    public Result<IntegrationAckVO> receiveLabResults(@Valid @RequestBody LabResultPayload dto,
                                                           HttpServletRequest request) {
         checkApiKey(request);
         int count = labResultService.processLabResults(dto);
-        return Result.ok(Map.of("status", "ACK", "recordsCreated", count,
-                "sourceMessageId", dto.getSourceMessageId()));
+        return Result.ok(IntegrationAckVO.accepted(dto.getSourceMessageId(), count));
     }
 }

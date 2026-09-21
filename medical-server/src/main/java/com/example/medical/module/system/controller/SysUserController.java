@@ -3,6 +3,7 @@ package com.example.medical.module.system.controller;
 import org.springframework.data.domain.Page;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.result.Result;
+import com.example.medical.module.system.dto.DoctorOptionVO;
 import com.example.medical.module.system.dto.SysUserFormDTO;
 import com.example.medical.module.system.dto.SysUserUpdateFormDTO;
 import com.example.medical.module.system.dto.SysUserVO;
@@ -10,6 +11,8 @@ import com.example.medical.module.system.service.SysUserService;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -24,11 +27,10 @@ public class SysUserController {
 
     @GetMapping("/doctors")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<java.util.List<java.util.Map<String, Object>>> doctors() {
-        var list = sysUserRepository.findDoctors().stream()
-                .map(u -> java.util.Map.<String, Object>of("id", u.getId(), "username", u.getUsername(), "realName", u.getRealName() != null ? u.getRealName() : u.getUsername()))
-                .toList();
-        return Result.ok(list);
+    public Result<List<DoctorOptionVO>> doctors() {
+        return Result.ok(sysUserRepository.findDoctors().stream()
+                .map(DoctorOptionVO::fromEntity)
+                .toList());
     }
 
     @GetMapping

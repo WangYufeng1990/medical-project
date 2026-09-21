@@ -6,6 +6,7 @@ import com.example.medical.module.patient.entity.Observation;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.ObservationRepository;
 import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.quality.dto.QualityReportVO;
 import com.example.medical.module.quality.entity.QualityMeasure;
 import com.example.medical.module.quality.entity.QualityResult;
 import com.example.medical.module.quality.repository.QualityMeasureRepository;
@@ -40,7 +41,7 @@ public class QualityMeasureService {
         return qualityMeasureRepository.findAll();
     }
 
-    public Map<String, Object> getReport(String cmsId) {
+    public QualityReportVO getReport(String cmsId) {
         QualityMeasure measure = qualityMeasureRepository.findByCmsId(cmsId)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND,
                         "Measure not found: " + cmsId));
@@ -48,23 +49,22 @@ public class QualityMeasureService {
         QualityResult latest = qualityResultRepository
                 .findTopByCmsIdOrderByCalculatedAtDesc(cmsId).orElse(null);
 
-        Map<String, Object> report = new LinkedHashMap<>();
-        report.put("cmsId", measure.getCmsId());
-        report.put("title", measure.getTitle());
-        report.put("reportPeriodMonths", measure.getReportPeriodMonths());
-        report.put("denominator", latest != null ? latest.getDenominator() : 0L);
-        report.put("exclusions", latest != null ? latest.getExclusions() : 0L);
-        report.put("eligibleDenominator", latest != null ? latest.getEligibleDenominator() : 0L);
-        report.put("numerator", latest != null ? latest.getNumerator() : 0L);
-        report.put("performanceRate", latest != null ? latest.getPerformanceRate() : 0.0);
-        report.put("performanceTarget", getTarget(cmsId));
-        report.put("calculatedAt", latest != null ? latest.getCalculatedAt() : null);
-        return report;
+        return QualityReportVO.of(
+                measure.getCmsId(),
+                measure.getTitle(),
+                measure.getReportPeriodMonths(),
+                latest != null ? latest.getDenominator() : 0L,
+                latest != null ? latest.getExclusions() : 0L,
+                latest != null ? latest.getEligibleDenominator() : 0L,
+                latest != null ? latest.getNumerator() : 0L,
+                latest != null ? latest.getPerformanceRate() : 0.0,
+                getTarget(cmsId),
+                latest != null ? latest.getCalculatedAt() : null);
     }
 
     @Transactional
-    public Map<String, Object> calculateReport(String cmsId) {
-        qualityMeasureRepository.findByCmsId(cmsId)
+    public QualityReportVO calculateReport(String cmsId) {
+        QualityMeasure measure = qualityMeasureRepository.findByCmsId(cmsId)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND,
                         "Measure not found: " + cmsId));
 
@@ -95,18 +95,12 @@ public class QualityMeasureService {
 
         log.info("eCQM {} calculated: rate={}% denom={} num={}", cmsId, rate, denominator, numerator);
 
-        Map<String, Object> report = new LinkedHashMap<>();
-        report.put("cmsId", cmsId);
-        report.put("title", getTarget(cmsId));
-        report.put("reportPeriodMonths", 12);
-        report.put("denominator", denominator);
-        report.put("exclusions", exclusions);
-        report.put("eligibleDenominator", eligibleDenominator);
-        report.put("numerator", numerator);
-        report.put("performanceRate", rate);
-        report.put("performanceTarget", target);
-        report.put("calculatedAt", java.time.LocalDateTime.now());
-        return report;
+        // title is the measure's own name here too — it used to be the target
+        // description, so the same key meant two different things depending on
+        // which of the two report endpoints you called (Round 51.8).
+        return QualityReportVO.of(cmsId, measure.getTitle(), 12, denominator, exclusions,
+                eligibleDenominator, numerator, rate, target,
+                java.time.LocalDateTime.now());
     }
 
     /**

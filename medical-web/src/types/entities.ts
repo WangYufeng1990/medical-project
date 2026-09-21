@@ -758,6 +758,21 @@ export interface QualityResultVO {
   calculatedAt?: string
 }
 
+export interface QualityReportVO {
+  cmsId: string
+  title: string
+  /** Always sent: the report falls back to 0 rather than omitting a counter. */
+  denominator: number
+  exclusions: number
+  eligibleDenominator: number
+  numerator: number
+  performanceRate: number
+  reportPeriodMonths?: number
+  /** Human-readable target description, e.g. "HbA1c < 9% … Target: ≥ 70%" — a string, not a number. */
+  performanceTarget?: string
+  calculatedAt?: string
+}
+
 export interface PharmacyVO {
   id: number
   name: string

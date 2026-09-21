@@ -38,10 +38,7 @@ public class AuditLogController {
     }
 
     @GetMapping("/verify")
-    public Result<java.util.Map<String, Object>> verifyIntegrity() {
-        Long brokenRowId = auditLogService.verifyIntegrity();
-        return Result.ok(java.util.Map.of(
-                "intact", brokenRowId == null,
-                "brokenRowId", brokenRowId == null ? -1 : brokenRowId));
+    public Result<IntegrityReportVO> verifyIntegrity() {
+        return Result.ok(IntegrityReportVO.of(auditLogService.verifyIntegrity()));
     }
 }

@@ -92,7 +92,7 @@ All require `ADMIN` role.
 | PUT | `/{id}` | path + body | Update user (evicts cache) |
 | PUT | `/{id}/unlock` | path | Unlock a locked account (clears failed attempts + lock expiry) |
 | DELETE | `/{id}` | path | Soft-delete user (evicts cache) |
-| GET | `/doctors` | — | Doctor list `[{id, username, realName}]` (ADMIN,DOCTOR — used by appointment/prescription forms) |
+| GET | `/doctors` | — | Doctor list `DoctorOptionVO[]` `{id, username, realName}` (ADMIN,DOCTOR — used by appointment/prescription forms) |
 
 ### User Profile — `/api/v1/users/me`
 
@@ -198,7 +198,7 @@ Appointment statuses: 0 = Scheduled, 1 = Arrived, 2 = Cancelled, 3 = Completed, 
 | GET | `/by-patient/{patientId}` | ADMIN,DOCTOR | path | All prescriptions for a patient (used by emergency break-glass) |
 | POST | `/` | ADMIN,DOCTOR | body: PrescriptionFormDTO (+optional `overrideReason`) | Create + items. CDS (drug-drug, active-medication, allergy incl. cross-reactive) runs BEFORE save; severe/contraindicated warnings block (409) unless `overrideReason` is provided (persisted to cds_override). Prescriber identity (doctorId/NPI/DEA) is server-derived from the authenticated user |
 | DELETE | `/{id}` | ADMIN | path | Soft-delete + items (hidden for transmitted/dispensed/cancelled) |
-| PUT | `/{id}/transmit` | ADMIN,DOCTOR | `?pharmacyId=` | Generate draft NCPDP XML for active prescriptions (non-controlled only). Returns `status: "generated"` — controlled substances are rejected (409, EPCS fail-closed) and nothing is ever marked "transmitted" (Review III C4) |
+| PUT | `/{id}/transmit` | ADMIN,DOCTOR | `?pharmacyId=` | Generate draft NCPDP XML for active prescriptions (non-controlled only). Returns `TransmitResultVO` `{status:"generated", format, messageId, xml}` — controlled substances are rejected (409, EPCS fail-closed) and nothing is ever marked "transmitted" (Review III C4) |
 | PUT | `/{id}/cancel` | ADMIN,DOCTOR | path | Cancel prescription (active→cancelled). Rejects non-active (409). Prescriptions are cancel-reissue — no in-place edit endpoint (Round 28/34) |
 
 ### Prescription Refill Requests — `/api/v1/prescriptions/refill-requests`
@@ -299,7 +299,7 @@ Requires `ADMIN` or `DOCTOR`. Drug formulary coverage lookup.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/check` | `?rxnormCode=&insurancePayer=` | Coverage check → `{found, drugName?, tier?, priorAuthRequired?, stepTherapyRequired?, alternatives?}` or `{found: false, message}` |
+| GET | `/check` | `?rxnormCode=&insurancePayer=` | Coverage check — `FormularyCheckVO`: a hit carries `{found, drugName, tier, priorAuthRequired, stepTherapyRequired, alternatives}`, a miss only `{found: false, message}` (no caller in the UI today) |
 | GET | `/{rxnormCode}` | path | All formulary entries for a drug across payers |
 
 ### Chat (Staff) — `/api/v1/messages`
@@ -354,7 +354,7 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=20&userId=&patientId=&module=&action=&fromDate=&toDate=` | Search/filter audit logs |
 | GET | `/distinct-values` | — | Distinct module/action values for filter dropdowns |
-| GET | `/verify` | — | Tamper-evidence check: verifies row_hash chain, returns `{intact, brokenRowId}` (Review III M2) |
+| GET | `/verify` | — | Tamper-evidence check: verifies row_hash chain, returns `IntegrityReportVO` `{intact, brokenRowId}` (Review III M2) |
 
 ### FHIR — `/api/v1/fhir`
 
@@ -409,8 +409,8 @@ Requires `ADMIN` or `DOCTOR`. Mirth Connect JSON integration for ADT and lab res
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| POST | `/adt` | body: AdtEventDTO | ADT event (A01/A03/A08) — upsert Patient by MRN |
-| POST | `/lab-results` | body: LabResultDTO, header `X-Integration-Key` | Batch lab results with sourceMessageId dedup. `results[].abnormalFlag` accepts the HL7 set and is **normalised to one character** before storage (`HH/HU → H`, `LL/LU → L`, `N`, `A`; anything else → null) because the column is `CHAR(1)` (Round 51.4) |
+| POST | `/adt` | body: AdtEventDTO, header `X-Integration-Key` | ADT event (A01/A03/A08) — upsert Patient by MRN. Returns `IntegrationAckVO` `{status:"ACK", sourceMessageId}` |
+| POST | `/lab-results` | body: LabResultDTO, header `X-Integration-Key` | Returns `IntegrationAckVO` `{status, sourceMessageId, recordsCreated}`. Batch lab results with sourceMessageId dedup. `results[].abnormalFlag` accepts the HL7 set and is **normalised to one character** before storage (`HH/HU → H`, `LL/LU → L`, `N`, `A`; anything else → null) because the column is `CHAR(1)` (Round 51.4) |
 
 ### Lab Results — `/api/v1/patients/{id}/observations` + `/api/v1/loinc`
 
@@ -444,7 +444,7 @@ Requires `ADMIN` or `DOCTOR`.
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| PUT | `/{id}/transmit` | `?pharmacyId=` | Transmit prescription via NCPDP SCRIPT, EPCS audit if controlled substance |
+| PUT | `/{id}/transmit` | `?pharmacyId=` | Transmit prescription via NCPDP SCRIPT, EPCS audit if controlled substance. Returns `TransmitResultVO` `{status, format, messageId, xml}` |
 
 ### eCQM — `/api/v1/quality`
 
@@ -453,8 +453,8 @@ Requires `ADMIN` or `DOCTOR`. CMS MIPS/MACRA clinical quality measures.
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/measures` | — | List all quality measure definitions |
-| GET | `/measures/{cmsId}/report` | path | Latest persisted performance report (CMS122/CMS125/CMS165) |
-| POST | `/measures/{cmsId}/calculate` | path | Run the measure calculation now; result persisted to `quality_result` |
+| GET | `/measures/{cmsId}/report` | path | Latest persisted performance report (CMS122/CMS125/CMS165) — `QualityReportVO` (10 keys) |
+| POST | `/measures/{cmsId}/calculate` | path | Run the measure calculation now; result persisted to `quality_result`. Same `QualityReportVO` shape as the read-back — **`title` is the measure's own title in both** (it used to be the target description here, so one key meant two different things); the description lives in `performanceTarget` |
 | GET | `/measures/{cmsId}/history` | path | Persisted calculation history for a measure |
 
 ---

@@ -3589,6 +3589,45 @@ A second defect sat behind it: `@Cacheable(value = "dashboard", key = "'stats'")
 
 **Not verified locally:** the Redis-backed cache path. The h2 profile sets `spring.cache.type: none`, so `@Cacheable` is inert in every local run; the scope-aware key is by inspection, and no Redis is available here to exercise it.
 
+### Round 51.8 — the last eight untyped responses are VOs ✅
+
+M8.1 promised "no endpoint returns a raw entity"; the remaining gap was the other half of the same idea — endpoints returning `Map<String, Object>`, where nothing states the shape. Eight of them, all now typed, **with the wire unchanged**:
+
+| Endpoint | Was | Now |
+|----------|-----|-----|
+| `POST /integration/adt` | `Map.of("status","ACK","sourceMessageId",…)` | `IntegrationAckVO` `{status, sourceMessageId}` |
+| `POST /integration/lab-results` | `Map.of(…, "recordsCreated", count)` | `IntegrationAckVO` `{status, sourceMessageId, recordsCreated}` |
+| `PUT /prescriptions/{id}/transmit` | 4-key map | `TransmitResultVO` `{status, format, messageId, xml}` |
+| `GET /formulary/check` (hit / miss) | 6-key map / 2-key map | `FormularyCheckVO` (one class, `@JsonInclude(NON_NULL)` so each branch keeps exactly its own keys) |
+| `GET /users/doctors` | `List<Map>` per row | `DoctorOptionVO[]` `{id, username, realName}` |
+| `GET /audit-logs/verify` | 2-key map | `IntegrityReportVO` `{intact, brokenRowId}` |
+| `GET` + `POST /quality/measures/{cmsId}/report|calculate` | `Map` built in the service | `QualityReportVO`, the same 10 keys from both |
+
+**Two contract defects surfaced while typing them** — both invisible until something had to name the fields:
+
+1. **`calculate` returned a different `title` than `report`.** The read-back used `measure.getTitle()`; the calculate path put `getTarget(cmsId)` — the *target description sentence* — into the same key, and the real target into `performanceTarget`. So after a calculation the two endpoints disagreed about what `title` means (the UI masked it by re-fetching the read-back afterwards). Both now answer with the measure's own title, and the description stays in `performanceTarget`.
+2. **The TypeScript type lied about `performanceTarget`.** `api/quality.ts` typed both report endpoints as `QualityResultVO`, whose `performanceTarget` was `number` while the API has always sent a string — invisible because the page renders it as a paragraph. There is now a `QualityReportVO` interface with truthful types.
+
+Writing the interface also caught my own mistake immediately: I first marked the five counters optional, and `tsc` rejected the page that feeds them to number-typed helpers. They are always present (the report falls back to 0 rather than omitting a counter), so the type says required — the compiler did the review.
+
+**Verification** — every endpoint called live and its key set compared with the shape it had before the change:
+
+| Call | Keys returned |
+|------|---------------|
+| `GET /users/doctors` | `id, realName, username` — as before |
+| `GET /audit-logs/verify` | `brokenRowId, intact` — as before |
+| `GET /quality/measures/CMS122v11/report` | the same 10 keys |
+| `POST /quality/measure/CMS122v11/calculate` | same 10 keys, `title = 'HbA1c Poor Control (>9%)'` — matching the read-back (the fix above) |
+| `GET /formulary/check` hit | `alternatives, drugName, found, priorAuthRequired, stepTherapyRequired, tier` — as before |
+| `GET /formulary/check` miss | `found, message` — as before, the other five keys omitted |
+| `POST /integration/adt` | `sourceMessageId, status` — no `recordsCreated`, as before |
+| `POST /integration/lab-results` | `recordsCreated, sourceMessageId, status` — as before |
+| `PUT /prescriptions/301/transmit` | `format, messageId, status, xml` — as before (301 is `active`; 300 answers 409 `Only active prescriptions can be transmitted`, a business rule) |
+
+Read-only calls were made against the dev instance, the three mutating ones against a throwaway database. `mvn clean verify` **182 tests green**, `npm run check` clean, and the eCQM page re-checked in the browser (heading `HbA1c Poor Control (>9%)`, target paragraph, four metrics, 0 console errors).
+
+**Still open from this slice:** `tier` on the formulary is a **String** holding "1"/"2" (seed values), which a real formulary would model as an int or an enum; and `api/formulary.ts` + `/formulary/check` have no UI caller at all — deleting both is still on the table rather than typing an endpoint nothing uses.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

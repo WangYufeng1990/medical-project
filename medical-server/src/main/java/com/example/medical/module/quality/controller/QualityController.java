@@ -1,5 +1,6 @@
 package com.example.medical.module.quality.controller;
 
+import com.example.medical.module.quality.dto.QualityReportVO;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.quality.service.QualityMeasureService;
 import com.example.medical.module.quality.dto.QualityMeasureVO;
@@ -26,13 +27,13 @@ public class QualityController {
     }
 
     @GetMapping("/measures/{cmsId}/report")
-    public Result<Map<String, Object>> getReport(@PathVariable String cmsId) {
+    public Result<QualityReportVO> getReport(@PathVariable String cmsId) {
         return Result.ok(qualityMeasureService.getReport(cmsId));
     }
 
     @PostMapping("/measures/{cmsId}/calculate")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Map<String, Object>> calculateReport(@PathVariable String cmsId) {
+    public Result<QualityReportVO> calculateReport(@PathVariable String cmsId) {
         return Result.ok(qualityMeasureService.calculateReport(cmsId));
     }
 
