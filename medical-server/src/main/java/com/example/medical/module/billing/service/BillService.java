@@ -12,6 +12,7 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -108,6 +109,20 @@ public class BillService {
         b.setAdjudicationDate(adjudicationDate != null ? adjudicationDate : LocalDate.now());
         b.setClaimStatus(patientResp.compareTo(BigDecimal.ZERO) > 0 ? "PENDING" : "PAID");
         billRepository.save(b);
+    }
+
+    /**
+     * Paged read for the CSV export loop: the caller owns the page size (500),
+     * so this deliberately does not go through {@code Pages}. An empty doctor
+     * scope means no rows — never "no filter".
+     */
+    public Page<BillVO> exportPage(long page, long size, Set<Long> scopedPatientIds) {
+        Pageable pageable = PageRequest.of((int) page, (int) size, Sort.by(Sort.Direction.DESC, "createTime"));
+        if (scopedPatientIds != null && scopedPatientIds.isEmpty()) return Page.empty(pageable);
+        Specification<Bill> spec = scopedPatientIds == null
+                ? null
+                : (root, query, cb) -> root.get("patientId").in(scopedPatientIds);
+        return billRepository.findAll(spec, pageable).map(this::toVO);
     }
 
     /** The patient portal's own view: no doctor scope, the id comes from the token. */

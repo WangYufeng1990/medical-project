@@ -10,12 +10,16 @@ import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.medical.common.base.Pages;
 import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
+
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +46,21 @@ public class PatientService {
             return predicates;
         };
         Pageable pageable = Pages.of(page, size);
+        return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
+    }
+
+    /**
+     * Paged read for the CSV export loop. Not routed through {@code Pages}: the
+     * export walks the table itself with its own 500-row page size, and the size
+     * is chosen by the caller. An empty doctor scope means no rows — never "no
+     * filter".
+     */
+    public Page<PatientVO> exportPage(long page, long size, Set<Long> scopedPatientIds) {
+        Pageable pageable = PageRequest.of((int) page, (int) size, Sort.by(Sort.Direction.DESC, "createTime"));
+        if (scopedPatientIds != null && scopedPatientIds.isEmpty()) return Page.empty(pageable);
+        Specification<Patient> spec = scopedPatientIds == null
+                ? null
+                : (root, query, cb) -> root.get("id").in(scopedPatientIds);
         return patientRepository.findAll(spec, pageable).map(PatientVO::fromEntity);
     }
 

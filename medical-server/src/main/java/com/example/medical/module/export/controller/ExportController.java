@@ -2,11 +2,12 @@ package com.example.medical.module.export.controller;
 
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.security.DoctorPatientScope;
-import com.example.medical.module.billing.entity.Bill;
-import com.example.medical.module.billing.repository.BillRepository;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.billing.dto.BillVO;
+import com.example.medical.module.billing.service.BillService;
+import com.example.medical.module.patient.dto.PatientVO;
+import com.example.medical.module.patient.service.PatientService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,12 @@ import java.io.Writer;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
+/**
+ * Streaming CSV export. The module owns the CSV shape and the masking rules; the
+ * data comes from the owning services, so no other module's repository is reached
+ * from a controller any more. The reads happen inside the streaming thread, one
+ * page per call, exactly as before.
+ */
 @RestController
 @RequestMapping("/api/v1/export")
 @RequiredArgsConstructor
@@ -29,8 +36,16 @@ public class ExportController {
 
     private static final int EXPORT_PAGE_SIZE = 500;
 
-    private final PatientRepository patientRepository;
-    private final BillRepository billRepository;
+    private static final String PATIENT_HEADER =
+            "MRN,Name,DOB,Sex,Gender,Race,Ethnicity,Language,Phone,Email,"
+                    + "Address,City,State,ZIP,Insurance,MedicalHistory,Allergies,Created\n";
+
+    private static final String BILL_HEADER =
+            "ID,PatientID,Type,Status,TotalCharge,InsAdj,InsPay,"
+                    + "PatientResp,PatientPaid,Copay,CPT,ICD10,POS,Payer,Claim#,FilingDate,PayTime,Method,Created\n";
+
+    private final PatientService patientService;
+    private final BillService billService;
     private final DoctorPatientScope doctorPatientScope;
 
     @GetMapping("/patients")
@@ -40,36 +55,17 @@ public class ExportController {
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream);
-            writer.write("MRN,Name,DOB,Sex,Gender,Race,Ethnicity,Language,Phone,Email," +
-                    "Address,City,State,ZIP,Insurance,MedicalHistory,Allergies,Created\n");
+            writer.write(PATIENT_HEADER);
 
             int page = 0;
-            boolean hasMore;
+            Page<PatientVO> patients;
             do {
-                var patients = patientRepository.findAll(
-                        org.springframework.data.domain.PageRequest.of(page++, EXPORT_PAGE_SIZE,
-                                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime")));
-                for (Patient p : patients.getContent()) {
-                    if (scopedPatientIds != null && !scopedPatientIds.contains(p.getId())) continue;
-                    writer.write(String.join(",",
-                            csv(p.getMrn()), csv(p.getName()),
-                            csv(p.getDateOfBirth() != null ? p.getDateOfBirth().toString() : ""),
-                            csv(p.getSexAtBirth()), csv(p.getGenderIdentity()),
-                            csv(p.getRace()), csv(p.getEthnicity()),
-                            csv(p.getPreferredLanguage()),
-                            csv(p.getPhoneMobile() != null ? maskLast4(p.getPhoneMobile()) : ""),
-                            csv(p.getEmail() != null ? maskEmail(p.getEmail()) : ""),
-                            csv(p.getAddressLine1()), csv(p.getCity()),
-                            csv(p.getState()), csv(p.getZipCode()),
-                            csv(p.getInsurancePayer()),
-                            csv(p.getMedicalHistory()),
-                            csv(p.getAllergies()),
-                            csv(p.getCreateTime() != null
-                                    ? p.getCreateTime().format(DateTimeFormatter.ISO_LOCAL_DATE) : "")));
+                patients = patientService.exportPage(page++, EXPORT_PAGE_SIZE, scopedPatientIds);
+                for (PatientVO p : patients.getContent()) {
+                    writer.write(patientRow(p));
                     writer.write("\n");
                 }
-                hasMore = patients.hasNext();
-            } while (hasMore);
+            } while (patients.hasNext());
             writer.flush();
         };
 
@@ -86,38 +82,17 @@ public class ExportController {
 
         StreamingResponseBody stream = outputStream -> {
             Writer writer = new OutputStreamWriter(outputStream);
-            writer.write("ID,PatientID,Type,Status,TotalCharge,InsAdj,InsPay," +
-                    "PatientResp,PatientPaid,Copay,CPT,ICD10,POS,Payer,Claim#,FilingDate,PayTime,Method,Created\n");
+            writer.write(BILL_HEADER);
 
             int page = 0;
-            boolean hasMore;
+            Page<BillVO> bills;
             do {
-                var bills = billRepository.findAll(
-                        org.springframework.data.domain.PageRequest.of(page++, EXPORT_PAGE_SIZE,
-                                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createTime")));
-                for (Bill b : bills.getContent()) {
-                    if (scopedPatientIds != null && !scopedPatientIds.contains(b.getPatientId())) continue;
-                    writer.write(String.join(",",
-                            csv(b.getId()), csv(b.getPatientId()),
-                            csv(b.getBillType()), csv(b.getClaimStatus()),
-                            csv(b.getTotalCharge()), csv(b.getInsuranceAdjustment()),
-                            csv(b.getInsurancePayment()), csv(b.getPatientResponsibility()),
-                            csv(b.getPatientPaidAmount()), csv(b.getCopayAmount()),
-                            csv(b.getCptCodes()), csv(b.getIcd10Codes()),
-                            csv(b.getPlaceOfServiceCode()), csv(b.getInsurancePayerName()),
-                            csv(b.getInsuranceClaimNumber() != null
-                                    ? "****" + b.getInsuranceClaimNumber().substring(
-                                            Math.max(0, b.getInsuranceClaimNumber().length() - 4)) : ""),
-                            csv(b.getClaimFilingDate()),
-                            csv(b.getPayTime() != null
-                                    ? b.getPayTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : ""),
-                            csv(b.getPaymentMethod()),
-                            csv(b.getCreateTime() != null
-                                    ? b.getCreateTime().format(DateTimeFormatter.ISO_LOCAL_DATE) : "")));
+                bills = billService.exportPage(page++, EXPORT_PAGE_SIZE, scopedPatientIds);
+                for (BillVO b : bills.getContent()) {
+                    writer.write(billRow(b));
                     writer.write("\n");
                 }
-                hasMore = bills.hasNext();
-            } while (hasMore);
+            } while (bills.hasNext());
             writer.flush();
         };
 
@@ -125,6 +100,42 @@ public class ExportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bills.csv")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(stream);
+    }
+
+    private static String patientRow(PatientVO p) {
+        return String.join(",",
+                csv(p.getMrn()), csv(p.getName()),
+                csv(p.getDateOfBirth() != null ? p.getDateOfBirth().toString() : ""),
+                csv(p.getSexAtBirth()), csv(p.getGenderIdentity()),
+                csv(p.getRace()), csv(p.getEthnicity()),
+                csv(p.getPreferredLanguage()),
+                csv(p.getPhoneMobile() != null ? maskLast4(p.getPhoneMobile()) : ""),
+                csv(p.getEmail() != null ? maskEmail(p.getEmail()) : ""),
+                csv(p.getAddressLine1()), csv(p.getCity()),
+                csv(p.getState()), csv(p.getZipCode()),
+                csv(p.getInsurancePayer()),
+                csv(p.getMedicalHistory()),
+                csv(p.getAllergies()),
+                csv(p.getCreateTime() != null
+                        ? p.getCreateTime().format(DateTimeFormatter.ISO_LOCAL_DATE) : ""));
+    }
+
+    private static String billRow(BillVO b) {
+        return String.join(",",
+                csv(b.getId()), csv(b.getPatientId()),
+                csv(b.getBillType()), csv(b.getClaimStatus()),
+                csv(b.getTotalCharge()), csv(b.getInsuranceAdjustment()),
+                csv(b.getInsurancePayment()), csv(b.getPatientResponsibility()),
+                csv(b.getPatientPaidAmount()), csv(b.getCopayAmount()),
+                csv(b.getCptCodes()), csv(b.getIcd10Codes()),
+                csv(b.getPlaceOfServiceCode()), csv(b.getInsurancePayerName()),
+                csv(b.getInsuranceClaimNumberLast4()),
+                csv(b.getClaimFilingDate()),
+                csv(b.getPayTime() != null
+                        ? b.getPayTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : ""),
+                csv(b.getPaymentMethod()),
+                csv(b.getCreateTime() != null
+                        ? b.getCreateTime().format(DateTimeFormatter.ISO_LOCAL_DATE) : ""));
     }
 
     private static String csv(Object value) {

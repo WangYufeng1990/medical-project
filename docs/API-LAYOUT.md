@@ -339,7 +339,7 @@ Requires `ADMIN` or `DOCTOR`.
 
 ### Export — `/api/v1/export`
 
-Requires `ADMIN` or `DOCTOR`. DOCTOR role is scoped to own patients only (from appointments/prescriptions); ADMIN exports all records.
+Requires `ADMIN` or `DOCTOR`. DOCTOR role is scoped to own patients only (from appointments/prescriptions); ADMIN exports all records. The scope is applied in the query, so a scoped file contains exactly the rows the same caller can list (Round 51.9); an empty scope yields a header-only file.
 
 | Method | Path | Description |
 |--------|------|-------------|

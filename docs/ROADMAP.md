@@ -3209,8 +3209,8 @@ Rule now recorded in CLAUDE.md §8b: **edit → stop the instance → `mvn clean
 
 | Remaining controller → foreign repository | Why it is not a 3-line move |
 |---|---|
-| `ExportController` → `PatientRepository`, `BillRepository` | The queries execute on the streaming thread, so moving them behind services means settling the transaction boundary there too — its own slice |
-| `EmergencyAccessController` → `PatientRepository` | It only needs "does this patient exist"; the honest fix is a `PatientService` existence method, which is a `system → patient` service edge — M8.5's territory |
+| ~~`ExportController` → `PatientRepository`, `BillRepository`~~ | **Closed in Round 51.9** — the reads moved to `PatientService.exportPage` / `BillService.exportPage` and the CSVs came out byte-identical |
+| `EmergencyAccessController` → `PatientRepository` | It only needs "does this patient exist"; the honest fix is a `PatientService` existence method, which is a `system → patient` service edge — M8.5's territory. **The last one left** |
 
 **Out of scope:** `common → module` reverse dependencies (M8.5), the two controllers above.
 
@@ -3627,6 +3627,31 @@ Writing the interface also caught my own mistake immediately: I first marked the
 Read-only calls were made against the dev instance, the three mutating ones against a throwaway database. `mvn clean verify` **182 tests green**, `npm run check` clean, and the eCQM page re-checked in the browser (heading `HbA1c Poor Control (>9%)`, target paragraph, four metrics, 0 console errors).
 
 **Still open from this slice:** `tier` on the formulary is a **String** holding "1"/"2" (seed values), which a real formulary would model as an int or an enum; and `api/formulary.ts` + `/formulary/check` have no UI caller at all — deleting both is still on the table rather than typing an endpoint nothing uses.
+
+### Round 51.9 — the export stops reaching across modules ✅
+
+`ExportController` was the last *complex* case: 156 lines that paginated `PatientRepository` and `BillRepository` inside a `StreamingResponseBody`, filtering by doctor scope **in memory** while walking the whole table.
+
+| Change | Detail |
+|--------|--------|
+| `PatientService.exportPage(page, size, scopedPatientIds)` / `BillService.exportPage(...)` | The owning services expose a paged read. It deliberately does **not** go through `Pages`: the export picks its own 500-row page size, which exceeds the 200 cap that exists for user-facing pages (the M7 note already recorded that exception) |
+| Scope applied in SQL | `id IN (…)` / `patient_id IN (…)` instead of skipping rows after fetching them. An **empty** scope returns an empty page — never an unfiltered one |
+| CSV shape stays in the export module | Header, row order, `csv()` escaping and the phone/email/claim-number masking are the export's business; it now reads `PatientVO` / `BillVO` instead of entities, which also means the streaming thread no longer touches a persistence context |
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `/export/patients`, before vs after | **byte-identical** — 1115 bytes, `md5 45e48284cd34729384931c0afa126420` |
+| `/export/bills`, before vs after | **byte-identical** — 642 bytes, `md5 b108f74e4c181db40a5c83c89c5ab73c` |
+| Doctor scope (live) | doctor1: 3 lines (header + `MRN-10001`, `MRN-10002`); admin: 5 lines (all four patients). Bill rows carry only patient ids `100`, `101` |
+| Audit | `EXPORT_PATIENTS` / `EXPORT_BILLS` rows still written for both roles |
+| Cross-module repositories left in controllers (grep) | **3 across 2 → 1 across 1** (`EmergencyAccessController` only) |
+| `mvn clean verify` | **183 tests, 0 failures** (182 → 183) |
+
+**The new test exposed that the two existing export tests were blind.** They asserted "not 500" on the first MockMvc result, but `StreamingResponseBody` starts async processing — the body only exists after an async dispatch, so `getContentAsString()` was returning an empty string all along and they could never have noticed a wrong CSV. The new test dispatches first, then compares the doctor's rows against the admin export and against the doctor's own patient-list total.
+
+**One deliberate behaviour change on a degenerate input:** the claim-number column now comes from `BillVO.insuranceClaimNumberLast4`, whose masking returns `****` for values of four characters or fewer, where the old inline expression would print `****123` (i.e. reveal the whole short identifier). No such value exists in the data, and the new behaviour is the more private one, but it is a difference rather than a byte-for-byte match.
 
 ## Round completion criteria
 
