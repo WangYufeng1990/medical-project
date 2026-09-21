@@ -3653,6 +3653,21 @@ Read-only calls were made against the dev instance, the three mutating ones agai
 
 **One deliberate behaviour change on a degenerate input:** the claim-number column now comes from `BillVO.insuranceClaimNumberLast4`, whose masking returns `****` for values of four characters or fewer, where the old inline expression would print `****123` (i.e. reveal the whole short identifier). No such value exists in the data, and the new behaviour is the more private one, but it is a difference rather than a byte-for-byte match.
 
+### Round 51.10 — the dead formulary endpoint is gone ✅
+
+Round 51.8 typed `GET /api/v1/formulary/check` rather than deleting it, and flagged the reason it might not deserve typing: the only caller was `medical-web/src/api/formulary.ts`, which **no view imported**. Decision taken: remove the surface instead of describing it. Deleted:
+
+- `FormularyController.check` — the endpoint and its two response branches
+- `FormularyCheckVO` — created in 51.8, used by nothing else
+- `FormularyEntryRepository.findByRxnormCodeAndInsurancePayer` — its only caller was the endpoint above (the surviving `findByRxnormCode` serves the list endpoint)
+- `medical-web/src/api/formulary.ts` — the dead client, including its `FormularyCheckResult` interface
+
+Verified by grep before deleting: no test called the endpoint, no view imported the client, and the repository method had exactly one caller. The compiled controller now contains no `formulary/check` mapping — though a stale caller does **not** get a 404: the sibling `GET /formulary/{rxnormCode}` matches the segment, so `/formulary/check?…` answers `200 {"data":[]}` (an empty lookup for the code "check"). Documented in API-LAYOUT rather than papered over.
+
+The restart itself surfaced a second, unrelated annoyance worth writing down: stopping the backend and starting it again too quickly fails with `The file is locked: …/medical_dev.mv.db`, because the H2 file lock outlives the JVM by a few seconds. Hit twice while verifying this slice; the README's quick start now says so. Endpoint count 149 → 148 (`mvn clean verify` **183 tests green**, `npm run check` clean) — nothing was covering it, which is itself part of why it should not have been kept.
+
+**Still standing, and now visibly so:** the rest of the formulary read surface is also uncalled from the UI — `GET /api/v1/formulary/{rxnormCode}` (`FormularyEntryVO`), the client-side `FormularyEntry` interface in `types/entities.ts`, and the 9 seeded `formulary_entry` rows. Unlike `/check`, that endpoint is a plain read of seeded reference data, so it is reported rather than removed: deleting the whole feature (endpoint, entity, seed, `cds` fallback) is a product decision, not cleanup.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

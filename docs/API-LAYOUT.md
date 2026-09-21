@@ -295,11 +295,10 @@ Requires `ADMIN` or `DOCTOR`. Status: PENDING → APPROVED / DENIED.
 
 ### Formulary — `/api/v1/formulary`
 
-Requires `ADMIN` or `DOCTOR`. Drug formulary coverage lookup.
+Requires `ADMIN` or `DOCTOR`. Drug formulary lookup. (`GET /formulary/check` was removed in Round 51.10 — no caller in the UI, no test, and its only repository method went with it. The path is now matched by `/{rxnormCode}`, so a stale caller gets `200 {"data":[]}` rather than a 404.)
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/check` | `?rxnormCode=&insurancePayer=` | Coverage check — `FormularyCheckVO`: a hit carries `{found, drugName, tier, priorAuthRequired, stepTherapyRequired, alternatives}`, a miss only `{found: false, message}` (no caller in the UI today) |
 | GET | `/{rxnormCode}` | path | All formulary entries for a drug across payers |
 
 ### Chat (Staff) — `/api/v1/messages`

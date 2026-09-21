@@ -33,6 +33,11 @@ than anything resembling a version error, so check `node -v` before blaming the
 config. The `h2` profile needs nothing else — Redis is only required by the
 `dev` and `prod` profiles.
 
+**One process at a time.** The H2 file database takes an exclusive lock, so a second
+instance started while one is still running (or still shutting down) exits with
+`The file is locked: …/medical_dev.mv.db` — stop the old JVM and give it a few
+seconds before starting the new one.
+
 ### Local database (h2 profile)
 
 The schema lives in `medical-server/src/main/resources/sql/schema.sql` and is
