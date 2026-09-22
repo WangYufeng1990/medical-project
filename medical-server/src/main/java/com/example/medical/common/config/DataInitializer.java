@@ -810,7 +810,9 @@ public class DataInitializer implements CommandLineRunner {
         LocalDateTime now = LocalDateTime.now();
         // Both visits already carry a bill (500 for appointment 201, 502 for 204),
         // so their charges are seeded BILLED: a DRAFT charge tells the Billing page
-        // it is "ready to convert", and converting it now answers 409.
+        // it is "ready to convert", and converting it now answers 409. Spelled out
+        // rather than read from ChargeStatus — common/ may not import a module
+        // (LayeringGuardTest), which is also why every seed value here is a literal.
         jdbcTemplate.update(sql, 100L, 201L, 2L, "99213", "I10;E11.9",
                 1, 20.85, "FOLLOW_UP", "BILLED", 500L,
                 AesCryptoUtil.encrypt("Hypertension + diabetes follow-up; captured from appointment #201"), now);

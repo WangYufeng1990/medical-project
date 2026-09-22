@@ -230,6 +230,8 @@ Claim lifecycle: DRAFT → SUBMITTED → (adjudicate) → PENDING → (pay) PAID
 
 ### Charges (Superbill) — `/api/v1/charges`
 
+Charge status vocabulary: `DRAFT` → `BILLED`, in `ChargeStatus` (Round 51.13). A charge is captured as `DRAFT` and becomes `BILLED` when it is converted; only `DRAFT` can be converted (`409 Charge is not in DRAFT status`). No endpoint accepts a status from the client — the create path always writes DRAFT — so there is no unknown-value case to reject here.
+
 Requires `ADMIN` or `DOCTOR`. Charge capture linked to appointments, convertible to bills.
 
 | Method | Path | Params | Description |

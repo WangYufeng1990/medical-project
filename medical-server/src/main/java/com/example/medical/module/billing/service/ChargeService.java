@@ -11,6 +11,7 @@ import com.example.medical.module.billing.dto.ChargeVO;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.billing.entity.Charge;
+import com.example.medical.module.billing.entity.ChargeStatus;
 import com.example.medical.module.billing.repository.BillRepository;
 import com.example.medical.module.billing.repository.ChargeRepository;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +54,7 @@ public class ChargeService {
     @Auditable(module = "charge", action = "CREATE", phiAccess = true)
     public ChargeVO create(ChargeForm form) {
         Charge c = form.toEntity();
-        c.setStatus("DRAFT");
+        c.setStatus(ChargeStatus.DRAFT.value());
         return ChargeVO.fromEntity(chargeRepository.save(c));
     }
 
@@ -63,8 +64,9 @@ public class ChargeService {
         Charge c = chargeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "Charge not found"));
         doctorPatientScope.requireAccess(c.getPatientId());
-        if (!"DRAFT".equals(c.getStatus())) {
-            throw new BusinessException(ResultCode.CONFLICT, "Charge is not in DRAFT status");
+        if (!ChargeStatus.isConvertible(c.getStatus())) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "Charge is not in " + ChargeStatus.DRAFT.value() + " status");
         }
         // A visit can only be billed once. Converting a charge whose appointment
         // already carries a bill used to create a second bill for the same visit
@@ -89,7 +91,7 @@ public class ChargeService {
         bill.setClaimStatus(BillClaimStatus.DRAFT.value());
         bill = billRepository.save(bill);
 
-        c.setStatus("BILLED");
+        c.setStatus(ChargeStatus.BILLED.value());
         c.setBillId(bill.getId());
         chargeRepository.save(c);
 

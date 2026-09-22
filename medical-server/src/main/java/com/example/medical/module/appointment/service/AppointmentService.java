@@ -156,7 +156,7 @@ public class AppointmentService {
         c.setIcd10Codes(a.getChiefComplaint());
         c.setVisitType(a.getVisitType());
         c.setChargeAmount(a.getCptCode() != null && a.getCptCode().startsWith("992") ? new java.math.BigDecimal("90") : new java.math.BigDecimal("100"));
-        c.setStatus("DRAFT");
+        c.setStatus(com.example.medical.module.billing.entity.ChargeStatus.DRAFT.value());
         chargeRepository.save(c);
     }
 

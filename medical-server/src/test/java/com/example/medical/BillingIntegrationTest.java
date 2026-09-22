@@ -276,5 +276,32 @@ class BillingIntegrationTest extends IntegrationTestSupport {
         assertEquals(45.00, bill.get("totalCharge").asDouble());
     }
 
+    @Test
+    @Order(72)
+    void convertCharge_shouldRefuseWhenItIsAlreadyBilled() throws Exception {
+        // The seeded charges for appointments 201/204 were billed at seed time, so
+        // this reaches the status guard instead of the appointment guard above.
+        JsonNode records = objectMapper.readTree(mockMvc.perform(get("/api/v1/charges?page=1&size=50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString())
+                .get("data").get("records");
+        long billedId = 0;
+        for (JsonNode row : records) {
+            if ("BILLED".equals(row.get("status").asText())) {
+                billedId = row.get("id").asLong();
+                break;
+            }
+        }
+        assertTrue(billedId > 0, "expected a seeded BILLED charge");
+
+        MvcResult result = mockMvc.perform(put("/api/v1/charges/" + billedId + "/convert")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isConflict())
+                .andReturn();
+        assertEquals("Charge is not in DRAFT status",
+                objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
     // ──────────────────────────────────────────────────────
 }

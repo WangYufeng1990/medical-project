@@ -59,6 +59,16 @@ export const CONSENT_TYPES = ['TREATMENT', 'RESEARCH', 'DATA_SHARING', 'MARKETIN
 
 export const CONSENT_STATUS = ['active', 'revoked']
 
+// Charge lifecycle, mirroring the backend's ChargeStatus. Only a DRAFT charge can
+// be converted into a bill — both the Charges page and the Billing page's
+// "ready to convert" box gate on this, and they used to spell the values out.
+export const CONVERTIBLE_CHARGE_STATUSES = ['DRAFT']
+
+export const CHARGE_STATUS_COLOR: Record<string, string> = {
+  DRAFT: '#E6A23C',
+  BILLED: '#67C23A',
+}
+
 export const CONSENT_STATUS_COLOR: Record<string, string> = {
   active: '#67C23A',
   revoked: '#909399',

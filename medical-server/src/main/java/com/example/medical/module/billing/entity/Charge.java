@@ -43,7 +43,7 @@ public class Charge extends BaseEntity {
     private String visitType;
 
     @Column(length = 20, nullable = false)
-    private String status = "DRAFT";
+    private String status = ChargeStatus.DRAFT.value();
 
     @Column(name = "bill_id")
     private Long billId;

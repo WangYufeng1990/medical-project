@@ -3735,6 +3735,39 @@ The second F4 vocabulary, and the one with the worse failure mode: `prescription
 
 **Remaining in F4:** `charge.status` (DRAFT/BILLED) and `sys_user.status` (the 0/1 integers behind force-logout and the login rejection), plus the presentational statuses outside F4 (consent, care plan, problem, referral, prior auth, refill, patient).
 
+### Round 51.13 — charge statuses are named (F4, third of four) ✅
+
+`charge.status` is the smallest vocabulary in F4 — two values — and it was written in five places: the entity's field default, `ChargeService` twice on the convert path, `AppointmentService` when an appointment is completed, and the seed. `ChargeStatus` (DRAFT / BILLED) now owns them, with `value()`, `matches()`, `of()` and `isConvertible()`.
+
+**It deliberately has no `parse()`, and that is the point.** Unlike claim and prescription statuses, no client ever sends this value: `ChargeForm` has no status field, creation always writes DRAFT, and the convert transition owns the other one. Adding a parser "for symmetry" would be dead code — exactly the trap Round 51.12 recorded when it found `TransmitResultVO` sitting unused since 51.8.
+
+| Site | Change |
+|------|--------|
+| `Charge.status` | field default `"DRAFT"` → `ChargeStatus.DRAFT.value()` |
+| `ChargeService.create` | `"DRAFT"` → `ChargeStatus.DRAFT.value()` |
+| `ChargeService.convert` | the guard is `!ChargeStatus.isConvertible(...)`, and the 409 message is built from the enum — `Charge is not in DRAFT status` cannot drift from the value it checks |
+| `ChargeService.convert` | after billing, `"BILLED"` → `ChargeStatus.BILLED.value()` |
+| `AppointmentService` | the charge it creates when a visit completes → the same constant |
+| `medical-web` | `CONVERTIBLE_CHARGE_STATUSES` and `CHARGE_STATUS_COLOR` in `utils/labels.ts` replace the inline `'DRAFT'`/`'BILLED'` comparisons and the inline amber/green ternary in `views/charges`, plus the duplicated filter in `views/billing` |
+
+**One literal is left on purpose:** `DataInitializer` still passes `"BILLED"` to its seed SQL, because `common/` may not import a module class — `LayeringGuardTest` fails the build for it, which is also why every other seed value there is a literal too. The comment beside it now says so.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **195 tests, 0 failures** (191 → 195: 3 `ChargeStatusTest` cases + `convertCharge_shouldRefuseWhenItIsAlreadyBilled`), enforcer clean |
+| New integration case | a seeded BILLED charge → **409 `Charge is not in DRAFT status`** — the status guard, reached before 51.1's appointment guard |
+| Existing convert cases | still green: a DRAFT charge for the billed appointment 201 → 409 `…already billed (bill 500)`; for appointment 203 → 200 with `appointmentId=203` |
+| Browser, `/charges` on a fresh database | charge 3 (DRAFT) amber `rgb(230,162,60)` with a Convert to Bill button; charges 1/2 (BILLED) green `rgb(103,194,58)`, **no button**, `Bill #500` / `Bill #502`. Screenshot `/tmp/ui-shots/95-charges-status.png` |
+| Browser, `/billing` | "Draft Charges — Ready to Convert (1)" lists exactly the one DRAFT charge. `/tmp/ui-shots/96-billing-draft-charges.png` |
+| Browser errors | 0 console errors, 0 failed API calls on both pages |
+| Test placement | `BillClaimStatusTest` declared `com.example.medical.module.billing.entity` while sitting in the root package directory — moved next to its enum, so all three status-enum tests now do. It was the only such mismatch in the 28 test files |
+
+**The dev database is stale, and it looks like a bug.** Pointing the browser at the ordinary dev instance showed both seeded charges as DRAFT with a Convert to Bill button, even though appointments 201/204 carry bills 500/502 — the 51.1 seed change (charges billed, `bill_id` set) only runs against an **empty** database, and `~/.medical-dev/data/medical_dev.mv.db` predates it. Clicking Convert there answers 409 `Appointment 201 is already billed (bill 500)`, so nothing is double-billed; the states above were therefore verified on a fresh database. Resetting the dev database is the fix, and it is a deliberate act (it discards local audit logs and test records), so it is reported rather than done.
+
+**Remaining in F4:** `sys_user.status` (the 0/1 integers behind force-logout and the login rejection). Outside F4, and now visible in one place: the frontend still spells out status values inline — `claimStatus === 'DRAFT'/'SUBMITTED'/'PENDING'` in `views/billing` and `views/patient/bills`, plus the referral, prior-auth and refill vocabularies. Those are the same defect class as 51.12's ghost dropdown, and a frontend pass over `utils/labels.ts` is the natural follow-up. Also left standing from M8.5: `AppointmentService` writes to `ChargeRepository` directly (a module→module repository edge, not covered by `LayeringGuardTest`) — charge creation belongs behind `ChargeService`.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

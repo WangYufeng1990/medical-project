@@ -5,7 +5,7 @@ import { getPatientPage } from '../../api/patient'
 import { getAppointmentPage } from '../../api/appointment'
 import { PageResult } from '../../types/common'
 import { ChargeForm, AppointmentVO, ChargeCreatePayload } from '../../types/entities'
-import { PAGE_SIZE, FEE_SCHEDULE } from '../../utils/labels'
+import { PAGE_SIZE, FEE_SCHEDULE, CONVERTIBLE_CHARGE_STATUSES, CHARGE_STATUS_COLOR } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
 import styles from '../shared.module.css'
 
@@ -84,14 +84,14 @@ export default function Charges() {
         <tr key={r.id}>
           <td>{r.id}</td><td>{r.patientId}</td><td>{r.appointmentId ?? '-'}</td><td>{r.cptCodes || '-'}</td><td>{r.icd10Codes || '-'}</td>
           <td>{r.chargeAmount != null ? `$${r.chargeAmount}` : '-'}</td>
-          <td><span style={{ color: r.status === 'DRAFT' ? '#E6A23C' : '#67C23A', fontWeight: 600 }}>{r.status}</span></td>
+          <td><span style={{ color: CHARGE_STATUS_COLOR[r.status || ''] ?? '#909399', fontWeight: 600 }}>{r.status}</span></td>
           <td>
-            {r.status === 'DRAFT' && (
+            {CONVERTIBLE_CHARGE_STATUSES.includes(r.status || '') && (
               <button className={styles.btnSm} disabled={convertMutation.isPending} onClick={async () => { if (await confirm('Convert to Bill?')) convertMutation.mutate(r.id) }}>
                 Convert to Bill
               </button>
             )}
-            {r.status === 'BILLED' && <span style={{ fontSize: 11, color: '#909399' }}>Bill #{r.billId}</span>}
+            {r.billId != null && <span style={{ fontSize: 11, color: '#909399' }}>Bill #{r.billId}</span>}
           </td>
         </tr>
       ))}</tbody>

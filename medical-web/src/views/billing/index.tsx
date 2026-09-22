@@ -7,7 +7,7 @@ import { getAppointmentPage } from '../../api/appointment'
 import { getChargePage, convertCharge } from '../../api/charge'
 import { PageResult } from '../../types/common'
 import { BillForm, BillCreatePayload, AppointmentVO, AdjudicateForm, PayForm } from '../../types/entities'
-import { PAGE_SIZE, BILL_STATUS_COLOR, FEE_SCHEDULE } from '../../utils/labels'
+import { PAGE_SIZE, BILL_STATUS_COLOR, FEE_SCHEDULE, CONVERTIBLE_CHARGE_STATUSES } from '../../utils/labels'
 import styles from '../shared.module.css'
 
 const emptyForm: BillForm = { patientId: '', totalCharge: '', billType: 'PROFESSIONAL', cptCodes: '', icd10Codes: '', insurancePayerName: '', copayAmount: '' }
@@ -55,7 +55,7 @@ export default function Billing() {
     queryKey: ['charges', 'list', { size: 50 }],
     queryFn: () => getChargePage({ size: 50 }).then(r => r.records ?? []),
   })
-  const draftCharges = (charges ?? []).filter(c => c.status === 'DRAFT')
+  const draftCharges = (charges ?? []).filter(c => CONVERTIBLE_CHARGE_STATUSES.includes(c.status || ''))
 
   const selectAppointment = (apptId: string) => {
     setLinkedApptId(apptId)
