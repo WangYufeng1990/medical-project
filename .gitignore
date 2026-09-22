@@ -17,6 +17,9 @@ medical-web/.env.local
 # Local H2 file databases (dev seed data, regenerated on boot)
 data/
 medical-server/data/
+# …and the same files wherever H2_DB_PATH happens to point them
+*.mv.db
+*.trace.db
 
 # ==========================================
 # 3. 系统通用缓存
