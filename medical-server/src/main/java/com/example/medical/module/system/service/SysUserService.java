@@ -5,6 +5,7 @@ import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.system.dto.SysUserFormDTO;
 import com.example.medical.module.system.dto.SysUserVO;
+import com.example.medical.module.system.entity.EnabledStatus;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -82,7 +83,7 @@ public class SysUserService {
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
             user.setPasswordChangedAt(LocalDateTime.now());
         }
-        if (oldStatus != null && oldStatus == 1 && user.getStatus() != null && user.getStatus() == 0) {
+        if (EnabledStatus.isEnabled(oldStatus) && EnabledStatus.isDisabled(user.getStatus())) {
             user.setForceLogoutAfter(LocalDateTime.now());
         }
         sysUserRepository.save(user);

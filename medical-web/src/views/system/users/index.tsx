@@ -65,7 +65,9 @@ export default function Users() {
     <table className={styles.table}><thead><tr><th>ID</th><th>Username</th><th>Name</th><th>NPI</th><th>Last Login</th><th>Status</th><th></th></tr></thead>
       <tbody>{data.map(r => (<tr key={r.id} className={styles.clickableRow} onClick={() => openForm(r)}><td>{r.id}</td><td>{r.username}</td><td>{r.realName}</td><td>{r.npi}</td>
         <td style={{ fontSize: 12, color: '#909399' }}>{r.lastLoginTime ? r.lastLoginTime.substring(0, 16).replace('T', ' ') : 'Never'}</td>
-        <td>{r.lockedUntil && new Date(r.lockedUntil) > new Date()
+        <td>{r.status === 0
+          ? <span style={{ color: '#F56C6C', fontWeight: 600, fontSize: 12 }}>Disabled</span>
+          : r.lockedUntil && new Date(r.lockedUntil) > new Date()
           ? <span style={{ color: '#F56C6C', fontWeight: 600, fontSize: 12 }}>🔒 Locked</span>
           : <span style={{ color: '#67C23A', fontSize: 12 }}>Active</span>}</td>
         <td onClick={e => e.stopPropagation()}>
@@ -82,6 +84,11 @@ export default function Users() {
       <form onSubmit={handleSubmit} className={styles.formGrid}>
         {USER_FIELDS.map(f => (
           <div key={f} className={styles.formGroup}><label>{f}</label><input type={f==='password'?'password':'text'} value={form[f] ?? ''} onChange={e => setForm(prev => ({...prev,[f]:e.target.value}) as SysUserForm)} /></div>))}
+        <div className={styles.formGroup}><label>status</label>
+          <select value={form.status} onChange={e => setForm(prev => ({ ...prev, status: Number(e.target.value) }))}>
+            <option value={1}>Enabled</option>
+            <option value={0}>Disabled</option>
+          </select></div>
         <div className={styles.formActions}><button type="button" className={styles.btnSm} onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className={styles.btnPrimary} disabled={saveMutation.isPending}>Save</button></div></form></div></div>}
   </div>)
 }

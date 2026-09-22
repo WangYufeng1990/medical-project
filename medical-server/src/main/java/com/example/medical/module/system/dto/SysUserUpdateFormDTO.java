@@ -1,6 +1,7 @@
 package com.example.medical.module.system.dto;
 
 import com.example.medical.common.validation.ValidPassword;
+import com.example.medical.module.system.entity.EnabledStatus;
 import com.example.medical.module.system.entity.SysUser;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -42,7 +43,9 @@ public class SysUserUpdateFormDTO {
         user.setPhone(phone);
         user.setEmail(email);
         user.setGender(gender);
-        user.setStatus(status);
+        // Absent means "keep": this field decides whether the account may log in,
+        // and it used to be nulled by any update that left it out.
+        if (status != null) user.setStatus(EnabledStatus.parse(status).value());
         user.setNpi(npi);
         user.setStateLicenseNumber(stateLicenseNumber);
         user.setLicenseState(licenseState);

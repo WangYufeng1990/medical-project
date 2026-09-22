@@ -1,6 +1,7 @@
 package com.example.medical.module.system.dto;
 
 import com.example.medical.common.validation.ValidPassword;
+import com.example.medical.module.system.entity.EnabledStatus;
 import com.example.medical.module.system.entity.SysUser;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -46,7 +47,7 @@ public class SysUserFormDTO {
         user.setPhone(phone);
         user.setEmail(email);
         user.setGender(gender);
-        user.setStatus(status);
+        user.setStatus(EnabledStatus.parse(status).value());
         user.setNpi(npi);
         user.setStateLicenseNumber(stateLicenseNumber);
         user.setLicenseState(licenseState);
@@ -55,20 +56,5 @@ public class SysUserFormDTO {
         user.setCredentials(credentials);
         user.setSpecialty(specialty);
         return user;
-    }
-
-    public void applyTo(SysUser user) {
-        user.setRealName(realName);
-        user.setPhone(phone);
-        user.setEmail(email);
-        user.setGender(gender);
-        user.setStatus(status);
-        user.setNpi(npi);
-        user.setStateLicenseNumber(stateLicenseNumber);
-        user.setLicenseState(licenseState);
-        user.setDeaNumber(deaNumber);
-        user.setTaxonomyCode(taxonomyCode);
-        user.setCredentials(credentials);
-        user.setSpecialty(specialty);
     }
 }

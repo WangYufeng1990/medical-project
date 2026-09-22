@@ -1,5 +1,6 @@
 package com.example.medical.module.system.dto;
 
+import com.example.medical.module.system.entity.EnabledStatus;
 import com.example.medical.module.system.entity.SysMenu;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -33,7 +34,7 @@ public class SysMenuFormDTO {
         menu.setType(type);
         menu.setPermission(permission);
         menu.setSort(sort != null ? sort : 0);
-        menu.setStatus(status != null ? status : 1);
+        menu.setStatus(EnabledStatus.parse(status).value());
         return menu;
     }
 
@@ -46,6 +47,6 @@ public class SysMenuFormDTO {
         menu.setType(type);
         menu.setPermission(permission);
         menu.setSort(sort);
-        menu.setStatus(status);
+        if (status != null) menu.setStatus(EnabledStatus.parse(status).value());
     }
 }

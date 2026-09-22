@@ -25,5 +25,5 @@ public class SysRole extends BaseEntity {
     private String description;
 
     @Column(name = "status")
-    private Integer status;
+    private Integer status = EnabledStatus.ENABLED.value();
 }

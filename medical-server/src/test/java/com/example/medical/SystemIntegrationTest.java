@@ -370,5 +370,79 @@ class SystemIntegrationTest extends IntegrationTestSupport {
         // @PostConstruct ordering may vary; array may be empty or have entries
     }
 
+    @Test
+    @Order(31)
+    void createUser_unknownStatus_shouldReturn400() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "username", "status-probe",
+                "password", "Probe@123",
+                "realName", "Status Probe",
+                "status", 7
+        ));
+        MvcResult result = mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertEquals("Unknown status: 7",
+                objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
+    }
+
+    @Test
+    @Order(32)
+    void disabledUser_shouldBeRefusedAtLogin() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "username", "disabled-probe",
+                "password", "Probe@123",
+                "realName", "Disabled Probe",
+                "status", 0
+        ));
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        // The 0/1 flag is what AuthService reads, and nothing covered the refusal.
+        MvcResult refused = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("username", "disabled-probe", "password", "Probe@123"))))
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertEquals("Account is disabled",
+                objectMapper.readTree(refused.getResponse().getContentAsString()).get("message").asText());
+
+        long id = userIdByUsername("disabled-probe");
+        // An update that says nothing about the status must not re-enable it.
+        mockMvc.perform(put("/api/v1/users/" + id)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"realName\":\"Still Disabled\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("username", "disabled-probe", "password", "Probe@123"))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/users/" + id)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":1}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        assertNotNull(login("disabled-probe", "Probe@123"), "a re-enabled account should log in");
+    }
+
+    private long userIdByUsername(String username) throws Exception {
+        JsonNode records = objectMapper.readTree(mockMvc.perform(
+                        get("/api/v1/users").param("keyword", username)
+                                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString())
+                .get("data").get("records");
+        for (JsonNode row : records) {
+            if (username.equals(row.get("username").asText())) return row.get("id").asLong();
+        }
+        throw new AssertionError("user not found: " + username);
+    }
+
     // ──────────────────────────────────────────────────────
 }

@@ -84,12 +84,14 @@ expired tokens require re-login.
 
 All require `ADMIN` role.
 
+Account status vocabulary — `0` disabled / `1` enabled, shared with `sys_role` and `sys_menu`, in `EnabledStatus` (Round 51.14). A disabled account is refused at login (**403 `Account is disabled`**) and its sessions are revoked (`force_logout_after`). Sending any other value is **400 `Unknown status: 7`**; omitting it means *enabled* on create and *unchanged* on update — an update that leaves the field out never re-enables a switched-off account.
+
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=10&keyword=` | Paginated user list |
 | GET | `/{id}` | path | User detail (cached) |
-| POST | `/` | body: SysUserFormDTO | Create user |
-| PUT | `/{id}` | path + body | Update user (evicts cache) |
+| POST | `/` | body: SysUserFormDTO | Create user (`status` 1/0, absent = enabled) |
+| PUT | `/{id}` | path + body | Update user (evicts cache; absent `status` keeps the current one) |
 | PUT | `/{id}/unlock` | path | Unlock a locked account (clears failed attempts + lock expiry) |
 | DELETE | `/{id}` | path | Soft-delete user (evicts cache) |
 | GET | `/doctors` | — | Doctor list `DoctorOptionVO[]` `{id, username, realName}` (ADMIN,DOCTOR — used by appointment/prescription forms) |

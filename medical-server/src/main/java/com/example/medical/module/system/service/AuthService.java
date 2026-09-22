@@ -4,6 +4,7 @@ import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.system.dto.LoginRequest;
 import com.example.medical.module.system.dto.LoginResponse;
+import com.example.medical.module.system.entity.EnabledStatus;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -64,7 +65,7 @@ public class AuthService {
                     auditLoginFailure(null, request.getUsername(), "USER_NOT_FOUND");
                     return new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
                 });
-        if (user.getStatus() != null && user.getStatus() == 0) {
+        if (EnabledStatus.isDisabled(user.getStatus())) {
             auditLoginFailure(user.getId(), user.getUsername(), "ACCOUNT_DISABLED");
             throw new BusinessException(ResultCode.FORBIDDEN, "Account is disabled");
         }

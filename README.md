@@ -278,7 +278,7 @@ app:
 ## Checks before committing
 
 ```bash
-# Backend — 195 tests plus the build-environment guardrails (enforcer).
+# Backend — 200 tests plus the build-environment guardrails (enforcer).
 # Use `clean`: Surefire never deletes old reports, so `target/surefire-reports`
 # keeps counting test classes that no longer exist.
 cd medical-server && mvn clean verify

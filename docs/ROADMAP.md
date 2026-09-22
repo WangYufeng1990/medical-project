@@ -3768,6 +3768,43 @@ The second F4 vocabulary, and the one with the worse failure mode: `prescription
 
 **Remaining in F4:** `sys_user.status` (the 0/1 integers behind force-logout and the login rejection). Outside F4, and now visible in one place: the frontend still spells out status values inline — `claimStatus === 'DRAFT'/'SUBMITTED'/'PENDING'` in `views/billing` and `views/patient/bills`, plus the referral, prior-auth and refill vocabularies. Those are the same defect class as 51.12's ghost dropdown, and a frontend pass over `utils/labels.ts` is the natural follow-up. Also left standing from M8.5: `AppointmentService` writes to `ChargeRepository` directly (a module→module repository edge, not covered by `LayeringGuardTest`) — charge creation belongs behind `ChargeService`.
 
+### Round 51.14 — the enabled/disabled flag is named (F4, fourth of four) ✅
+
+`0` and `1` behind `status` on **three** tables (`sys_user`, `sys_role`, `sys_menu`) decided two real behaviours — `AuthService` refuses a disabled account's login and `SysUserService` forces its sessions out when it is switched off — while the payloads stored whatever integer arrived. `EnabledStatus` (DISABLED 0 / ENABLED 1) now owns it, with `value()`, `matches()`, `of()`, `parse()`, `isEnabled()` and `isDisabled()`.
+
+| Site | Change |
+|------|--------|
+| `SysUser` / `SysRole` / `SysMenu` | the field had no default, so a new instance was "neither state"; all three now start at `ENABLED` |
+| `SysUserFormDTO.toEntity` | stored the raw `Integer` → `EnabledStatus.parse(status).value()`: **400 `Unknown status: 7`** for anything but 0/1, and an absent value now means ENABLED — the default the role and menu payloads already applied, while the user payload stored `null` |
+| `SysRoleFormDTO` / `SysMenuFormDTO` `toEntity` | `status != null ? status : 1` → the same call |
+| `SysUserUpdateFormDTO` / `SysRoleFormDTO` / `SysMenuFormDTO` `applyTo` | **an update that omits the status keeps it.** It used to null it, and `null` is not disabled as far as `AuthService` is concerned — so any partial update silently re-enabled a switched-off account |
+| `AuthService.login` | `user.getStatus() != null && user.getStatus() == 0` → `EnabledStatus.isDisabled(...)` (the same 403 `Account is disabled`) |
+| `SysUserService.update` | the force-logout branch (`oldStatus == 1 && newStatus == 0`) reads through the enum |
+
+**The flag had no UI, and that is the finding.** `sys_user.status` was carried in the payload, never rendered and never editable: the only way to disable an account was a hand-written request, even though a disabled account is refused at login and force-logged-out mid-session. Worse, the users table's own **Status** column reads `lockedUntil` — the *lockout* state — so a disabled account was displayed as **Active**.
+
+Both are fixed in the smallest way that makes the vocabulary reachable:
+
+| File | Change |
+|------|--------|
+| `views/system/users` | the form gained a `status` select (Enabled / Disabled); the table's Status column now shows **Disabled** (red) before Locked/Active |
+| `SysUserFormDTO.applyTo` | deleted — nothing called it (`SysUserService.update` uses `SysUserUpdateFormDTO.applyTo`); it was the second dead method found by this run of F4, after `TransmitResultVO` |
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **200 tests, 0 failures** (195 → 200: 3 `EnabledStatusTest` cases + 2 system integration cases), enforcer clean |
+| Live, throwaway database | `status: 7` → **400 `Unknown status: 7`**; `status: 0` → 200 and that account's login → **403 `Account is disabled`**; no `status` at all → 200 and the account logs in |
+| The mid-session path | a probe user's token answered **403** (role-less, so forbidden) before being disabled and **401** afterwards — `force_logout_after` reached it. A `PUT` carrying only `realName` left the status at 0 (still 403) |
+| Browser, `/system/users` | the Add/Edit form has a `status` select (options `1:Enabled`, `0:Disabled`); creating `ui-disabled-probe` with **Disabled** stored `status = 0` and that account's login answered 403. Screenshots `/tmp/ui-shots/98-user-form-disabled-selected.png`, `99-users-status-column.png` |
+| Browser, list column | admin and doctor1 show **Active** (green); the three probe accounts show **Disabled** (red, `rgb(245,108,108)`). Reopening a disabled user shows the select on Disabled. 0 console errors, 0 failed API calls |
+| `npm run check` | clean (0 errors, the 4 pre-existing warnings) |
+
+**F4 is complete** — four vocabularies, four commits (`claim_status`, `rx_status`, `charge.status`, the 0/1 flag), each one verified against a running instance. What it bought, concretely: two endpoints that answered 200 with a silently-empty result now answer 400, a create path that stored whatever it was sent now rejects it, an update path that could re-enable a disabled account no longer can, and a login refusal that had no test now has one.
+
+**Left outside F4, deliberately:** the presentational vocabularies (consent, care plan, problem, referral, prior auth, refill request, `patient_auth.status`) and the frontend's inline status literals listed in 51.13. `sys_role.status` and `sys_menu.status` are now named but still enforced nowhere — nothing filters a disabled role or menu out of a login or a menu tree, which is a functional gap rather than a vocabulary one.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.

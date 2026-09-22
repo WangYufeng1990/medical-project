@@ -40,5 +40,5 @@ public class SysMenu extends BaseEntity {
     private Integer sort;
 
     @Column(name = "status")
-    private Integer status;
+    private Integer status = EnabledStatus.ENABLED.value();
 }

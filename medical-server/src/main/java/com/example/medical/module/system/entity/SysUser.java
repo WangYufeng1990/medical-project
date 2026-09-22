@@ -39,7 +39,7 @@ public class SysUser extends BaseEntity {
     private Integer gender;
 
     @Column(name = "status")
-    private Integer status;
+    private Integer status = EnabledStatus.ENABLED.value();
 
     @Column(name = "avatar")
     private String avatar;

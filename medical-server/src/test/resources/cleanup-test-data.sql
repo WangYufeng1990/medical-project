@@ -1,4 +1,4 @@
-DELETE FROM sys_user WHERE username IN ('doctor2', 'doctor3', 'revocation-probe', 'blank-pass-probe');
+DELETE FROM sys_user WHERE username IN ('doctor2', 'doctor3', 'revocation-probe', 'blank-pass-probe', 'status-probe', 'disabled-probe');
 DELETE FROM sys_user_role WHERE user_id NOT IN (1, 2);
 DELETE FROM sys_role WHERE role_code IN ('TEST_ROLE', 'NURSE');
 DELETE FROM sys_menu WHERE (menu_name LIKE 'Test%' OR menu_name = 'Updated Menu') AND id != 14;
