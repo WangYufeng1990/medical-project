@@ -3805,6 +3805,56 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 **Left outside F4, deliberately:** the presentational vocabularies (consent, care plan, problem, referral, prior auth, refill request, `patient_auth.status`) and the frontend's inline status literals listed in 51.13. `sys_role.status` and `sys_menu.status` are now named but still enforced nowhere — nothing filters a disabled role or menu out of a login or a menu tree, which is a functional gap rather than a vocabulary one.
 
+## Round 52 — module boundaries (plan, not started)
+
+> **Status: plan only, no code yet.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression.
+
+**The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
+
+| Metric | Now | Target |
+|--------|-----|--------|
+| module→module import pairs | 17 | unchanged — most are legitimate consumer edges |
+| …of those, **bidirectional (cycles)** | **4**: `appointment↔patient`, `billing↔patient`, `patient↔prescription`, `patient↔system` | **0** |
+| files importing **another module's repository** | **10 files, 17 import statements** | **0** |
+| cross-module `entity` imports | **14 imports** — 12 entity classes, 2 enums (`BillClaimStatus`, `AppointmentStatus`) | 0 entity classes; the enums stay, they are shared vocabulary on purpose (F4 #1) |
+
+The ten files: `AppointmentService`, `BillService`, `ChatService`, `AdtService`, `LabResultService`, `PatientCaseService`, `CdsService`, `PrescriptionService`, `QualityMeasureService`, `EmergencyAccessController`.
+
+Why this is worth a round rather than a style note: a repository **is** a module's persistence contract. Reaching into it from outside skips that module's rules — `PatientService.getById` audits the read (`@Auditable(module = "patient", action = "VIEW", phiAccess = true)`), and its list reads are scoped to the caller's patients; a raw `PatientRepository.findById` inside `BillService` does neither — and a cycle means neither module can be understood, tested or moved without the other. M8.4's own decision note deferred exactly this: *"Cycle governance belongs to M8.5/M8.6."*
+
+### Decisions taken before any code
+
+1. **Reads get an interface in `common/lookup/`; writes get the owning module's service.** Precedent: `common/security/AccountRevocationCheck`, added because `JwtClaimMapper` reading `SysUserRepository` closed a cycle, and `PatientService.exportPage` from 51.9. Two interfaces cover the read side: `PatientLookup` (`displayName`, `allergies`, `exists`) and `StaffLookup` (`realName`, `prescriberIdentity` → NPI + DEA). They must be **scope-free and audit-free** — they are display helpers; a lookup that starts answering 403, or writes an audit row per name resolved, is a behaviour change, not a refactor.
+2. **The portal keeps calling other modules' services.** `patient → appointment/billing/prescription/system` stays: it is a consumer relation, and once decision 1 lands those directions are one-way. Moving the six portal controllers into their own module was considered and rejected for the same reason M8.4 rejected it.
+3. **The guard lands first, with a shrinking allowlist.** The new `LayeringGuardTest` rules — no cross-module repository imports, no cross-module entity imports (enums excepted), no module cycles — arrive in 52.1 together with today's violations listed as `file → the slice that removes it`. The build stays green, a new violation is blocked from day one, and each slice deletes its own entries. 52.8 deletes the allowlist constant itself, so the mechanism cannot quietly become a permanent dumping ground.
+4. **The quality slice is a data-shape decision, not a rename.** `QualityMeasureService` walks `patientRepository.findAll()` and reads decrypted demographics, conditions and the latest observation per LOINC across three eCQM measures. It needs a narrow clinical read model — the one slice where the interface has to be designed rather than discovered.
+
+### Slices
+
+Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
+
+| # | Slice | Removes | Evidence to record |
+|---|-------|---------|--------------------|
+| 52.1 | Guard rules for cross-module repository/entity imports and import cycles, with the allowlist | — (introduces the metric) | the test prints the counts; `clean verify` green with the allowlist in place |
+| 52.2 | `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`; 5 repository imports | appointment / prescription / bill / chat lists show the same names; the CDS allergy path keeps its existing test |
+| 52.3 | `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository imports (appointment/chat/prescription → system) | prescription `prescriberNpi`/`deaNumber` unchanged; chat sender names unchanged |
+| 52.4 | `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system`; the last controller holding another module's repository (M8.6 leftover) | break-glass still 200 for a real patient and 404 for an unknown id |
+| 52.5 | Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | integration→patient, including the only cross-module **write** path | Mirth ADT and lab-results endpoints return the same ACK bodies; `MirthIntegrationTest` / `LabIntegrationTest` green |
+| 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | quality→patient | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |
+| 52.7 | The portal's 360 aggregate stops importing appointment/prescription repositories (`PatientCaseService`, `PatientDataExport`) | 3 repository imports and the last cross-module entity imports | the portal pages re-checked in the browser; the 360 payload compared field by field |
+| 52.8 | Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` | the allowlist mechanism itself | 17 → 0 repository imports, 4 → 0 cycles |
+
+**Docs**: this section gains each slice's completion record; `CLAUDE.md`'s structure rules gain the repository/entity/cycle clauses; `docs/backend-architecture-explained.md` Layer 3/4 gains the dependency direction (it currently shows the directory tree but not who may import whom).
+
+### Risks / trade-offs
+
+- **Scoping and auditing change by accident.** If a lookup implementation calls `PatientService.getById`, it inherits doctor-scope enforcement and PHI-read auditing. Each slice verifies its endpoint as **admin and as doctor** — the failure mode is a doctor suddenly seeing 403 where the list used to render.
+- **Extra queries.** `AppointmentService.toVO` resolves a patient and a doctor name per row. The implementations must stay single-column lookups; loading and decrypting a whole patient per row would turn one query into one-plus-decrypt-per-row. The list endpoints' query counts belong in the evidence.
+- **Transaction shape.** A cross-module service call inside a `@Transactional` method joins the caller's transaction, which is fine, but a `@Cacheable` or `@Auditable` service method adds side effects the repository call never had. 52.5 is the delicate one: two write paths move into the patient module, so its audit rows and entity lifecycle become the patient module's — the ACK bodies and the integration tests are the check.
+- **It is not free.** `common/lookup` adds an indirection over what is today a one-line repository call. It is worth it against four cycles and ten files that know another module's tables — but if a slice finds itself needing ten methods on an interface, that is the signal the *feature* belongs in the owning module instead. 52.6 is where that is most likely.
+
+**Not in this round:** the presentational status literals (the F4 leftovers listed in 51.13/51.14), enforcement of `sys_role.status` / `sys_menu.status`, and the dead formulary read surface — all still open and unaffected by this work.
+
 ## Round completion criteria
 
 1. All 9 batches ✅ with their own `mvn test` / `tsc` / `npm run build` evidence recorded above.
