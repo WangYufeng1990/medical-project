@@ -3814,9 +3814,11 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 | Metric | Now | Target |
 |--------|-----|--------|
 | module→module import pairs | 17 | unchanged — most are legitimate consumer edges |
-| …of those, **bidirectional (cycles)** | **4**: `appointment↔patient`, `billing↔patient`, `patient↔prescription`, `patient↔system` | **0** |
+| **import cycles** | **6** — four between two modules (`appointment↔patient`, `billing↔patient`, `patient↔prescription`, `patient↔system`) and two through three (`appointment↔system↔patient`, `patient↔prescription↔system`) | **0** |
 | files importing **another module's repository** | **10 files, 17 import statements** | **0** |
-| cross-module `entity` imports | **14 imports** — 12 entity classes, 2 enums (`BillClaimStatus`, `AppointmentStatus`) | 0 entity classes; the enums stay, they are shared vocabulary on purpose (F4 #1) |
+| cross-module `entity` imports | **18 imports** — 16 entity classes, 2 enums (`BillClaimStatus`, `AppointmentStatus`) | 0 entity classes; the enums stay, they are shared vocabulary on purpose (F4 #1) |
+
+**The plan's first numbers were low, and 52.1 is what corrected them.** The survey behind this section was a pairwise scan, which cannot see a cycle through three modules and missed four entity imports that are not paired with a repository import. The guard written in 52.1 found both on its first run — 4 → 6 cycles and 12 → 16 entity classes — before a single line of the refactor was written. That is the argument for landing the check first.
 
 The ten files: `AppointmentService`, `BillService`, `ChatService`, `AdtService`, `LabResultService`, `PatientCaseService`, `CdsService`, `PrescriptionService`, `QualityMeasureService`, `EmergencyAccessController`.
 
@@ -3829,6 +3831,34 @@ Why this is worth a round rather than a style note: a repository **is** a module
 3. **The guard lands first, with a shrinking allowlist.** The new `LayeringGuardTest` rules — no cross-module repository imports, no cross-module entity imports (enums excepted), no module cycles — arrive in 52.1 together with today's violations listed as `file → the slice that removes it`. The build stays green, a new violation is blocked from day one, and each slice deletes its own entries. 52.8 deletes the allowlist constant itself, so the mechanism cannot quietly become a permanent dumping ground.
 4. **The quality slice is a data-shape decision, not a rename.** `QualityMeasureService` walks `patientRepository.findAll()` and reads decrypted demographics, conditions and the latest observation per LOINC across three eCQM measures. It needs a narrow clinical read model — the one slice where the interface has to be designed rather than discovered.
 
+### Slice 52.1 ✅ — the guard, with an allowlist that can only shrink
+
+`LayeringGuardTest` gained four checks next to the M8.5 one:
+
+| Check | Rule |
+|-------|------|
+| `noModuleShouldImportAnotherModulesRepository` | a module may not import another module's `repository` package |
+| `crossModuleEntityImportsShouldBeEnumsOnly` | a module may not import another module's entity — **enums are exempt**, decided by reading the target file for an `enum` declaration, because `BillClaimStatus` and `AppointmentStatus` are vocabularies the neighbours legitimately share |
+| `modulesShouldNotFormImportCycles` | depth-first walk of the module import graph; reports every cycle, at any length, rotated so the alphabetically first module leads |
+| `allowlistsShouldNotContainFixedEntries` | every allowlisted violation must still exist |
+
+The third rule is what made 52.1 worth doing first: it found **two cycles through three modules** (`appointment↔system↔patient`, `patient↔prescription↔system`) that the pairwise survey behind the plan could not express, and the entity rule found four imports the survey missed. The plan above has been corrected to 6 and 16.
+
+**The allowlist can only shrink in one direction.** Each entry names the slice that will delete it, and the fourth check fails the build when an entry no longer describes a real violation — so fixing a violation without deleting its entry is itself a failure. 52.8 deletes the three constants.
+
+**Verification** — the guard was proved to bite, not merely to pass:
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **204 tests, 0 failures** (200 → 204: the guard went from 1 check to 5) |
+| Counts printed by every run | `repository imports 17 (allowlisted 17)`, `entity imports 16 (allowlisted 16)`, `module import cycle 6 (allowlisted 6)` |
+| Injected a cross-module repository import (`BillService` → `system.SysUserRepository`) | build **fails**, naming the file and the target |
+| Injected a cross-module entity import (`BillService` → `prescription.Prescription`) | build **fails**, and the cycle check additionally reported three new cycles, including a four-module one (`billing↔prescription↔system↔patient`) |
+| Injected an allowlist entry with no violation behind it | build **fails** with `these allowlist entries no longer describe a violation — delete them` |
+| Both injections reverted | `git status` clean; the suite is green from the committed tree |
+
+The injections were made in the working tree and reverted immediately; they are recorded here because a guard test's only value is the failure it produces.
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -3836,12 +3866,12 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 | # | Slice | Removes | Evidence to record |
 |---|-------|---------|--------------------|
 | 52.1 | Guard rules for cross-module repository/entity imports and import cycles, with the allowlist | — (introduces the metric) | the test prints the counts; `clean verify` green with the allowlist in place |
-| 52.2 | `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`; 5 repository imports | appointment / prescription / bill / chat lists show the same names; the CDS allergy path keeps its existing test |
-| 52.3 | `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository imports (appointment/chat/prescription → system) | prescription `prescriberNpi`/`deaNumber` unchanged; chat sender names unchanged |
-| 52.4 | `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system`; the last controller holding another module's repository (M8.6 leftover) | break-glass still 200 for a real patient and 404 for an unknown id |
-| 52.5 | Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | integration→patient, including the only cross-module **write** path | Mirth ADT and lab-results endpoints return the same ACK bodies; `MirthIntegrationTest` / `LabIntegrationTest` green |
-| 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | quality→patient | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |
-| 52.7 | The portal's 360 aggregate stops importing appointment/prescription repositories (`PatientCaseService`, `PatientDataExport`) | 3 repository imports and the last cross-module entity imports | the portal pages re-checked in the browser; the 360 payload compared field by field |
+| 52.2 | `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`, `patient↔prescription`; 5 repository **and 5 entity** imports | appointment / prescription / bill / chat lists show the same names; the CDS allergy path keeps its existing test |
+| 52.3 | `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository **and 3 entity** imports (appointment/chat/prescription → system); halves the two three-module cycles | prescription `prescriberNpi`/`deaNumber` unchanged; chat sender names unchanged |
+| 52.4 | `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system` and the rest of `appointment↔system↔patient`; 1 repository import — the last controller holding another module's repository (M8.6 leftover) | break-glass still 200 for a real patient and 404 for an unknown id |
+| 52.5 | Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | 3 repository **and 3 entity** imports (integration→patient), including the only cross-module **write** path | Mirth ADT and lab-results endpoints return the same ACK bodies; `MirthIntegrationTest` / `LabIntegrationTest` green |
+| 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | 2 repository **and 2 entity** imports (quality→patient) | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |
+| 52.7 | The portal's 360 aggregate stops importing appointment/prescription repositories (`PatientCaseService`, `PatientDataExport`) | 3 repository **and 3 entity** imports, the last of both; finishes `patient↔prescription↔system` | the portal pages re-checked in the browser; the 360 payload compared field by field |
 | 52.8 | Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` | the allowlist mechanism itself | 17 → 0 repository imports, 4 → 0 cycles |
 
 **Docs**: this section gains each slice's completion record; `CLAUDE.md`'s structure rules gain the repository/entity/cycle clauses; `docs/backend-architecture-explained.md` Layer 3/4 gains the dependency direction (it currently shows the directory tree but not who may import whom).

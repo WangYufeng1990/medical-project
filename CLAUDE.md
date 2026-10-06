@@ -22,7 +22,7 @@ HIPAA-compliant medical practice management system. Spring Boot backend + React 
 | Validation | Jakarta Validation + Hibernate Validator | bundled with Spring Boot |
 | JSON | Jackson | bundled with Spring Boot |
 | Util | Lombok | latest |
-| Testing | JUnit 5 + Spring Boot Test | 200 tests (149 integration + 51 unit) |
+| Testing | JUnit 5 + Spring Boot Test | 204 tests (153 integration + 51 unit) |
 | Frontend | React 18 + TypeScript + Vite 5 | medical-web/ |
 
 **Explicitly excluded (DO NOT introduce):**
@@ -102,6 +102,7 @@ medical-project/
 - `common/` and `security/` must never import `module.*` — the shared kernel is depended upon, it does not depend. When a cross-cutting component needs module data, invert it with an interface in `common/security` (see `DoctorPatientScopeProvider`, `AccountRevocationCheck`); `LayeringGuardTest` fails the build otherwise.
 - DTOs go in the module's own `dto/` directory, not a global one.
 - JPA repositories live in each module's `repository/` directory. Naming: `{Entity}Repository`.
+- **A module never imports another module's `repository` or `entity` package, and the module import graph has no cycles** — a repository is that module's persistence contract (its audit and scope rules live behind its service), and a cycle means neither module can be understood or moved alone. Status **enums** are the deliberate exception: `BillClaimStatus` / `AppointmentStatus` are shared vocabulary. `LayeringGuardTest` enforces all of it; Round 52 is working the current violations down, and its allowlist only shrinks — a violation that is not listed fails the build, and so does a listed entry whose violation has been fixed.
 
 ---
 
