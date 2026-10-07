@@ -1,7 +1,6 @@
 package com.example.medical.module.prescription.service;
 
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.module.prescription.dto.CdsWarning;
 import com.example.medical.module.prescription.entity.DrugAllergyClass;
 import com.example.medical.module.prescription.entity.DrugInteraction;
@@ -29,7 +28,7 @@ public class CdsService {
 
     private final DrugInteractionRepository drugInteractionRepository;
     private final DrugAllergyClassRepository drugAllergyClassRepository;
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
 
@@ -101,11 +100,10 @@ public class CdsService {
         List<CdsWarning> warnings = new ArrayList<>();
         if (items == null || items.isEmpty()) return warnings;
 
-        Patient patient = patientRepository.findById(patientId).orElse(null);
-        if (patient == null || patient.getAllergies() == null
-                || patient.getAllergies().isBlank()) return warnings;
+        String recorded = patientLookup.allergies(patientId).orElse(null);
+        if (recorded == null || recorded.isBlank()) return warnings;
 
-        String allergies = patient.getAllergies().toLowerCase();
+        String allergies = recorded.toLowerCase();
 
         List<String> rxnormCodes = items.stream()
                 .map(PrescriptionItem::getRxnormCode)

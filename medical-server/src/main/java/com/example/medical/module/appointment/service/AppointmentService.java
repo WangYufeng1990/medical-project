@@ -3,13 +3,12 @@ package com.example.medical.module.appointment.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
 import com.example.medical.module.appointment.entity.Appointment;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +32,7 @@ public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
     private final com.example.medical.module.appointment.repository.AppointmentLockRepository appointmentLockRepository;
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final SysUserRepository sysUserRepository;
     private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
     private final DoctorPatientScope doctorPatientScope;
@@ -205,8 +204,7 @@ public class AppointmentService {
     }
 
     private AppointmentVO toVO(Appointment a) {
-        String patientName = patientRepository.findById(a.getPatientId())
-                .map(Patient::getName).orElse("");
+        String patientName = patientLookup.displayName(a.getPatientId()).orElse("");
         String doctorName = sysUserRepository.findById(a.getDoctorId())
                 .map(SysUser::getRealName).orElse("");
         return AppointmentVO.fromEntity(a, patientName, doctorName);

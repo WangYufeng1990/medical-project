@@ -1,13 +1,12 @@
 package com.example.medical.module.chat.service;
 
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageVO;
 import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.system.entity.SysUser;
 import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +30,7 @@ public class ChatService {
     public static final String PATIENT = "PATIENT";
 
     private final MessageRepository messageRepository;
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final SysUserRepository sysUserRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -116,8 +115,7 @@ public class ChatService {
             return sysUserRepository.findById(userId)
                     .map(SysUser::getRealName).orElse("Unknown");
         }
-        return patientRepository.findById(userId)
-                .map(Patient::getName).orElse("Unknown");
+        return patientLookup.displayName(userId).orElse("Unknown");
     }
 
     private record Party(String type, Long id) {}

@@ -3805,9 +3805,9 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 **Left outside F4, deliberately:** the presentational vocabularies (consent, care plan, problem, referral, prior auth, refill request, `patient_auth.status`) and the frontend's inline status literals listed in 51.13. `sys_role.status` and `sys_menu.status` are now named but still enforced nowhere — nothing filters a disabled role or menu out of a login or a menu tree, which is a functional gap rather than a vocabulary one.
 
-## Round 52 — module boundaries (plan, not started)
+## Round 52 — module boundaries (in progress)
 
-> **Status: plan only, no code yet.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression.
+> **Status: 52.1–52.2 landed, 52.3–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings.
 
 **The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
 
@@ -3859,6 +3859,31 @@ The third rule is what made 52.1 worth doing first: it found **two cycles throug
 
 The injections were made in the working tree and reverted immediately; they are recorded here because a guard test's only value is the failure it produces.
 
+### Slice 52.2 ✅ — `PatientLookup`, and the five reads that closed three cycles
+
+`common/lookup/PatientLookup` answers two questions — `displayName(id)` and `allergies(id)` — and `module/patient/service/PatientFieldLookup` answers them from the patient module's own repository, through two new single-column reads (`PatientRepository.findNameById`, `findAllergiesById`). The five call sites the plan named now use it: `AppointmentService.toVO`, `BillService.toVO`, `PrescriptionService.toVO`, `ChatService.resolveName`, `CdsService.checkAllergyContraindications`. Each keeps the fallback it had (`""`, `"Unknown"`, or "no allergies recorded"), so nothing downstream can tell the difference.
+
+**Scope-free and audit-free is the whole point of the interface, and it is now the interface's documented contract.** `PatientService.getById` is the obvious implementation and the wrong one: it calls `doctorPatientScope.requireAccess` (a doctor would start seeing 403 where a list used to render) and it carries `@Auditable(module = "patient", action = "VIEW", phiAccess = true)` (one PHI-read audit row per row of every list).
+
+**`allergies` is encrypted too, which turned this from a rename into a measurement.** Both fields behind the lookup carry `@Convert(converter = AesAttributeConverter.class)` (`Patient.name`, `Patient.allergies`), so the single-column read only returns usable values if Hibernate applies the converter to a scalar JPQL select. Had it not, the appointment/bill/prescription lists would have rendered ciphertext — and `CdsService` would have compared ciphertext against allergy-class names, silently deleting every `DRUG_ALLERGY` warning. That is why the pre-change instance was probed **before** a line was written, and why the comparison below is a byte comparison rather than "the page still works".
+
+**Order followed CLAUDE.md §8b**, since the running instance was the "before" half: probe the live pre-change instance → stop it → `mvn clean verify` → start the new build → probe again.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **204 tests, 0 failures**, `BUILD SUCCESS` |
+| Counts printed by every run | `repository 12 (allowlisted 12)`, `entity 11 (allowlisted 11)`, `module import cycle 3 (allowlisted 3)` — down from **17 / 16 / 6** as planned |
+| Cycles gone | `appointment ↔ patient`, `billing ↔ patient`, `patient ↔ prescription`. Left, each still tagged to its slice: `appointment ↔ system ↔ patient` (52.3+52.4), `patient ↔ prescription ↔ system` (52.3+52.7), `patient ↔ system` (52.4) |
+| No wire change, both roles | 13 response bodies captured from the pre-change instance and from the new build are **byte-identical**: `/appointments`, `/prescriptions`, `/bills`, `/messages/conversations` plus `/patients`, as **admin** and as **doctor1**, and `POST /cds/check` for patient 100 (allergic to Penicillin) and 102 (no allergy). The names are plaintext in both runs — this is the measurement that the encrypted scalar read decrypts |
+| CDS allergy path | identical three warnings, unchanged: `DRUG_DRUG/minor`, `DRUG_ALLERGY/contraindicated` (`Amoxicillin vs Penicillin`), `DRUG_ALLERGY/contraindicated` (cross-reactive); patient 102 still `passed: true, warnings: []` |
+| Names in the browser | `/appointments` (5 rows), `/prescriptions` (3), `/billing` (4 bills + 2 charges) render `James Anderson` / `Maria Garcia` as **admin** and as **doctor1**; the chat sidebar renders `James Anderson`, `Maria Garcia` for doctor1 (admin has no conversations) — 0 console errors. Screenshots `/tmp/ui-shots/100-52.2-{admin,doctor}-{appointments,prescriptions,billing,chat}.png` |
+| Query shape | the appointment list now issues `select p1_0.name from patient p1_0 where (p1_0.is_deleted = 0) and p1_0.id=?` **once per row** — the same one query per row as before, but one column where the repository call selected all 33 (`ssn`, `medical_history`, `allergies` included) and decrypted every one of them |
+| Audit rows | audit total **296 before and 296 after** rendering 18 rows' worth of names (11 appointments, 4 bills, 3 prescriptions); the newest rows are `auth/LOGIN_SUCCESS` only — the lookup writes no PHI-read row |
+
+**Not in this slice, deliberately:** the doctor name on the same rows (`AppointmentService:205`, `ChatService:114`, `PrescriptionService:191`) still comes from `SysUserRepository` — that is 52.3's `StaffLookup`, and the allowlist entries for it are still listed.
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -3866,7 +3891,7 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 | # | Slice | Removes | Evidence to record |
 |---|-------|---------|--------------------|
 | 52.1 | Guard rules for cross-module repository/entity imports and import cycles, with the allowlist | — (introduces the metric) | the test prints the counts; `clean verify` green with the allowlist in place |
-| 52.2 | `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`, `patient↔prescription`; 5 repository **and 5 entity** imports | appointment / prescription / bill / chat lists show the same names; the CDS allergy path keeps its existing test |
+| 52.2 | ✅ `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`, `patient↔prescription`; 5 repository **and 5 entity** imports (17→12, 16→11, 6→3) | the four lists compare **byte-identical** as admin and doctor, and the CDS allergy warnings are unchanged; query reduced to one column per row; 296 → 296 audit rows |
 | 52.3 | `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository **and 3 entity** imports (appointment/chat/prescription → system); halves the two three-module cycles | prescription `prescriberNpi`/`deaNumber` unchanged; chat sender names unchanged |
 | 52.4 | `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system` and the rest of `appointment↔system↔patient`; 1 repository import — the last controller holding another module's repository (M8.6 leftover) | break-glass still 200 for a real patient and 404 for an unknown id |
 | 52.5 | Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | 3 repository **and 3 entity** imports (integration→patient), including the only cross-module **write** path | Mirth ADT and lab-results endpoints return the same ACK bodies; `MirthIntegrationTest` / `LabIntegrationTest` green |

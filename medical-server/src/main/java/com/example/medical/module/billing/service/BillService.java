@@ -3,14 +3,13 @@ package com.example.medical.module.billing.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.billing.dto.BillFormDTO;
 import com.example.medical.module.billing.dto.BillVO;
 import com.example.medical.module.billing.entity.Bill;
 import com.example.medical.module.billing.entity.BillClaimStatus;
 import com.example.medical.module.billing.repository.BillRepository;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,7 +31,7 @@ import org.springframework.data.domain.Pageable;
 public class BillService {
 
     private final BillRepository billRepository;
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final DoctorPatientScope doctorPatientScope;
 
     public Page<BillVO> page(long page, long size, String claimStatus, Long patientId) {
@@ -55,8 +54,7 @@ public class BillService {
     }
 
     public BillVO toVO(Bill b) {
-        String patientName = patientRepository.findById(b.getPatientId())
-                .map(Patient::getName).orElse("");
+        String patientName = patientLookup.displayName(b.getPatientId()).orElse("");
         return BillVO.fromEntity(b, patientName);
     }
 

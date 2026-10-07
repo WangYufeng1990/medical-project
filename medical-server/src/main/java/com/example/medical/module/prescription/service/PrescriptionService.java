@@ -3,9 +3,8 @@ package com.example.medical.module.prescription.service;
 import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.security.DoctorPatientScope;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionItemVO;
 import com.example.medical.module.prescription.dto.PrescriptionVO;
@@ -36,7 +35,7 @@ public class PrescriptionService {
 
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final SysUserRepository sysUserRepository;
     private final CdsService cdsService;
     private final com.example.medical.module.prescription.repository.CdsOverrideRepository cdsOverrideRepository;
@@ -191,8 +190,7 @@ public class PrescriptionService {
     }
 
     private PrescriptionVO toVO(Prescription p) {
-        String patientName = patientRepository.findById(p.getPatientId())
-                .map(Patient::getName).orElse("");
+        String patientName = patientLookup.displayName(p.getPatientId()).orElse("");
         String doctorName = sysUserRepository.findById(p.getDoctorId())
                 .map(SysUser::getRealName).orElse("");
         List<PrescriptionItemVO> items = prescriptionItemRepository
