@@ -151,7 +151,15 @@ medical-project/
 - **Exception**: Reference/lookup tables populated by seed data (LoincCatalog, DrugInteraction, DrugAllergyClass, PharmacyDirectory, QualityMeasure, QualityResult) do not extend BaseEntity. These are managed via DataInitializer, not user CRUD, so soft-delete and optimistic locking are unnecessary.
 
 ### 8. Testing
-- Write tests only when asked.
+- **A new feature is built test-first: the plan names the tests before anyone writes the code.** The
+  Plan Agent's output lists the test class and what each test asserts, and the first implementation
+  step is the failing test — write it, watch it fail for the right reason, then make it pass. A record
+  of that red state belongs in the feature's `docs/ROADMAP.md` entry, the way 52.1 recorded that its
+  guard fails when a violation is injected: a test that has never been red proves nothing about the
+  code, only that it compiles.
+- "Write tests only when asked" above is about not scattering tests over work that changes nothing
+  observable — a rename, a comment, a slice whose whole point is that behaviour is identical (52.2's
+  byte-identical payloads, 52.3's ciphertext lengths). It does not exempt a new feature.
 - Happy path + one edge case + one failure mode. No more.
 - Use `@WebMvcTest` for controllers, `@DataJpaTest` for repositories.
 - **Read test results with `mvn clean test`, not `mvn test`** — Surefire never deletes old
@@ -213,12 +221,14 @@ Every feature/round follows a three-phase workflow. These sections define the sc
 2. **Files to Create / Modify** — path + what + why
 3. **Docs to Update** — ROADMAP always, API-LAYOUT if endpoints change
 4. **Data Contract Trace** — every field in every API request: where does it come from? Is it in the form?
-5. **Execution Order** — numbered with dependencies
-6. **Risks / Trade-offs**
+5. **Tests to Write First** — the test class(es), what each test asserts, and what it should fail with before the code exists. A plan that cannot name one is not ready to implement.
+6. **Execution Order** — numbered with dependencies, starting with the failing test
+7. **Risks / Trade-offs**
 
 Key rules:
 - Trace every field from UI form → API payload. If the backend needs a field the form doesn't collect, you MUST add it to the form. Never assume empty defaults are safe.
 - When async calls modify form state, specify the state update strategy (functional `setForm(prev => ...)`, stale-response guards).
+- New features are planned test-first (§8): the slice's `docs/ROADMAP.md` row says which test fails without it, and the record of that red state goes with the evidence. A refactor or a slice whose whole point is "no observable change" is verified by comparison instead — that is measurement, not a test, and §8 says which is which.
 
 ### Frontend Agent (Implement)
 
