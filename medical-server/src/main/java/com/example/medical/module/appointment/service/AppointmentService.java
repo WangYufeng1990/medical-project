@@ -4,13 +4,12 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.lookup.PatientLookup;
+import com.example.medical.common.lookup.StaffLookup;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
 import com.example.medical.module.appointment.entity.Appointment;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
-import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,7 +32,7 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final com.example.medical.module.appointment.repository.AppointmentLockRepository appointmentLockRepository;
     private final PatientLookup patientLookup;
-    private final SysUserRepository sysUserRepository;
+    private final StaffLookup staffLookup;
     private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
     private final DoctorPatientScope doctorPatientScope;
 
@@ -205,8 +204,7 @@ public class AppointmentService {
 
     private AppointmentVO toVO(Appointment a) {
         String patientName = patientLookup.displayName(a.getPatientId()).orElse("");
-        String doctorName = sysUserRepository.findById(a.getDoctorId())
-                .map(SysUser::getRealName).orElse("");
+        String doctorName = staffLookup.realName(a.getDoctorId()).orElse("");
         return AppointmentVO.fromEntity(a, patientName, doctorName);
     }
 }

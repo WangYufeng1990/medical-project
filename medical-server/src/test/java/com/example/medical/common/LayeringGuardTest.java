@@ -56,35 +56,27 @@ class LayeringGuardTest {
      * the list shrink instead of rot. Slice 52.8 deletes the three constants.
      */
     private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries(
-            Map.entry("module/appointment/service/AppointmentService.java → system.SysUserRepository", "52.3"),
-            Map.entry("module/chat/service/ChatService.java → system.SysUserRepository", "52.3"),
             Map.entry("module/integration/service/AdtService.java → patient.PatientRepository", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.ObservationRepository", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.PatientRepository", "52.5"),
             Map.entry("module/patient/service/PatientCaseService.java → appointment.AppointmentRepository", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItemRepository", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionRepository", "52.7"),
-            Map.entry("module/prescription/service/PrescriptionService.java → system.SysUserRepository", "52.3"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.ObservationRepository", "52.6"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.PatientRepository", "52.6"),
             Map.entry("module/system/controller/EmergencyAccessController.java → patient.PatientRepository", "52.4"));
 
     private static final Map<String, String> PENDING_ENTITY = Map.ofEntries(
-            Map.entry("module/appointment/service/AppointmentService.java → system.SysUser", "52.3"),
-            Map.entry("module/chat/service/ChatService.java → system.SysUser", "52.3"),
             Map.entry("module/integration/service/AdtService.java → patient.Patient", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.Observation", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.Patient", "52.5"),
             Map.entry("module/patient/service/PatientCaseService.java → appointment.Appointment", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.Prescription", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItem", "52.7"),
-            Map.entry("module/prescription/service/PrescriptionService.java → system.SysUser", "52.3"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.Observation", "52.6"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.Patient", "52.6"));
 
     private static final Map<String, String> PENDING_CYCLE = Map.of(
-            "appointment ↔ system ↔ patient", "52.3 + 52.4",
-            "patient ↔ prescription ↔ system", "52.3 + 52.7",
             "patient ↔ system", "52.4");
 
     @Test

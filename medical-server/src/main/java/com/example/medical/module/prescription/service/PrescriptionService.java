@@ -4,6 +4,8 @@ import com.example.medical.common.audit.Auditable;
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
 import com.example.medical.common.lookup.PatientLookup;
+import com.example.medical.common.lookup.PrescriberIdentity;
+import com.example.medical.common.lookup.StaffLookup;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.prescription.dto.PrescriptionFormDTO;
 import com.example.medical.module.prescription.dto.PrescriptionItemVO;
@@ -13,8 +15,6 @@ import com.example.medical.module.prescription.entity.Prescription;
 import com.example.medical.module.prescription.entity.PrescriptionItem;
 import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
 import com.example.medical.module.prescription.repository.PrescriptionRepository;
-import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -36,7 +36,7 @@ public class PrescriptionService {
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final PatientLookup patientLookup;
-    private final SysUserRepository sysUserRepository;
+    private final StaffLookup staffLookup;
     private final CdsService cdsService;
     private final com.example.medical.module.prescription.repository.CdsOverrideRepository cdsOverrideRepository;
     private final DoctorPatientScope doctorPatientScope;
@@ -98,10 +98,10 @@ public class PrescriptionService {
         // Prescriber identity is server-derived (Review III C5): doctorId, NPI
         // and DEA come from the authenticated user's profile, never the client.
         p.setDoctorId(loginUser.getUserId());
-        com.example.medical.module.system.entity.SysUser prescriber =
-                sysUserRepository.findById(loginUser.getUserId()).orElse(null);
-        p.setPrescriberNpi(prescriber != null ? prescriber.getNpi() : null);
-        p.setDeaNumber(prescriber != null ? prescriber.getDeaNumber() : null);
+        PrescriberIdentity prescriber =
+                staffLookup.prescriberIdentity(loginUser.getUserId()).orElse(null);
+        p.setPrescriberNpi(prescriber != null ? prescriber.npi() : null);
+        p.setDeaNumber(prescriber != null ? prescriber.deaNumber() : null);
         p.setDiagnosis(dto.getDiagnosis());
         p.setIcd10Codes(dto.getIcd10Codes());
         p.setPrescriptionDate(dto.getPrescriptionDate() != null
@@ -191,8 +191,7 @@ public class PrescriptionService {
 
     private PrescriptionVO toVO(Prescription p) {
         String patientName = patientLookup.displayName(p.getPatientId()).orElse("");
-        String doctorName = sysUserRepository.findById(p.getDoctorId())
-                .map(SysUser::getRealName).orElse("");
+        String doctorName = staffLookup.realName(p.getDoctorId()).orElse("");
         List<PrescriptionItemVO> items = prescriptionItemRepository
                 .findByPrescriptionId(p.getId())
                 .stream().map(PrescriptionItemVO::fromEntity).toList();

@@ -1,5 +1,6 @@
 package com.example.medical.module.system.repository;
 
+import com.example.medical.common.lookup.PrescriberIdentity;
 import com.example.medical.module.system.entity.SysUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -47,4 +48,17 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long>, JpaSpec
             "WHERE r.role_code = 'DOCTOR' AND u.status = 1 AND u.is_deleted = 0 " +
             "ORDER BY u.real_name", nativeQuery = true)
     List<SysUser> findDoctors();
+
+    /**
+     * Reads behind {@link com.example.medical.common.lookup.StaffLookup}: a name,
+     * and the pair a prescription is signed with. Loading the account to reach
+     * them would carry the password hash and every other field with it; DEA is
+     * encrypted, so the signing pair is fetched through the converter.
+     */
+    @Query("SELECT u.realName FROM SysUser u WHERE u.id = :id")
+    Optional<String> findRealNameById(@Param("id") Long id);
+
+    @Query("SELECT new com.example.medical.common.lookup.PrescriberIdentity(u.npi, u.deaNumber) "
+            + "FROM SysUser u WHERE u.id = :id")
+    Optional<PrescriberIdentity> findPrescriberIdentityById(@Param("id") Long id);
 }

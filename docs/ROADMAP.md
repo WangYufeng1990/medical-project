@@ -3807,7 +3807,7 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 ## Round 52 — module boundaries (in progress)
 
-> **Status: 52.1–52.2 landed, 52.3–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings.
+> **Status: 52.1–52.3 landed, 52.4–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings.
 
 **The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
 
@@ -3884,6 +3884,32 @@ The injections were made in the working tree and reverted immediately; they are 
 
 **Not in this slice, deliberately:** the doctor name on the same rows (`AppointmentService:205`, `ChatService:114`, `PrescriptionService:191`) still comes from `SysUserRepository` — that is 52.3's `StaffLookup`, and the allowlist entries for it are still listed.
 
+### Slice 52.3 ✅ — `StaffLookup`, and the accounts the lists were loading whole
+
+`common/lookup/StaffLookup` answers `realName(id)` and `prescriberIdentity(id)` — the latter returning the `PrescriberIdentity(npi, deaNumber)` record a prescription is signed with — and `module/system/service/StaffFieldLookup` answers both from `SysUserRepository`'s two new narrow reads. The three call sites the plan named now use it: `AppointmentService.toVO`, `ChatService.resolveName` (the STAFF branch), `PrescriptionService` twice — the doctor name in `toVO` and the server-derived prescriber identity in `create`.
+
+**`prescriberIdentity` is one query, not two, and the reason is worth stating.** The obvious implementation composes two single-column reads, but "the account row exists" and "the DEA column is non-null" are then indistinguishable, and an account with an NPI but no DEA would silently lose its NPI. A JPQL constructor expression (`SELECT new ...PrescriberIdentity(u.npi, u.deaNumber)`) keeps the row-exists semantics the old `findById(...).orElse(null)` had — at the cost of relying on the converter being applied to *constructor arguments*, a mechanism 52.2 had not measured. So it was measured, below.
+
+**`deaNumber` is encrypted, and nothing exposes it for reading.** `PrescriptionVO` carries `prescriberNpi` but not the DEA, the NCPDP draft payload carries the pharmacy NPI only, and the stored column is ciphertext — so a defect here would be invisible to every existing surface: a prescription signed with `v1:...` instead of a DEA number. The check therefore reads the stored ciphertext of a row created **before** the change and one created **after**: both must be one encryption of a 9-character string. A value that had passed through the lookup as ciphertext would have been encrypted a second time and come out roughly twice as long.
+
+Chat's STAFF branch needed a conversation to exist at all: the seed data has none (all eight seeded messages are PATIENT ↔ STAFF), so this slice's probe sends one staff-to-staff message first, in both phases, and reads it back as both parties.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **204 tests, 0 failures**, `BUILD SUCCESS` |
+| Counts printed by every run | `repository 9 (allowlisted 9)`, `entity 8 (allowlisted 8)`, `module import cycle 1 (allowlisted 1)` — from **12 / 11 / 3** |
+| Cycles gone | `appointment ↔ system ↔ patient` and `patient ↔ prescription ↔ system` both closed, so the round's two three-module cycles are gone. Left: `patient ↔ system` (52.4) |
+| No wire change, both roles | 14 response bodies captured from the pre-change instance and from the new build: `/appointments`, `/prescriptions`, `/bills`, `/messages/conversations` as **admin** and as **doctor1**, the doctor profile read, the created prescription, and the CDS allergy check. All are byte-identical apart from fields that must move — the new row's `id`, its item `id`, and `lastLoginTime` |
+| Prescriber identity | the same create request is signed identically before and after: `prescriberNpi 1234567890`, `doctorName Dr. Sarah Mitchell`, `patientName James Anderson`; `/users/me` still reports `npi 1234567890`, `deaNumberLast4 ****4567` in both runs |
+| **DEA decryption (the measured risk)** | H2 console, via the app's own datasource: `LENGTH(dea_number)` is **76 for the pre-change row 303, 76 for the post-change row 335, and 76 for `sys_user.dea_number` of the prescriber** — one encryption of the same 9-character value each, with distinct IVs (`01e…`, `014…`, `017…`). A ciphertext pass-through would have produced a ~111-character double encryption |
+| SQL shape | since the restart: **26** `select su1_0.real_name from sys_user …` (one column per name resolved), **1** `select su1_0.npi, su1_0.dea_number from sys_user …` (the one create), and **4** whole-account reads — three `username=?` logins and one `id=?` profile read. The lists no longer load the account, whose 25 columns include the **password hash** |
+| Names in the browser | `/appointments` (5 rows) and `/prescriptions` (5) render `Dr. Sarah Mitchell` in the Doctor column as **admin** and as **doctor1**; the chat sidebar shows `Dr. Sarah Mitchell` for admin and `Administrator`, `James Anderson`, `Maria Garcia` for doctor1 — the STAFF branch is visible, not just covered. 0 console errors. Screenshots `/tmp/ui-shots/103-52.3-{admin,doctor}-*.png` |
+| CDS allergy path | unchanged (52.2 regression): the same three warnings for patient 100 in both runs |
+
+**Found while measuring, not fixed here.** `LayeringGuardTest` matches `import` statements, so a cross-module reference written fully qualified is invisible to it. `AppointmentService` holds `com.example.medical.module.billing.repository.ChargeRepository` (line 37, used at 150/158 with `billing.entity.Charge` and `billing.entity.ChargeStatus`) with no import at all — a real appointment → billing repository edge that no count above includes, and one that `52.8`'s "0 imports, 0 cycles" would not catch. This slice removed the two FQN references it owned (`PrescriptionService`'s `system.entity.SysUser`); the guard gap itself belongs to its own slice.
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -3892,7 +3918,7 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 |---|-------|---------|--------------------|
 | 52.1 | Guard rules for cross-module repository/entity imports and import cycles, with the allowlist | — (introduces the metric) | the test prints the counts; `clean verify` green with the allowlist in place |
 | 52.2 | ✅ `PatientLookup` for the patient's name and allergies — `AppointmentService:208`, `ChatService:119`, `PrescriptionService:194`, `CdsService:104`, `BillService:58` | `appointment↔patient`, `billing↔patient`, `patient↔prescription`; 5 repository **and 5 entity** imports (17→12, 16→11, 6→3) | the four lists compare **byte-identical** as admin and doctor, and the CDS allergy warnings are unchanged; query reduced to one column per row; 296 → 296 audit rows |
-| 52.3 | `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository **and 3 entity** imports (appointment/chat/prescription → system); halves the two three-module cycles | prescription `prescriberNpi`/`deaNumber` unchanged; chat sender names unchanged |
+| 52.3 | ✅ `StaffLookup` for the clinician's name and prescriber identity — `AppointmentService:210`, `ChatService:116`, `PrescriptionService:103/196` | 3 repository **and 3 entity** imports (appointment/chat/prescription → system); both three-module cycles closed (12→9, 11→8, 3→1) | prescription `prescriberNpi`/`deaNumber` unchanged — DEA confirmed decrypted at 76-char ciphertext; chat sender names unchanged in API and UI |
 | 52.4 | `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system` and the rest of `appointment↔system↔patient`; 1 repository import — the last controller holding another module's repository (M8.6 leftover) | break-glass still 200 for a real patient and 404 for an unknown id |
 | 52.5 | Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | 3 repository **and 3 entity** imports (integration→patient), including the only cross-module **write** path | Mirth ADT and lab-results endpoints return the same ACK bodies; `MirthIntegrationTest` / `LabIntegrationTest` green |
 | 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | 2 repository **and 2 entity** imports (quality→patient) | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |

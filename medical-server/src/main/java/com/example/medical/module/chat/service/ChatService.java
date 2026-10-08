@@ -1,14 +1,13 @@
 package com.example.medical.module.chat.service;
 
 import com.example.medical.common.lookup.PatientLookup;
+import com.example.medical.common.lookup.StaffLookup;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageVO;
 import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
-import com.example.medical.module.system.entity.SysUser;
-import com.example.medical.module.system.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
@@ -31,7 +30,7 @@ public class ChatService {
 
     private final MessageRepository messageRepository;
     private final PatientLookup patientLookup;
-    private final SysUserRepository sysUserRepository;
+    private final StaffLookup staffLookup;
     private final ApplicationEventPublisher eventPublisher;
 
     public int unreadCount(Long userId, String userType) {
@@ -112,8 +111,7 @@ public class ChatService {
 
     private String resolveName(String type, Long userId) {
         if (STAFF.equals(type)) {
-            return sysUserRepository.findById(userId)
-                    .map(SysUser::getRealName).orElse("Unknown");
+            return staffLookup.realName(userId).orElse("Unknown");
         }
         return patientLookup.displayName(userId).orElse("Unknown");
     }
