@@ -58,6 +58,52 @@ public class ChargeService {
         return ChargeVO.fromEntity(chargeRepository.save(c));
     }
 
+    /**
+     * Whether the visit already produced a charge. The appointment module asks
+     * before completing a visit, because a charge can also be entered by hand for
+     * the same appointment — but only this module knows what "already charged"
+     * means.
+     */
+    public boolean visitAlreadyCharged(Long appointmentId, Long patientId) {
+        return chargeRepository.findAll(
+                (root, query, cb) -> cb.and(
+                        cb.equal(root.get("appointmentId"), appointmentId),
+                        cb.equal(root.get("patientId"), patientId)),
+                PageRequest.of(0, 1)).hasContent();
+    }
+
+    /**
+     * The charge a completed visit produces. Called by the appointment module
+     * (52.3b) instead of it building a {@code Charge} through this module's
+     * repository: the amount rule, the DRAFT status and the audit row are the
+     * owning module's, and the appointment path used to skip the audit row
+     * entirely.
+     *
+     * @param cptCodes   the visit's CPT code, which the amount rule reads
+     * @param icd10Codes the diagnosis recorded on the visit
+     */
+    @Transactional
+    @Auditable(module = "charge", action = "CREATE", phiAccess = true)
+    public void createForVisit(Long appointmentId, Long patientId, Long doctorId,
+                               String cptCodes, String icd10Codes, String visitType) {
+        Charge c = new Charge();
+        c.setPatientId(patientId);
+        c.setAppointmentId(appointmentId);
+        c.setDoctorId(doctorId);
+        c.setCptCodes(cptCodes);
+        c.setIcd10Codes(icd10Codes);
+        c.setVisitType(visitType);
+        c.setChargeAmount(amountFor(cptCodes));
+        c.setStatus(ChargeStatus.DRAFT.value());
+        chargeRepository.save(c);
+    }
+
+    /** An office visit (992xx) bills 90, anything else 100 — the rule the appointment module used to hold. */
+    private BigDecimal amountFor(String cptCodes) {
+        return cptCodes != null && cptCodes.startsWith("992")
+                ? new BigDecimal("90") : new BigDecimal("100");
+    }
+
     @Transactional
     @Auditable(module = "charge", action = "CONVERT_TO_BILL")
     public BillVO convert(Long id) {

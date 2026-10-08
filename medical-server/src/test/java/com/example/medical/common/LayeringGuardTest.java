@@ -74,7 +74,6 @@ class LayeringGuardTest {
      * the list shrink instead of rot. Slice 52.8 deletes the three constants.
      */
     private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries(
-            Map.entry("module/appointment/service/AppointmentService.java → billing.ChargeRepository", "52.3b"),
             Map.entry("module/integration/service/AdtService.java → patient.PatientRepository", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.ObservationRepository", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.PatientRepository", "52.5"),
@@ -86,7 +85,6 @@ class LayeringGuardTest {
             Map.entry("module/system/controller/EmergencyAccessController.java → patient.PatientRepository", "52.4"));
 
     private static final Map<String, String> PENDING_ENTITY = Map.ofEntries(
-            Map.entry("module/appointment/service/AppointmentService.java → billing.Charge", "52.3b"),
             Map.entry("module/integration/service/AdtService.java → patient.Patient", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.Observation", "52.5"),
             Map.entry("module/integration/service/LabResultService.java → patient.Patient", "52.5"),

@@ -1,5 +1,6 @@
 package com.example.medical;
 
+import com.example.medical.module.appointment.entity.AppointmentStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
 import org.springframework.http.MediaType;
@@ -141,6 +142,85 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/api/v1/appointments/205")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * The charge a completed visit produces is written through the billing module
+     * (52.3b): the amount rule, the DRAFT status and the audit row belong to the
+     * module that owns charges. Patient 101 is used because no other test charges
+     * that patient, so the audit count below can only come from this visit.
+     */
+    @Test
+    @Order(49)
+    void completingAVisit_shouldCreateTheChargeThroughTheBillingService() throws Exception {
+        String time = LocalDateTime.now().plusDays(45)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+        String visit = objectMapper.writeValueAsString(Map.of(
+                "patientId", 101, "doctorId", 2, "appointmentTime", time,
+                "visitType", "FOLLOW_UP", "chiefComplaint", "R52.3b visit",
+                "cptCode", "99213", "description", "52.3b probe", "status", 0));
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON).content(visit)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        JsonNode page = objectMapper.readTree(mockMvc.perform(get("/api/v1/appointments")
+                        .param("size", "50").header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString());
+        long appointmentId = -1;
+        for (JsonNode row : page.get("data").get("records")) {
+            if ("R52.3b visit".equals(row.get("chiefComplaint").asText())) {
+                appointmentId = row.get("id").asLong();
+            }
+        }
+        assertTrue(appointmentId > 0, "the probe visit should be listed");
+
+        assertEquals(0, chargeCreateAudits(101).get("data").get("total").asInt(),
+                "no charge/CREATE row for patient 101 exists before this test");
+
+        mockMvc.perform(put("/api/v1/appointments/" + appointmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "patientId", 101, "doctorId", 2, "appointmentTime", time,
+                                "visitType", "FOLLOW_UP", "chiefComplaint", "R52.3b visit",
+                                "cptCode", "99213", "description", "52.3b probe",
+                                "status", AppointmentStatus.COMPLETED.code())))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        JsonNode charges = objectMapper.readTree(mockMvc.perform(get("/api/v1/charges")
+                        .param("patientId", "101").param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString());
+        JsonNode charge = null;
+        for (JsonNode row : charges.get("data").get("records")) {
+            if (row.get("appointmentId") != null && row.get("appointmentId").asLong() == appointmentId) {
+                charge = row;
+            }
+        }
+        assertNotNull(charge, "completing the visit should create its charge");
+        assertEquals("99213", charge.get("cptCodes").asText());
+        assertEquals("DRAFT", charge.get("status").asText());
+        assertEquals(90.0, charge.get("chargeAmount").asDouble(), "a 992xx visit bills 90");
+        assertEquals("R52.3b visit", charge.get("icd10Codes").asText(),
+                "the visit's chief complaint is still carried onto the charge");
+
+        // Audit rows are written asynchronously — poll briefly rather than assert instantly.
+        long deadline = System.currentTimeMillis() + 5000;
+        int audits = 0;
+        while (audits == 0 && System.currentTimeMillis() < deadline) {
+            audits = chargeCreateAudits(101).get("data").get("total").asInt();
+            if (audits == 0) Thread.sleep(100);
+        }
+        assertEquals(1, audits, "completing a visit must leave a charge/CREATE audit row");
+    }
+
+    private JsonNode chargeCreateAudits(long patientId) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get("/api/v1/audit-logs")
+                        .param("module", "charge").param("action", "CREATE")
+                        .param("patientId", String.valueOf(patientId)).param("size", "50")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString());
     }
 
     // ──────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
 import com.example.medical.module.appointment.entity.Appointment;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
+import com.example.medical.module.billing.service.ChargeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,7 +34,7 @@ public class AppointmentService {
     private final com.example.medical.module.appointment.repository.AppointmentLockRepository appointmentLockRepository;
     private final PatientLookup patientLookup;
     private final StaffLookup staffLookup;
-    private final com.example.medical.module.billing.repository.ChargeRepository chargeRepository;
+    private final ChargeService chargeService;
     private final DoctorPatientScope doctorPatientScope;
 
     public Page<AppointmentVO> page(long page, long size, Integer status, Long patientId) {
@@ -138,24 +139,9 @@ public class AppointmentService {
     }
 
     private void generateCharge(Appointment a) {
-        boolean exists = chargeRepository.findAll(
-                (root, query, cb) -> cb.and(
-                        cb.equal(root.get("appointmentId"), a.getId()),
-                        cb.equal(root.get("patientId"), a.getPatientId())),
-                PageRequest.of(0, 1))
-                .hasContent();
-        if (exists) return;
-
-        com.example.medical.module.billing.entity.Charge c = new com.example.medical.module.billing.entity.Charge();
-        c.setPatientId(a.getPatientId());
-        c.setAppointmentId(a.getId());
-        c.setDoctorId(a.getDoctorId());
-        c.setCptCodes(a.getCptCode());
-        c.setIcd10Codes(a.getChiefComplaint());
-        c.setVisitType(a.getVisitType());
-        c.setChargeAmount(a.getCptCode() != null && a.getCptCode().startsWith("992") ? new java.math.BigDecimal("90") : new java.math.BigDecimal("100"));
-        c.setStatus(com.example.medical.module.billing.entity.ChargeStatus.DRAFT.value());
-        chargeRepository.save(c);
+        if (chargeService.visitAlreadyCharged(a.getId(), a.getPatientId())) return;
+        chargeService.createForVisit(a.getId(), a.getPatientId(), a.getDoctorId(),
+                a.getCptCode(), a.getChiefComplaint(), a.getVisitType());
     }
 
     @Transactional
