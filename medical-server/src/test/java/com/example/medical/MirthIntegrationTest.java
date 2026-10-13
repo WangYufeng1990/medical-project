@@ -141,12 +141,14 @@ class MirthIntegrationTest extends IntegrationTestSupport {
         String body = objectMapper.writeValueAsString(Map.of(
                 "sourceMessageId", messageId, "patientMrn", "MRN-10001",
                 "collectionDate", "2026-06-02T08:00:00",
-                "results", List.of(Map.of(
-                        "loincCode", "6690-2", "display", "WBC", "value", "7.5",
-                        "unit", "10*3/uL", "referenceRange", "4.0-11.0", "abnormalFlag", "N"))));
+                "results", List.of(
+                        Map.of("loincCode", "6690-2", "display", "WBC", "value", "7.5",
+                                "unit", "10*3/uL", "referenceRange", "4.0-11.0", "abnormalFlag", "N"),
+                        Map.of("loincCode", "718-7", "display", "Hemoglobin", "value", "13.1",
+                                "unit", "g/dL", "referenceRange", "13.0-17.0", "abnormalFlag", "N"))));
 
-        assertEquals(1, labAck(body).get("recordsCreated").asInt(),
-                "the ack reports how many observations were stored");
+        assertEquals(2, labAck(body).get("recordsCreated").asInt(),
+                "a panel arrives as one message with many results, and stores one row per result");
         assertEquals(0, labAck(body).get("recordsCreated").asInt(),
                 "the same sourceMessageId is ignored the second time");
     }

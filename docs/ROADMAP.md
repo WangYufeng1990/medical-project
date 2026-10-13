@@ -3807,7 +3807,7 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 ## Round 52 — module boundaries (in progress)
 
-> **Status: 52.1–52.5 (52.3a, 52.3b) landed; 52.5a and 52.6–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
+> **Status: 52.1–52.5 landed (52.3a, 52.3b, 52.5a); 52.6–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
 
 **The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
 
@@ -3979,6 +3979,28 @@ The two rules that look like trivia but are not stayed where they belong: `norma
 
 **Found while writing this slice's tests — a real defect, not fixed here.** `observation` carries `UNIQUE KEY uk_source_message (source_message_id)`, and `LabResultService` builds one `Observation` per result item, all sharing that message id. So **any lab message with more than one result fails as a whole**: the second insert violates the index, `ConstraintViolationException` propagates, the transaction rolls back, and the endpoint answers 500 having stored nothing. A CBC panel is eight results, and both the ack contract (`recordsCreated`) and the seeded LOINC panel assume N > 1 — so the constraint is what is wrong. Moving it to `(source_message_id, loinc_code)` means a `schema.sql` change, a `DevSchemaGuard.SCHEMA_VERSION` bump, and an upgrade path for existing dev databases (`spring.sql.init` only creates tables that do not exist, so today's index survives on any database already built). That is a data-shape change with a migration story, not a module-boundary one, so it is planned below as **52.5a** rather than folded in here.
 
+### Slice 52.5a ✅ — the observation key allows a panel
+
+`observation` was keyed `UNIQUE (source_message_id)` while one row is written per result item, so a message carrying two results could store only one of them — and in fact stored none: the second insert violated the index, the transaction rolled back, and the endpoint answered 500. The key is now `(source_message_id, loinc_code)`, which is what the ingest actually means, and `DevSchemaGuard.SCHEMA_VERSION` went 1 → 2 in the same commit, which is the rule that file states.
+
+**The migration story is the guard, and it was measured rather than described.** Starting the new build against the existing v1 database exits 1 without ever listening:
+
+```
+java.lang.IllegalStateException: Local database schema is v1 but this build expects v2 (jdbc:h2:file:.../medical_dev;...).
+spring.sql.init never alters existing tables, so the new columns are missing. Delete the local database file
+(default: ~/.medical-dev/data/, or the path in H2_DB_PATH) and restart to rebuild schema + seed data.
+```
+
+`README.md` already documents that reset and the bump rule, and `DevSchemaGuardTest` already covers the fresh-database and mismatch paths, so this slice needed no documentation beyond this record. The local database was rebuilt to run the probe below: the seed data is fresh, and the probe rows 52.4/52.5 had left are gone.
+
+| Check | Result |
+|-------|--------|
+| Red first | the two-result assertion restored in `MirthIntegrationTest` → `Status expected:<200> but was:<500>`, with H2 naming the constraint: `Unique index or primary key violation: "PUBLIC.UK_SOURCE_MESSAGE_INDEX_8 ON PUBLIC.OBSERVATION(SOURCE_MESSAGE_ID ...)"` |
+| `mvn clean verify` | **212 tests, 0 failures**, `BUILD SUCCESS`; this slice does not move the guard counts (5 / 5 / 0) |
+| Live probe, the defect | a two-result message answers `recordsCreated 2`; an eight-result CBC panel answers `recordsCreated 8`, and `/patients/100/observations` reads the rows back with their LOINC codes, values and message ids |
+| Live probe, idempotency | the same `sourceMessageId` resent answers `recordsCreated 0` — the message-level duplicate check never depended on the index |
+| **Residual, measured and left alone** | one message that repeats a single LOINC code twice still answers **500**: the payload carries no specimen or sequence to tell the two results apart, so any tighter key would have to invent one. Silently keeping the first row would lose data, and a 400 would have to be defined per interface — a product decision, reported rather than guessed |
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -3992,7 +4014,7 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 | **52.3b** | ✅ **Appointment's charge generation goes through the billing module's service** — found by 52.3a, which is what made the violation visible | `AppointmentService` → `billing.ChargeRepository` / `billing.Charge`: the last cross-module **write** in this direction, and one an interface cannot invert (10→9, 9→8, cycles 3→1 unchanged at 1) | completing a visit still creates the same charge row (same CPT, amount and DRAFT status) — and now leaves the `charge/CREATE` audit row it used to skip; live probe 0 → 1 rows, and a hand-entered charge is still not duplicated |
 | 52.4 | ✅ `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system` — **the last cycle**; 1 repository reference (9→8, and 1→**0** cycles) | break-glass 200 for a real patient and 404 for an unknown id, both re-checked live; 404 for a soft-deleted patient pinned by test; the check is a `count` under `is_deleted = 0` |
 | 52.5 | ✅ Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | 3 repository **and 3 entity** references (integration→patient), including the only cross-module **write** path (8→5, 8→5) | acks unchanged (count present/absent per endpoint, duplicate and unmapped-MRN cases at 0); the writes now leave `patient/CREATE`, `patient/UPDATE` and `patient/LAB_INGEST` rows |
-| **52.5a** | **The observation uniqueness constraint permits one row per result, not one per message** — found by 52.5's tests: a lab message with two results answers 500 and stores nothing | the defect, not a boundary: `uk_source_message` → `(source_message_id, loinc_code)`, `SCHEMA_VERSION` bump, migration note for existing dev databases | a two-result message stores two observations and acks `recordsCreated 2`; the duplicate-message test still answers 0; `MirthIntegrationTest` green with its assertion restored to two items |
+| **52.5a** | ✅ **The observation uniqueness constraint permits one row per result, not one per message** — found by 52.5's tests: a lab message with two results answered 500 and stored nothing | the defect, not a boundary: `uk_source_message` → `(source_message_id, loinc_code)`, `SCHEMA_VERSION` 1 → 2, migration via the guard (measured: the old database refuses to start and names the fix) | a two-result message answers `recordsCreated 2` and an eight-result panel `8`, both readable back; the duplicate-message case still answers 0; the repeated-LOINC case is measured and left as a product decision |
 | 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | 2 repository **and 2 entity** imports (quality→patient) | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |
 | 52.7 | The portal's 360 aggregate stops importing appointment/prescription repositories (`PatientCaseService`, `PatientDataExport`) | 3 repository **and 3 entity** imports, the last of both | the portal pages re-checked in the browser; the 360 payload compared field by field |
 | 52.8 | Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` | the allowlist mechanism itself | 17 → 0 repository imports, 6 → 0 cycles (the 52.3a entries included — deleting the allowlist while a rule cannot see every edge would certify a number, not a rule) |

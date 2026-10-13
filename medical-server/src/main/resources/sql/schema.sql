@@ -484,7 +484,10 @@ CREATE TABLE IF NOT EXISTS observation (
     update_time TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     INDEX idx_obs_patient_loinc (patient_id, loinc_code),
-    UNIQUE KEY uk_source_message (source_message_id)
+    -- One row per result within a message, not one row per message: a panel is a
+    -- single message carrying many results, and keying on the message id alone
+    -- failed the whole message (52.5a).
+    UNIQUE KEY uk_source_message (source_message_id, loinc_code)
 );
 
 CREATE TABLE IF NOT EXISTS medical_history_entry (
