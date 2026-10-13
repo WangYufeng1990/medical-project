@@ -27,4 +27,9 @@ public class PatientFieldLookup implements PatientLookup {
     public boolean exists(Long patientId) {
         return patientRepository.countById(patientId) > 0;
     }
+
+    @Override
+    public Optional<Long> idByMrn(String mrn) {
+        return patientRepository.findIdByMrn(mrn);
+    }
 }

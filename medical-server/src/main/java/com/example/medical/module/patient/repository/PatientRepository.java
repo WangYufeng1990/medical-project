@@ -30,4 +30,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long>, JpaSpec
     /** Counts, so an existence check never decrypts a row it does not need. */
     @Query("SELECT COUNT(p) FROM Patient p WHERE p.id = :id")
     long countById(@Param("id") Long id);
+
+    /** MRN is unique ({@code uk_mrn}), so at most one row answers. */
+    @Query("SELECT p.id FROM Patient p WHERE p.mrn = :mrn")
+    Optional<Long> findIdByMrn(@Param("mrn") String mrn);
 }

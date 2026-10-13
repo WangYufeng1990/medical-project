@@ -1,48 +1,46 @@
 package com.example.medical.module.integration.service;
 
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.module.integration.dto.AdtEventPayload;
-import com.example.medical.module.patient.entity.Patient;
-import com.example.medical.module.patient.repository.PatientRepository;
+import com.example.medical.module.patient.dto.PatientDemographics;
+import com.example.medical.module.patient.service.PatientRegistryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Mirth ADT intake. The patient row itself is written by the patient module (52.5). */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdtService {
 
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
+    private final PatientRegistryService patientRegistry;
 
     @Transactional
     @com.example.medical.common.audit.Auditable(module = "integration", action = "ADT_UPSERT")
     public void processAdt(AdtEventPayload event) {
-        Patient patient = patientRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("mrn"), event.getPatient().getMrn()),
-                org.springframework.data.domain.Sort.unsorted())
-                .stream().findFirst()
-                .orElseGet(() -> {
-                    Patient p = new Patient();
-                    p.setMrn(event.getPatient().getMrn());
-                    return p;
-                });
-
-        AdtEventPayload.PatientInfo info = event.getPatient();
-        if (info.getName() != null) patient.setName(info.getName());
-        if (info.getDateOfBirth() != null) patient.setDateOfBirth(info.getDateOfBirth());
-        if (info.getSexAtBirth() != null) patient.setSexAtBirth(info.getSexAtBirth());
-        if (info.getAddress() != null) {
-            AdtEventPayload.AddressInfo addr = info.getAddress();
-            if (addr.getLine1() != null) patient.setAddressLine1(addr.getLine1());
-            if (addr.getCity() != null) patient.setCity(addr.getCity());
-            if (addr.getStateCode() != null) patient.setState(addr.getStateCode());
-            if (addr.getZip() != null) patient.setZipCode(addr.getZip());
+        PatientDemographics demographics = toDemographics(event.getPatient());
+        Long patientId = patientLookup.idByMrn(demographics.mrn()).orElse(null);
+        if (patientId == null) {
+            patientId = patientRegistry.createFromAdt(demographics);
+        } else {
+            patientRegistry.updateFromAdt(patientId, demographics);
         }
 
-        patientRepository.save(patient);
         log.info("ADT {}: patient mrn={} id={}", event.getEventType(),
-                maskMrn(event.getPatient().getMrn()), patient.getId());
+                maskMrn(demographics.mrn()), patientId);
+    }
+
+    private static PatientDemographics toDemographics(AdtEventPayload.PatientInfo info) {
+        AdtEventPayload.AddressInfo address = info.getAddress();
+        return new PatientDemographics(info.getMrn(), info.getName(), info.getDateOfBirth(),
+                info.getSexAtBirth(),
+                address != null ? address.getLine1() : null,
+                address != null ? address.getCity() : null,
+                address != null ? address.getStateCode() : null,
+                address != null ? address.getZip() : null);
     }
 
     private static String maskMrn(String mrn) {

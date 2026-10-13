@@ -28,4 +28,7 @@ public interface PatientLookup {
 
     /** Whether the patient exists; a soft-deleted patient does not. */
     boolean exists(Long patientId);
+
+    /** The patient behind an MRN, which is the key every interface message arrives with. */
+    Optional<Long> idByMrn(String mrn);
 }
