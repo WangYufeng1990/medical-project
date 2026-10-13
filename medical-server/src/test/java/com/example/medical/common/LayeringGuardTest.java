@@ -81,8 +81,7 @@ class LayeringGuardTest {
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItemRepository", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionRepository", "52.7"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.ObservationRepository", "52.6"),
-            Map.entry("module/quality/service/QualityMeasureService.java → patient.PatientRepository", "52.6"),
-            Map.entry("module/system/controller/EmergencyAccessController.java → patient.PatientRepository", "52.4"));
+            Map.entry("module/quality/service/QualityMeasureService.java → patient.PatientRepository", "52.6"));
 
     private static final Map<String, String> PENDING_ENTITY = Map.ofEntries(
             Map.entry("module/integration/service/AdtService.java → patient.Patient", "52.5"),
@@ -94,8 +93,7 @@ class LayeringGuardTest {
             Map.entry("module/quality/service/QualityMeasureService.java → patient.Observation", "52.6"),
             Map.entry("module/quality/service/QualityMeasureService.java → patient.Patient", "52.6"));
 
-    private static final Map<String, String> PENDING_CYCLE = Map.of(
-            "patient ↔ system", "52.4");
+    private static final Map<String, String> PENDING_CYCLE = Map.of();
 
     @Test
     void sharedKernelShouldNotImportBusinessModules() throws IOException {

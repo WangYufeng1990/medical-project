@@ -25,4 +25,7 @@ public interface PatientLookup {
 
     /** The patient's recorded allergies; empty when there is no such patient, or none recorded. */
     Optional<String> allergies(Long patientId);
+
+    /** Whether the patient exists; a soft-deleted patient does not. */
+    boolean exists(Long patientId);
 }

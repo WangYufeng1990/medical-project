@@ -2,8 +2,8 @@ package com.example.medical.module.system.controller;
 
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
+import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.result.Result;
-import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.module.system.dto.EmergencyAccessTokenVO;
 import com.example.medical.module.system.dto.EmergencyAccessVO;
 import com.example.medical.module.system.entity.EmergencyAccess;
@@ -35,7 +35,7 @@ public class EmergencyAccessController {
 
     static final int EMERGENCY_ACCESS_MINUTES = 30;
 
-    private final PatientRepository patientRepository;
+    private final PatientLookup patientLookup;
     private final EmergencyAccessRepository emergencyAccessRepository;
     private final JwtEncoder jwtEncoder;
 
@@ -45,7 +45,7 @@ public class EmergencyAccessController {
     public Result<EmergencyAccessTokenVO> emergencyAccess(@AuthenticationPrincipal LoginUser loginUser,
                                                         @PathVariable Long patientId,
                                                         @Valid @RequestBody EmergencyAccessRequest request) {
-        if (!patientRepository.existsById(patientId)) {
+        if (!patientLookup.exists(patientId)) {
             throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
         }
 

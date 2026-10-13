@@ -26,4 +26,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long>, JpaSpec
 
     @Query("SELECT p.allergies FROM Patient p WHERE p.id = :id")
     Optional<String> findAllergiesById(@Param("id") Long id);
+
+    /** Counts, so an existence check never decrypts a row it does not need. */
+    @Query("SELECT COUNT(p) FROM Patient p WHERE p.id = :id")
+    long countById(@Param("id") Long id);
 }

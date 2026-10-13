@@ -22,4 +22,9 @@ public class PatientFieldLookup implements PatientLookup {
     public Optional<String> allergies(Long patientId) {
         return patientRepository.findAllergiesById(patientId);
     }
+
+    @Override
+    public boolean exists(Long patientId) {
+        return patientRepository.countById(patientId) > 0;
+    }
 }

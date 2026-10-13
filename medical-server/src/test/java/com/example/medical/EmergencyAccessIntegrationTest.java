@@ -60,5 +60,50 @@ class EmergencyAccessIntegrationTest extends IntegrationTestSupport {
         assertTrue(node.get("data").size() >= 1);
     }
 
+    /** The only guard break-glass has: the patient must exist (52.4). */
+    @Test
+    @Order(109)
+    void emergencyAccess_forAnUnknownPatient_shouldReturn404() throws Exception {
+        mockMvc.perform(post("/api/v1/emergency/access/999999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "no such patient")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * A deleted patient is gone everywhere else — {@code GET /patients/{id}} answers
+     * 404 — so break-glass must not hand out a token for one either. Asserted here
+     * because this slice replaces the existence check, and a deleted row is exactly
+     * where the old and the new form could disagree.
+     */
+    @Test
+    @Order(110)
+    void emergencyAccess_forASoftDeletedPatient_shouldReturn404() throws Exception {
+        mockMvc.perform(post("/api/v1/patients")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Test R52.4 Probe", "mrn", "MRN-TEST-524")))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        JsonNode records = objectMapper.readTree(mockMvc.perform(get("/api/v1/patients")
+                        .param("keyword", "MRN-TEST-524")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString()).get("data").get("records");
+        assertTrue(records.size() >= 1, "the probe patient should be listed");
+        long patientId = records.get(0).get("id").asLong();
+
+        mockMvc.perform(delete("/api/v1/patients/" + patientId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/emergency/access/" + patientId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "deleted patient")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isNotFound());
+    }
+
     // ──────────────────────────────────────────────────────
 }
