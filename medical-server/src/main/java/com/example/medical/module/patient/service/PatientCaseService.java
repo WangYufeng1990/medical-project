@@ -2,14 +2,15 @@ package com.example.medical.module.patient.service;
 
 import com.example.medical.common.enums.ResultCode;
 import com.example.medical.common.exception.BusinessException;
-import com.example.medical.module.appointment.entity.Appointment;
-import com.example.medical.module.appointment.repository.AppointmentRepository;
+import com.example.medical.module.appointment.dto.AppointmentVO;
+// An enum, not an entity: AppointmentStatus is shared vocabulary (LayeringGuardTest exempts enums).
+import com.example.medical.module.appointment.entity.AppointmentStatus;
+import com.example.medical.module.appointment.service.AppointmentService;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.repository.PatientRepository;
-import com.example.medical.module.prescription.entity.Prescription;
-import com.example.medical.module.prescription.entity.PrescriptionItem;
-import com.example.medical.module.prescription.repository.PrescriptionItemRepository;
-import com.example.medical.module.prescription.repository.PrescriptionRepository;
+import com.example.medical.module.prescription.dto.PrescriptionItemVO;
+import com.example.medical.module.prescription.dto.PrescriptionVO;
+import com.example.medical.module.prescription.service.PrescriptionService;
 import lombok.RequiredArgsConstructor;
 import org.hl7.fhir.r4.model.Address;
 import org.hl7.fhir.r4.model.AllergyIntolerance;
@@ -25,14 +26,10 @@ import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.MedicationRequest;
 import org.hl7.fhir.r4.model.StringType;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import com.example.medical.module.appointment.entity.AppointmentStatus;
 import java.util.Locale;
 
 @Service
@@ -48,9 +45,8 @@ public class PatientCaseService {
     private static final String OMB_CATEGORY_SYSTEM = "urn:oid:2.16.840.1.113883.6.238";
 
     private final PatientRepository patientRepository;
-    private final AppointmentRepository appointmentRepository;
-    private final PrescriptionRepository prescriptionRepository;
-    private final PrescriptionItemRepository prescriptionItemRepository;
+    private final AppointmentService appointmentService;
+    private final PrescriptionService prescriptionService;
 
     public Bundle getPatientCase(Long patientId) {
         Patient patient = patientRepository.findById(patientId)
@@ -76,10 +72,10 @@ public class PatientCaseService {
                     .setUrl("AllergyIntolerance/" + patient.getId() + "-allergy");
         }
 
-        List<Appointment> appointments = appointmentRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
-                Sort.by(Sort.Direction.DESC, "appointmentTime"));
-        for (Appointment a : appointments) {
+        // The visits and the medication come from the modules that own them — the
+        // same reads the staff views use, in the same order.
+        List<AppointmentVO> appointments = appointmentService.listForPatient(patientId);
+        for (AppointmentVO a : appointments) {
             Encounter encounter = buildEncounter(a);
             // A cancelled or no-show visit produced no encounter to report.
             if (encounter == null) continue;
@@ -88,20 +84,10 @@ public class PatientCaseService {
                     .setUrl("Encounter/" + a.getId());
         }
 
-        List<Prescription> prescriptions = prescriptionRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("patientId"), patientId),
-                Sort.by(Sort.Direction.DESC, "prescriptionDate"));
+        List<PrescriptionVO> prescriptions = prescriptionService.listForPatient(patientId);
         if (!prescriptions.isEmpty()) {
-            List<Long> prescriptionIds = prescriptions.stream()
-                    .map(Prescription::getId).toList();
-            List<PrescriptionItem> allItems = prescriptionItemRepository
-                    .findAll((root, query, cb) -> root.get("prescriptionId").in(prescriptionIds));
-            Map<Long, List<PrescriptionItem>> itemsByPrescription = allItems.stream()
-                    .collect(Collectors.groupingBy(PrescriptionItem::getPrescriptionId));
-
-            for (Prescription p : prescriptions) {
-                List<PrescriptionItem> items = itemsByPrescription.getOrDefault(p.getId(), List.of());
-                for (MedicationRequest mr : buildMedicationRequests(p, items)) {
+            for (PrescriptionVO p : prescriptions) {
+                for (MedicationRequest mr : buildMedicationRequests(p, p.getItems())) {
                     bundle.addEntry().setResource(mr).getRequest()
                             .setMethod(Bundle.HTTPVerb.PUT)
                             .setUrl("MedicationRequest/" + mr.getId());
@@ -282,7 +268,7 @@ public class PatientCaseService {
         };
     }
 
-    private Encounter buildEncounter(Appointment a) {
+    private Encounter buildEncounter(AppointmentVO a) {
         Encounter encounter = new Encounter();
         encounter.setId(a.getId().toString());
         encounter.getSubject().setReference("Patient/" + a.getPatientId());
@@ -305,7 +291,7 @@ public class PatientCaseService {
         return encounter;
     }
 
-    private List<MedicationRequest> buildMedicationRequests(Prescription p, List<PrescriptionItem> items) {
+    private List<MedicationRequest> buildMedicationRequests(PrescriptionVO p, List<PrescriptionItemVO> items) {
         return items.stream().map(item -> {
             MedicationRequest mr = new MedicationRequest();
             mr.setId("medication-request-" + item.getId());

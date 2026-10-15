@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -236,6 +238,48 @@ class PatientIntegrationTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * The FHIR case bundle for patient 100 (52.7): entry composition and order, not
+     * just the HTTP status. Its encounters and medication requests now come from the
+     * appointment and prescription modules, so this pins the bundle they must
+     * reproduce — the four seeded visits (202/203 are restored to scheduled by
+     * cleanup-test-data.sql, the two completed ones become finished encounters) and
+     * the items of prescription 301 before 300, newest prescription first.
+     */
+    @Test
+    @Order(107)
+    void patientCase_shouldBundleTheEncountersAndMedicationRequests() throws Exception {
+        JsonNode bundle = objectMapper.readTree(mockMvc.perform(get("/api/v1/patients/100/case")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertEquals("searchset", bundle.get("type").asText());
+        List<String> urls = new ArrayList<>();
+        for (JsonNode entry : bundle.get("entry")) {
+            urls.add(entry.get("request").get("url").asText());
+        }
+        assertEquals(List.of(
+                "Patient/100", "Condition/100-condition", "AllergyIntolerance/100-allergy",
+                "Encounter/203", "Encounter/202", "Encounter/201", "Encounter/200",
+                "MedicationRequest/medication-request-402", "MedicationRequest/medication-request-403",
+                "MedicationRequest/medication-request-400", "MedicationRequest/medication-request-401"),
+                urls);
+        assertEquals(urls.size(), bundle.get("total").asInt());
+
+        assertEquals("planned", bundle.get("entry").get(3).get("resource").get("status").asText(),
+                "a scheduled visit is a planned encounter");
+        assertEquals("finished", bundle.get("entry").get(5).get("resource").get("status").asText(),
+                "a completed visit is a finished encounter");
+        for (JsonNode entry : bundle.get("entry")) {
+            JsonNode resource = entry.get("resource");
+            if (!"MedicationRequest".equals(resource.get("resourceType").asText())) continue;
+            assertEquals("Patient/100", resource.get("subject").get("reference").asText());
+            assertFalse(resource.get("medicationCodeableConcept").get("text").asText().isBlank(),
+                    "a medication request names its drug");
+        }
     }
 
     @Test

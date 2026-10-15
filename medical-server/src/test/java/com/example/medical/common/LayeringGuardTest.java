@@ -73,16 +73,9 @@ class LayeringGuardTest {
      * fixed ({@link #allowlistsShouldNotContainFixedEntries}), which is what makes
      * the list shrink instead of rot. Slice 52.8 deletes the three constants.
      */
-    private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries(
-            Map.entry("module/patient/service/PatientCaseService.java → appointment.AppointmentRepository", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItemRepository", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionRepository", "52.7"));
+    private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries();
 
-
-    private static final Map<String, String> PENDING_ENTITY = Map.ofEntries(
-            Map.entry("module/patient/service/PatientCaseService.java → appointment.Appointment", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.Prescription", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItem", "52.7"));
+    private static final Map<String, String> PENDING_ENTITY = Map.ofEntries();
 
 
     private static final Map<String, String> PENDING_CYCLE = Map.of();
