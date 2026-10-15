@@ -2,6 +2,8 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
+> **Backend-focused review (2026-10-15), baseline `4f629f4`: 11 OPEN findings (5 P1, 6 P2), including 9 reproduced backend defects and 2 frontend findings. No fixes applied. See [Round 53](#round-53--backend-focused-review-follow-up-2026-10-15--planned) for evidence, suggested solutions and test-first acceptance criteria.**
+>
 > **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 49 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 11 LOW). 1 CRITICAL backend-dependent deferred (C4). L1 (any types) resolved in Round 43 — all Round 37 findings closed.**
 >
 > **Round 42 (2026-08-04): Integration tests decoupled from MySQL — run on isolated in-memory H2. `mvn clean install`: 135 tests, 0 failures (previously required a running MySQL and accumulated 8 broken tests as endpoints evolved).**
@@ -4097,3 +4099,205 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 2. `docs/API-LAYOUT.md`, `CLAUDE.md`, `README.md` refreshed for every behaviour change in this round (M1 Redis optionality + H2 reset, M2 export path, M7 size bound, M8 payloads).
 3. No new runtime dependency; one removed (`hutool`).
 4. Re-run of the review checklist: the F1–F14 items above closed or explicitly deferred with a reason.
+
+---
+
+## Round 53 — Backend-focused review follow-up (2026-10-15) — Planned
+
+**Status: review complete; all 11 findings OPEN. No implementation fixes are included in this documentation update.**
+
+Reviewed baseline: [`4f629f4fb1584a266dc79e9e97a55828f9d41e00`](https://github.com/WangYufeng1990/medical-project/commit/4f629f4fb1584a266dc79e9e97a55828f9d41e00). Scope: backend authentication/authorization, appointment-to-billing flow, key rotation, audit integrity and FHIR serialization, with a smaller frontend review of appointment input and chat request handling. Source locations below refer to that baseline, not future line numbers.
+
+This is a new follow-up to the earlier completed rounds. Their historical completion records remain intact; those records do not close the reproducible defects below. The project remains an H2 learning demo: R53-04 is specifically a defect in the production decoder and does not prevent the H2 profile from working. Recording its fix does not expand scope into a production deployment or introduce external infrastructure.
+
+### Verification recorded during the review
+
+- Existing backend suite: **213 tests, 0 failures, 0 errors**, `mvn clean test` passed on Java 17 with isolated in-memory H2. The first attempt hit the environment's Mockito dynamic-agent attachment restriction; rerunning with Byte Buddy loaded at JVM startup (`-DargLine=-javaagent:<byte-buddy-agent.jar>`) passed. The attachment failure is not a project defect.
+- Separate temporary review probes reproduced R53-01, 02, 03, 05, 06, 07, 08 and 09 against isolated H2 / the actual application code. R53-04 was reproduced by signing and decoding a token with the actual production configuration classes, without an external Okta service.
+- Frontend: `npm run check` passed with **0 ESLint errors, 4 warnings** and a passing TypeScript check; `npm run build` passed. R53-10 was checked with a fixed America/Los_Angeles timestamp. R53-11 is a static asynchronous-flow finding, not a browser reproduction.
+- The review probes used synthetic data and did not modify application source. They were temporary review tooling, **not committed regression tests**. The tests proposed below must still be written and shown to fail before each fix.
+- This was not a full production/Okta/Redis/MySQL integration run. Passing the existing suite does not cover the missing scenarios listed below.
+
+### Finding index
+
+P1 means fix first because the defect breaks a security boundary, risks unreadable data, or blocks an entire authentication path. P2 means a concrete workflow/data/rendering defect to fix next.
+
+| ID | Priority | Finding | Status |
+|----|----------|---------|--------|
+| R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [ ] Open |
+| R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [ ] Open |
+| R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
+| R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [ ] Open |
+| R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [ ] Open |
+| R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [ ] Open |
+| R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [ ] Open |
+| R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [ ] Open |
+| R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [ ] Open |
+| R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [ ] Open |
+| R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [ ] Open |
+
+### R53-01 — Revoke patient sessions on credential/state changes
+
+**Location:** `module/patient/controller/PatientAuthController.java:155–188` (refresh), `security/JwtClaimMapper.java:45–56` (patient accounts excluded from staff revocation), and `module/patient/service/PatientAccountService.java` (password change). Backend paths are relative to `medical-server/src/main/java/com/example/medical/`.
+
+**Observed:** after a successful patient password change, the original access token still reads `GET /api/v1/patient/me` with HTTP 200, and the original refresh token still obtains new tokens with HTTP 200. After setting the synthetic account to disabled, both old-token paths still return 200. Refresh verifies signature/claims but never loads the current patient account or checks its status/password-change state.
+
+**Suggested solution:**
+- Add a patient-specific account/session revocation contract through `common/security`, implemented by the patient module. Keep staff IDs and patient IDs as separate identity domains; do not reuse `sys_user` revocation by numeric ID.
+- Validate patient/account existence, enabled status and session validity on both access-token authentication and refresh. A credential/session version claim checked against the database is preferable to fragile same-second `iat` comparisons; if using timestamps, specify precision and boundary semantics explicitly.
+- Invalidate existing sessions on password change/reset and account disablement. Check the current account again before issuing refresh replacements. Preserve the rule that refresh tokens cannot authenticate normal API calls.
+- Make the patient profile UI handle the chosen post-password-change behavior explicitly (e.g. clear patient credentials and return to login if all sessions are invalidated). Do not silently invalidate credentials while leaving the page looking authenticated.
+
+**Tests first:** add `PatientSessionRevocationIntegrationTest`: valid credentials can access and refresh; after password change, both original tokens are rejected; a disabled/deleted patient cannot refresh or access; a new login with the new password works. Include staff/patient numeric-ID overlap and same-second changes in the identity/version tests. Cover password reset through the same revocation contract without exposing reset tokens in production responses.
+
+### R53-02 — Separate conflict detection from disclosure of patient details
+
+**Location:** `module/appointment/controller/AppointmentController.java:35–42`, `module/appointment/service/AppointmentService.java:161–169`, and `AppointmentVO`.
+
+**Observed:** a doctor receives 403 for direct access to a synthetic patient outside their scope, but `GET /api/v1/appointments/conflicts?doctorId=...&time=...` returns 200 and that patient's chief complaint. The endpoint accepts another doctor's ID and returns complete `AppointmentVO` records, including patient name, clinical text and notes, without patient-scope enforcement.
+
+**Suggested solution:**
+- Preserve the full internal occupancy/conflict check so bookings cannot bypass conflicts just because the conflicting patient is outside the caller's scope.
+- Return a dedicated minimal availability/conflict DTO from the public endpoint (occupied time/duration or a conflict flag), with no patient identity or clinical fields. If detailed conflicts are needed, require explicit patient authorization before including them.
+- Update `medical-web/src/api/appointment.ts`, its types and the conflict display in `views/appointments/index.tsx` to consume the new response. Remove the current patient-name display for unrestricted availability checks.
+- Document the reduced response in `docs/API-LAYOUT.md`.
+
+**Tests first:** extend `AppointmentIntegrationTest`: an out-of-scope doctor cannot retrieve patient identifiers/clinical text through conflicts, but the same occupied slot still blocks booking; authorized appointment detail reads remain scoped and functional.
+
+### R53-03 — Finish the scan before declaring key rotation complete
+
+**Location:** `common/job/KeyRotationService.java:169–208`, especially `return count` and `if (batchCount == null || batchCount == 0) break`.
+
+**Observed:** with the first 500 non-null rows already encrypted by the new key and row 501 still using the old key, calling the actual column migration leaves row 501 untouched while `remainingByTable` reports 0. This is the shape of an interrupted rotation restarted from offset zero. The outer loop subsequently marks rotation complete; retiring the old key or rotating again can make skipped rows unreadable.
+
+**Suggested solution:**
+- Track rows scanned separately from rows rewritten. Stop only at the actual end of the scan, never merely because a batch required no changes.
+- Prefer keyset paging by ID to an OFFSET over a changing non-null result set. Make restart/resume idempotent across mixed-key batches.
+- Use a compare-and-set update against the ciphertext read, or an equivalent locking/version strategy, so re-encryption does not overwrite a concurrent clinical edit.
+- Verify that no old-key rows remain before publishing completion/allowing key retirement. Keep failed or unreadable rows visible as unresolved work instead of converting their count to zero. Interruption must not report completion.
+- Retain the required previous key until migration is verified complete.
+
+**Tests first:** add `KeyRotationServiceIntegrationTest` with 501 rows: first 500 new-key / final row old-key; resume after a partial batch; ordinary all-old data; and a concurrent edit that must survive migration. Assert both ciphertext readability with the new key and truthful completion/remaining status.
+
+### R53-04 — Accept one trusted issuer, not every issuer at once
+
+**Location:** `common/config/SecurityConfigProd.java:65–72`; also inspect `CompositeJwtDecoder` and `security/DevJwtEncoder` for issuer routing consistency.
+
+**Observed:** a patient token signed by the production configuration's encoder is rejected by its local decoder with `JwtValidationException: The iss claim is not valid`. `DelegatingOAuth2TokenValidator` combines validation failures; three distinct issuer-equality validators mean no single token can pass them all.
+
+**Suggested solution:**
+- Use one validator that accepts membership in the explicitly trusted local-issuer set, or select an issuer-specific validator/decoder after routing.
+- Retain signature and expiration/not-before validation; do not fix this by dropping issuer validation.
+- Align the emitted issuer values with the trusted set. `DevJwtEncoder` currently derives issuer from roles and ignores a caller-provided `iss`, including the refresh builder's special issuer; choose and document a consistent contract.
+- Keep local patient/emergency trust separate from external IdP validation.
+
+**Tests first:** add `SecurityConfigProdTest` exercising the actual encoder/decoder with a synthetic key: valid patient, refresh and emergency tokens validate according to the chosen issuer contract; wrong issuer, wrong signing key and expired tokens fail. Retain a request-level check that a refresh token is rejected as an access token.
+
+### R53-05 — Commit failed patient-login attempts independently
+
+**Location:** `module/patient/controller/PatientAuthController.java:65–90`, its `recordFailedAttempt`, and `module/patient/repository/PatientAuthRepository.java`. The staff-side `module/system/service/LockoutService` already demonstrates the separate-transaction pattern.
+
+**Observed:** six consecutive wrong passwords all return 401; the persisted `failed_attempts` stays **0**; a correct password immediately afterward returns 200. The repository increment joins the controller's transaction, which rolls back when `BusinessException` escapes.
+
+**Suggested solution:**
+- Move the atomic failure increment/lock update into a patient-module Spring service using `REQUIRES_NEW`. Invoke it through the injected proxy, not by self-invocation.
+- Do not make the entire login transaction commit arbitrary partial changes on authentication exceptions.
+- On success, ensure counter reset and last-login changes do not merge a stale detached `PatientAuth` over the reset performed by a bulk update.
+- Preserve generic invalid-credentials responses and the existing lock duration.
+
+**Tests first:** add a real transactional integration test in `AuthIntegrationTest`: five wrong passwords persist the threshold; the next attempt, even with the correct password, is locked; after expiry, a successful login leaves counters reset. Restore the synthetic account between cases. Mockito verification that an increment method was called does not prove the counter committed.
+
+### R53-06 — Allow clinical status updates after the appointment start
+
+**Location:** `module/appointment/service/AppointmentService.java:116–137`; related UI minimum-time handling is R53-10.
+
+**Observed:** updating an appointment scheduled ten minutes earlier to status COMPLETED returns 400, `Cannot schedule appointments in the past`, even when the appointment time is unchanged. This blocks the normal completion-to-charge workflow.
+
+**Suggested solution:**
+- Apply the future-time rule when creating an appointment or actually rescheduling it. An unchanged historical start time must not prevent allowed status/clinical-field changes.
+- Keep terminal-state protections and explicitly validate permitted transitions. Do not work around the validation by rewriting the recorded appointment time.
+- Ensure completion generates one charge through the existing billing service and retains conflict checks when the schedule changes.
+
+**Tests first:** extend `AppointmentIntegrationTest`: a past-start SCHEDULED/ARRIVED appointment completes without changing its time and generates one charge; rescheduling into the past remains rejected; an already terminal visit remains protected. Use this scenario with R53-07's field assertions.
+
+### R53-07 — Preserve diagnosis codes in visit-generated charges
+
+**Location:** `module/appointment/service/AppointmentService.java:141–144` and `module/billing/service/ChargeService.createForVisit`.
+
+**Observed:** an appointment with `icd10Codes = R51.9` and chief complaint `synthetic headache` creates a charge whose `icd10_codes` is `synthetic headache`. The caller passes `a.getChiefComplaint()` in the parameter named `icd10Codes`; charge-to-bill conversion propagates the wrong value.
+
+**Suggested solution:**
+- Pass `a.getIcd10Codes()` to the existing diagnosis-code parameter. If the charge also needs clinical complaint text, model that as a separate field with its own storage/privacy rules.
+- Preserve the charge amount, CPT, appointment link, DRAFT status and deduplication behavior.
+- **Update the existing characterization assertion:** Slice 52.3b explicitly preserved the chief-complaint-as-ICD mapping and described it as unchanged behavior. That historical comparison is not evidence that the mapping is correct; the new regression test must assert distinct complaint/code values and expect the actual diagnosis code.
+- Inspect previously generated demo charges/bills if correcting historical records; do not blindly reinterpret arbitrary text as diagnosis codes.
+
+**Tests first:** extend `AppointmentIntegrationTest.completingAVisit_shouldCreateTheChargeThroughTheBillingService` and billing conversion coverage: complaint and ICD-10 deliberately differ; both charge and resulting bill retain `R51.9`; no duplicate charge or extra false CREATE audit is emitted.
+
+### R53-08 — Hash the same timestamp that the database stores
+
+**Location:** `common/audit/AuditLog.java:57–75`, `AuditLogWriter`, `AuditLogService.verifyIntegrity`, and the `audit_log.create_time` column definition.
+
+**Observed:** an audit record with `createTime = 2026-10-15T12:34:56.123456789` returns from H2 as `2026-10-15T12:34:56.123457`. Recomputing its hash after a save/read round trip does not match the persisted hash, without any tampering.
+
+**Suggested solution:**
+- Define a canonical timestamp precision and serialization for hashing, normalize before calculating the hash, and persist that exact value. Ensure the selected precision matches the supported schema rather than assuming Java nanoseconds survive storage.
+- If schema precision changes, update the schema version and document the supported database upgrade/reset path.
+- Treat existing hash-format records explicitly. Do not silently rewrite immutable historical hashes to make verification green; define a versioned/legacy verification policy or document an intentional demo-data reset.
+- Verify the persisted record through a fresh persistence context, not the same in-memory entity that computed its hash.
+
+**Tests first:** add `AuditIntegrityIntegrationTest`: nanosecond input survives normalization plus database round trip with a valid hash; a multi-row chain validates after fresh reads; changing a hashed field is detected. Assert the timestamp normalization contract directly.
+
+### R53-09 — Serialize Observation effective time without appending seconds
+
+**Location:** `module/patient/controller/FhirObservationController.java:117–119`.
+
+**Observed:** an observation with effective time `2026-10-15T12:34:56` returns 500 from `GET /api/v1/fhir/Observation/{id}`. Appending `":00"` to `LocalDateTime.toString()` creates `2026-10-15T12:34:56:00` when seconds are already present.
+
+**Suggested solution:**
+- Use an explicit conversion/formatter with the intended clinical timezone and FHIR-compatible offset/precision. Do not patch the string by always adding another seconds segment.
+- Use the same conversion for single-resource and search responses. Preserve the original instant/clinical time semantics, including fractional seconds where supported.
+
+**Tests first:** extend `FhirIntegrationTest` with minute-only, nonzero-second and fractional-second observations. Both detail and search must return 200 and produce resources parseable by HAPI with the expected effective time. Add an explicit timezone/offset assertion.
+
+### R53-10 — Generate datetime-local bounds in local time
+
+**Location:** `medical-web/src/views/appointments/index.tsx:121`.
+
+**Observed:** at `2026-10-15 12:00` in America/Los_Angeles, `new Date().toISOString().slice(0, 16)` produces a minimum of `2026-10-15T19:00`. A valid 13:00 local appointment is therefore below the input's minimum.
+
+**Suggested solution:**
+- Format the minimum from local date/time components, not a UTC ISO string with the timezone suffix removed.
+- Apply the bound only where a new/rescheduled time must be future; editing the status of an existing past-start appointment must remain possible after R53-06.
+- Keep the API's timezone contract explicit; this UI fix must not silently reinterpret stored appointment times.
+
+**Verification first:** a fixed-clock check at 12:00 America/Los_Angeles must allow 13:00 and reject 11:00 when creating an appointment. Include UTC and a positive-offset zone, and a browser check of editing an existing past-start appointment. Use existing tools or a small pure-function check; do not add a frontend test framework solely for this change.
+
+### R53-11 — Ignore responses belonging to a conversation that is no longer selected
+
+**Location:** `medical-web/src/views/chat/index.tsx:42–54` and `medical-web/src/views/patient/chat/index.tsx:30–43`.
+
+**Finding / reproducible sequence to automate:** select conversation A, then B; resolve B's request first and A's request last. Both implementations unconditionally apply each response with `setMessages`, so A can replace B's messages while the header/recipient still points to B. This sequence was established from the code path; it was not exercised in a browser during this review.
+
+**Suggested solution:**
+- Guard responses with a selection/request generation, cancel obsolete requests, or use query state keyed by the full conversation identity. Staff identity includes both party type and ID.
+- Apply the guard to both the first page and "Load earlier"; stale pages must not prepend another conversation's messages or overwrite totals.
+- Reset pagination/error state on selection changes and ensure sending uses the same selected identity as the displayed conversation.
+
+**Verification first:** use controlled deferred responses for A/B in both portals; resolve A last and assert only B's messages/total remain. Also switch conversations while loading older messages and while a request fails. Verify with browser network delay if no automated UI harness is available.
+
+### Suggested implementation order and completion gates
+
+1. Fix patient authentication state (R53-01 and R53-05), with separate regression evidence for revocation and failure-counter transactions.
+2. Close the conflict-query disclosure (R53-02), updating the API response and frontend consumer together.
+3. Fix resumable rotation (R53-03) before relying on completion status or retiring keys.
+4. Fix and unit-test the production local JWT contract (R53-04); this requires no external IdP deployment.
+5. Fix appointment completion and diagnosis propagation together (R53-06/07), then the related UI time bound (R53-10).
+6. Fix audit timestamp canonicalization (R53-08) and FHIR time conversion (R53-09).
+7. Fix both chat consumers' stale-response handling (R53-11).
+
+For each slice: write the named regression scenario first, record the failing behavior, implement the fix, and record the passing result here. Run `mvn clean verify` for backend changes and `npm run check && npm run build` for affected frontend changes. Stop any instance using `target/classes` before rebuilding, then start a fresh isolated instance for live probes, as required by CLAUDE.md §8b.
+
+Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
+
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 0/11 complete.**
