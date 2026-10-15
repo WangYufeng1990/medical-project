@@ -3807,7 +3807,7 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 ## Round 52 — module boundaries (in progress)
 
-> **Status: 52.1–52.7 landed (52.3a, 52.3b, 52.5a); only 52.8 open — every metric is at zero and the allowlists are empty.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
+> **Status: complete.** 52.1–52.8 landed (with 52.3a, 52.3b and 52.5a found by measurement along the way). Every metric is at zero and the allowlist mechanism is deleted. Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
 
 **The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
 
@@ -4040,6 +4040,27 @@ Scope-free and audit-free, like the other lookups: the daily `QualityScheduler.c
 
 Also worth knowing when reading the test: the test database's bundle carries **11** entries against the dev database's **9**, because `cleanup-test-data.sql` restores appointments 202/203 to `scheduled` while the running dev instance's scheduler had already marked those past visits no-show. The test asserts the test database's state, and says so.
 
+### Slice 52.8 ✅ — the allowlist deleted, and the rule written down
+
+The three allowlist constants are gone, along with the fourth check that policed them (`allowlistsShouldNotContainFixedEntries`) and the `pending` parameter every assertion used to consult. What is left is the rule itself: `assertNoViolations` prints the count and asserts the set is empty, and the failure message says what to do instead — cross the boundary through the owning module's service, or through an interface in `common/lookup`.
+
+**The guard was proved to bite without the allowlist**, because a guard that has only ever passed proves nothing (52.1's argument, applied to the state it was working towards). Two violations were injected into the working tree and reverted immediately:
+
+| Injected | Result |
+|----------|--------|
+| `DashboardService` importing `patient.entity.Patient` | `entity references 1`, build **fails**: `a module must not reference entity references: [module/dashboard/service/DashboardService.java → patient.Patient] — cross the boundary through the owning module's service or an interface in common/lookup (see PatientLookup, StaffLookup, ClinicalMeasureReader)` |
+| `ChatService` holding `com.example.medical.module.prescription.repository.PrescriptionRepository` **fully qualified**, with no import | `repository references 1`, build **fails** naming `module/chat/service/ChatService.java → prescription.PrescriptionRepository` — the form that was invisible before 52.3a |
+
+The rule is now stated where a contributor will meet it: `CLAUDE.md`'s structure rules name the three sanctioned ways across a boundary (a `common/lookup` interface, the owning module's service, or consuming its DTOs and services as a caller) and say the guard has no allowlist; `docs/backend-architecture-explained.md` gains **§3.1 "Who may import whom"** with the table, the reasoning (a repository *is* the persistence contract — its audit, its scoping and its lifecycle live behind its service), and the enum exception. Its directory tree also gained the entries it had been missing (`common/annotation`, `common/job`, `common/lookup`, and the `integration` and `quality` modules) — the section was describing a tree two modules out of date.
+
+| Check | Result |
+|-------|--------|
+| `mvn clean verify` | **213 tests** (214 − the deleted allowlist check), **0 failures**, `BUILD SUCCESS` |
+| Counts printed by every run | `repository references 0`, `entity references 0`, `module import cycles 0` — no allowlist, nothing to consult |
+| Both injections reverted | `git checkout` on the two files; the guard is green from the committed tree |
+
+**Round 52 is complete.** The metrics it set out to move, from the plan's own table: repository references **17 → 0**, cross-module entity references **16 → 0** (status enums still shared, by design), import cycles **6 → 0**, and the allowlist mechanism that made the work incremental is deleted rather than left as a permanent dumping ground. Eight slices, each with its own measurement: 52.1's guard (which corrected the plan's numbers), 52.2's `PatientLookup`, 52.3's `StaffLookup`, 52.3a (the guard learns about fully-qualified references), 52.3b (the charge write that blindness had hidden), 52.4 (`PatientLookup.exists`, last cycle), 52.5 (`PatientRegistryService` / `ObservationIntakeService`, the interface writes), 52.5a (the constraint that made a lab panel fail), 52.6 (`ClinicalMeasureReader`), 52.7 (the 360 bundle through the owning services) and this one.
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -4056,7 +4077,7 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 | **52.5a** | ✅ **The observation uniqueness constraint permits one row per result, not one per message** — found by 52.5's tests: a lab message with two results answered 500 and stored nothing | the defect, not a boundary: `uk_source_message` → `(source_message_id, loinc_code)`, `SCHEMA_VERSION` 1 → 2, migration via the guard (measured: the old database refuses to start and names the fix) | a two-result message answers `recordsCreated 2` and an eight-result panel `8`, both readable back; the duplicate-message case still answers 0; the repeated-LOINC case is measured and left as a product decision |
 | 52.6 | ✅ A clinical read model for the eCQM engine (`ClinicalMeasureReader`: a patient page plus the latest observation per LOINC) | 2 repository **and 2 entity** references (quality→patient), the last of each (5→3, 5→3) | the three reports compare field for field identical and the counters are pinned by test; observation queries 7→3 for the same three `/calculate` calls; the read model deliberately passes the free-text conditions and the raw value through unchanged, because codes or parsing anywhere else would move the numbers |
 | 52.7 | ✅ The portal's 360 aggregate reads through the owning modules' services (`PatientCaseService`; `PatientDataExport` only ever imported their DTOs) | 3 repository **and 3 entity** references, the last of both — **0 / 0 / 0**, allowlists empty | bundle entry composition and order pinned by test before the rewrite; the live bundle differs only in the two timestamps the code stamps itself; the endpoint has no frontend consumer, so there was no page to re-check |
-| 52.8 | Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` | the allowlist mechanism itself | 17 → 0 repository imports, 6 → 0 cycles (the 52.3a entries included — deleting the allowlist while a rule cannot see every edge would certify a number, not a rule) |
+| 52.8 | ✅ Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` (§3.1) | the allowlist mechanism itself — three constants, the check that policed them, and the `pending` parameter | **17 → 0 repository references, 16 → 0 entity references, 6 → 0 cycles**; two injected violations (an import and a fully-qualified reference) each fail the build by name, with the allowlist gone |
 
 **Docs**: this section gains each slice's completion record; `CLAUDE.md`'s structure rules gain the repository/entity/cycle clauses; `docs/backend-architecture-explained.md` Layer 3/4 gains the dependency direction (it currently shows the directory tree but not who may import whom).
 

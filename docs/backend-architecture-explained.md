@@ -43,6 +43,7 @@ medical-server/src/main/java/com/example/medical/
 ├── MedicalApplication.java              ← Spring Boot entry point
 │
 ├── common/                              ← Shared infrastructure
+│   ├── annotation/   @PhiField (Redis cache PHI redaction)
 │   ├── base/         BaseEntity (id/createTime/updateTime/isDeleted/version)
 │   ├── config/       SecurityConfig, SecurityConfigDev, FhirConfig,
 │   │                 AesCryptoUtil, AesAttributeConverter, AsyncConfig,
@@ -50,7 +51,12 @@ medical-server/src/main/java/com/example/medical/
 │   ├── audit/        @Auditable, AuditLogAspect, AuditLogWriter, AuditLog
 │   ├── enums/        ResultCode
 │   ├── exception/    BusinessException, GlobalExceptionHandler
-│   └── result/       Result<T>, PageResult<T>
+│   ├── job/          DataRetentionJob (scheduled audit archive)
+│   ├── lookup/       The interfaces a module implements so its neighbours can
+│   │                 read its data without importing it (PatientLookup,
+│   │                 StaffLookup, ClinicalMeasureReader)
+│   ├── result/       Result<T>, PageResult<T>
+│   └── security/     DoctorPatientScope + the same kind of inversion interfaces
 │
 ├── security/                             ← Auth adapters
 │   ├── JwtUtils        (Okta token parsing)
@@ -65,10 +71,41 @@ medical-server/src/main/java/com/example/medical/
     ├── billing/      Billing management (insurance claim lifecycle + CPT/ICD-10)
     ├── chat/         Instant messaging (AES-encrypted content, SSE real-time push)
     ├── dashboard/    Dashboard statistics
-    └── export/       Data export (CSV + audit + rate limit)
+    ├── export/       Data export (CSV + audit + rate limit)
+    ├── integration/  Mirth Connect ADT + lab results (API key, not JWT)
+    └── quality/      CMS eCQM measures and their scheduled calculation
 ```
 
 Each module internally follows a uniform five-layer structure: `controller → service → repository → entity → dto`.
+
+### 3.1 Who may import whom
+
+Two rules, both enforced by `LayeringGuardTest` (a source scan, no allowlist — a
+reference counts whether it arrives by `import` or written out fully qualified, and
+the module graph is walked for cycles at any length):
+
+| From | May reference | Not |
+|------|---------------|-----|
+| `common/`, `security/` | the JDK, Spring, other `common/` | `module.*` — invert with an interface the module implements (`common/security/DoctorPatientScopeProvider`, `AccountRevocationCheck`, `common/lookup/PatientLookup`) |
+| a module | its own packages, `common/`, `security/` | another module's `repository` or `entity` package |
+| a module | another module's **DTOs and services** as a caller (the portal reads `BillService`, `AppointmentService`, `PrescriptionService`) | creating a cycle in the module graph |
+
+A repository *is* a module's persistence contract: its audit rows, its doctor
+scoping and its entity lifecycle all live behind its service, so reaching past it
+skips them. When a neighbour needs data, the direction is:
+
+- **reads** → an interface in `common/lookup` that the owning module implements
+  (`PatientLookup.displayName`, `StaffLookup.prescriberIdentity`,
+  `ClinicalMeasureReader.patientPage`), kept narrow and deliberately scope-free and
+  audit-free, because these answer display and batch questions rather than access
+  ones;
+- **writes** → the owning module's service (`ChargeService.createForVisit` for the
+  charge a completed visit produces, `PatientRegistryService` and
+  `ObservationIntakeService` for ADT and lab feeds), so the write inherits that
+  module's audit row and rules;
+- **status enums** (`BillClaimStatus`, `AppointmentStatus`) are the one deliberate
+  exception to the entity rule: they are shared vocabulary, not persistence, and the
+  guard decides by reading the target file for an `enum` declaration.
 
 ---
 

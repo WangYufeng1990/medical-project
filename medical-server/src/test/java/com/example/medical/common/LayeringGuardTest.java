@@ -30,9 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <b>Round 52:</b> the same rule one level down, between modules. A repository is
  * a module's persistence contract, so importing another module's skips that
  * module's audit and scope rules; and a mutual import means neither module can be
- * understood, tested or moved on its own. Three checks, plus the shrinking
- * allowlist in {@link #PENDING_REPOSITORY}, {@link #PENDING_ENTITY} and
- * {@link #PENDING_CYCLE} that Round 52 works down to empty.
+ * understood, tested or moved on its own. Three checks, no allowlist: 52.1 landed
+ * them with today's violations listed as a shrinking allowlist, 52.2–52.7 removed
+ * every violation, and 52.8 deleted the mechanism. A violation is now a build
+ * failure, full stop.
  * <p>
  * <b>52.3a:</b> a reference counts whether it arrives by import or is written out
  * fully qualified — 52.3's measurement found {@code AppointmentService} holding
@@ -66,20 +67,6 @@ class LayeringGuardTest {
     /** Block comments, javadoc and line comments — dropped before the reference scan. */
     private static final Pattern COMMENT = Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
 
-    /**
-     * Round 52 work in progress: the violations that exist today, each tagged with
-     * the slice that removes it. Two rules keep this honest — a violation that is
-     * not listed fails immediately, and so does an entry whose violation has been
-     * fixed ({@link #allowlistsShouldNotContainFixedEntries}), which is what makes
-     * the list shrink instead of rot. Slice 52.8 deletes the three constants.
-     */
-    private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries();
-
-    private static final Map<String, String> PENDING_ENTITY = Map.ofEntries();
-
-
-    private static final Map<String, String> PENDING_CYCLE = Map.of();
-
     @Test
     void sharedKernelShouldNotImportBusinessModules() throws IOException {
         Path root = moduleRoot();
@@ -108,7 +95,7 @@ class LayeringGuardTest {
         for (CrossModuleReference r : crossModuleReferences()) {
             if (r.simpleName().endsWith("Repository")) violations.add(r.key());
         }
-        assertAllowlisted("repository references", violations, PENDING_REPOSITORY);
+        assertNoViolations("repository references", violations);
     }
 
     /**
@@ -125,7 +112,7 @@ class LayeringGuardTest {
             if (r.simpleName().endsWith("Repository")) continue;
             if (!isEnum(r)) violations.add(r.key());
         }
-        assertAllowlisted("entity references", violations, PENDING_ENTITY);
+        assertNoViolations("entity references", violations);
     }
 
     @Test
@@ -139,43 +126,15 @@ class LayeringGuardTest {
         for (List<String> cycle : findCycles(graph)) {
             cycles.add(String.join(" ↔ ", cycle));
         }
-        assertAllowlisted("module import cycles", cycles, PENDING_CYCLE);
+        assertNoViolations("module import cycles", cycles);
     }
 
-    @Test
-    void allowlistsShouldNotContainFixedEntries() throws IOException {
-        List<CrossModuleReference> references = crossModuleReferences();
-        Set<String> repository = new TreeSet<>();
-        Set<String> entity = new TreeSet<>();
-        Map<String, Set<String>> graph = new TreeMap<>();
-        for (CrossModuleReference r : references) {
-            graph.computeIfAbsent(r.from(), k -> new TreeSet<>()).add(r.to());
-            if (r.simpleName().endsWith("Repository")) repository.add(r.key());
-            else if ("entity".equals(r.packageWithinModule()) && !isEnum(r)) entity.add(r.key());
-        }
-        Set<String> cycles = new TreeSet<>();
-        for (List<String> cycle : findCycles(graph)) cycles.add(String.join(" ↔ ", cycle));
+    private void assertNoViolations(String what, Set<String> violations) {
+        System.out.printf("layering: cross-module %-26s %d%n", what, violations.size());
 
-        List<String> stale = new ArrayList<>();
-        for (String key : PENDING_REPOSITORY.keySet()) if (!repository.contains(key)) stale.add(key);
-        for (String key : PENDING_ENTITY.keySet()) if (!entity.contains(key)) stale.add(key);
-        for (String key : PENDING_CYCLE.keySet()) if (!cycles.contains(key)) stale.add(key);
-
-        assertTrue(stale.isEmpty(),
-                "these allowlist entries no longer describe a violation — delete them: " + stale);
-    }
-
-    private void assertAllowlisted(String what, Set<String> violations, Map<String, String> pending) {
-        System.out.printf("layering: cross-module %-26s %d (allowlisted %d)%n",
-                what, violations.size(), pending.size());
-
-        List<String> unexpected = new ArrayList<>();
-        for (String violation : violations) {
-            if (!pending.containsKey(violation)) {
-                unexpected.add(violation + " (fix it, or add it with the slice that will)");
-            }
-        }
-        assertTrue(unexpected.isEmpty(), "a module must not reference " + what + ": " + unexpected);
+        assertTrue(violations.isEmpty(), "a module must not reference " + what + ": " + violations
+                + " — cross the boundary through the owning module's service or an interface in"
+                + " common/lookup (see PatientLookup, StaffLookup, ClinicalMeasureReader)");
     }
 
     private record CrossModuleReference(String file, String from, String to, String packageWithinModule,
