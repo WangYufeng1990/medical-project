@@ -23,6 +23,9 @@ class PatientIntegrationTest extends IntegrationTestSupport {
 
     private String adminToken, doctorToken, patientToken = null;
 
+    /** The patient this class creates at order 36; update and delete act on it, never on seed data. */
+    private Long probePatientId = null;
+
     @BeforeAll
     void authenticate() throws Exception {
         adminToken = login("admin", "admin123");
@@ -140,7 +143,7 @@ class PatientIntegrationTest extends IntegrationTestSupport {
                 "patientStatus", "active",
                 "phoneMobile", "312-555-9999"
         ));
-        mockMvc.perform(put("/api/v1/patients/103")
+        mockMvc.perform(put("/api/v1/patients/" + probePatientId())
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
@@ -149,7 +152,7 @@ class PatientIntegrationTest extends IntegrationTestSupport {
     @Test
     @Order(39)
     void deletePatient_asDoctor_shouldBeDenied() throws Exception {
-        MvcResult result = mockMvc.perform(delete("/api/v1/patients/103")
+        MvcResult result = mockMvc.perform(delete("/api/v1/patients/" + probePatientId())
                         .header("Authorization", "Bearer " + doctorToken))
                 .andReturn();
         assertNotEquals(200, result.getResponse().getStatus(),
@@ -159,9 +162,28 @@ class PatientIntegrationTest extends IntegrationTestSupport {
     @Test
     @Order(40)
     void deletePatient_asAdmin_shouldSucceed() throws Exception {
-        mockMvc.perform(delete("/api/v1/patients/103")
+        mockMvc.perform(delete("/api/v1/patients/" + probePatientId())
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * The id of the patient order 36 created. These tests used to update and delete
+     * seeded patient 103 instead — which wiped that patient's date of birth and
+     * history (the form carries null for fields it omits) and then soft-deleted the
+     * row, for every class that ran afterwards. Nothing depended on patient 103
+     * until 52.6's measure counters did.
+     */
+    private long probePatientId() throws Exception {
+        if (probePatientId == null) {
+            JsonNode records = objectMapper.readTree(mockMvc.perform(get("/api/v1/patients")
+                            .param("keyword", "MRN-TEST-001")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andReturn().getResponse().getContentAsString()).get("data").get("records");
+            assertTrue(records.size() == 1, "order 36 should have created MRN-TEST-001");
+            probePatientId = records.get(0).get("id").asLong();
+        }
+        return probePatientId;
     }
 
     @Test

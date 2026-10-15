@@ -23,4 +23,12 @@ public interface ObservationRepository extends JpaRepository<Observation, Long> 
             Long patientId, String loincCode, Pageable pageable);
 
     boolean existsBySourceMessageId(String sourceMessageId);
+
+    /**
+     * Every observation of these LOINCs for these patients, newest first — the
+     * ordering the eCQM reader relies on to pick the latest row per patient and
+     * LOINC out of one query (52.6).
+     */
+    List<Observation> findByPatientIdInAndLoincCodeInOrderByEffectiveDateDesc(
+            Collection<Long> patientIds, Collection<String> loincCodes);
 }

@@ -3807,7 +3807,7 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 ## Round 52 — module boundaries (in progress)
 
-> **Status: 52.1–52.5 landed (52.3a, 52.3b, 52.5a); 52.6–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
+> **Status: 52.1–52.6 landed (52.3a, 52.3b, 52.5a); 52.7–52.8 open.** Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
 
 **The rule, and what breaks it.** CLAUDE.md says "No cyclic references between modules" and "JPA repositories live in each module's `repository/` directory". `LayeringGuardTest` (M8.5) enforces the first of those only for `common/` and `security/` — the shared kernel must not import `module.*`. Nothing looks at `module ↔ module`. Measured today:
 
@@ -4001,6 +4001,29 @@ spring.sql.init never alters existing tables, so the new columns are missing. De
 | Live probe, idempotency | the same `sourceMessageId` resent answers `recordsCreated 0` — the message-level duplicate check never depended on the index |
 | **Residual, measured and left alone** | one message that repeats a single LOINC code twice still answers **500**: the payload carries no specimen or sequence to tell the two results apart, so any tighter key would have to invent one. Silently keeping the first row would lose data, and a 400 would have to be defined per interface — a product decision, reported rather than guessed |
 
+### Slice 52.6 ✅ — a clinical read model for the eCQM engine
+
+`QualityMeasureService` walked `patientRepository.findAll()` and read the patient module's entities directly — the last read of its kind, and one that also cost an observation query per patient per LOINC. It now reads `common/lookup/ClinicalMeasureReader`: `patientPage(pageable)` for the patients a measure must consider, and `latestObservations(patientIds, loincs)` for the most recent value of each LOINC those patients carry. `PatientMeasureReader` answers both from the patient module's own repositories. Every predicate stayed where it was — only where the values come from changed.
+
+**This is the slice the plan said would have to be designed.** The design decision was not the method names but what to pass through unchanged, because each of these would otherwise move the counters:
+
+- **the condition text, not codes.** The measures match words in `Patient.medicalHistory`. The `problem` table holds codes, and they cover a different set of patients: patient 100 has Essential hypertension + Type 2 diabetes as rows, patient 103 has none, while the free text carries both. Reading codes would drop 103 out of CMS122 and CMS165.
+- **age as a number, not a date of birth.** Age is `-1` when the date of birth is unknown, which every measure reads as out of range — the same rule, now applied inside the patient module, so DOB never leaves it.
+- **the value as a string**, because the measures parse it and an unparseable value means "not on record"; and **the effective date**, because CMS125 needs it (a mammogram counts only within 27 months), not just the value.
+
+Scope-free and audit-free, like the other lookups: the daily `QualityScheduler.calculateAllMeasures()` runs with no authenticated user, so anything the reader inherited from a login would break that path. The service now also pages (500 patients) instead of loading the whole table, and picks the newest value per patient and LOINC out of one ordered query — the same ordering the per-patient query used, so the row picked is the same one, including for rows that carry no effective date.
+
+**Verification**
+
+| Check | Result |
+|-------|--------|
+| Counters pinned first | `qualityReports_shouldMatchTheSeededCounters` was written against the old code and passed: CMS122 `2/0/2/2/100`, CMS125 `1/0/1/1/100`, CMS165 `2/0/2/1/50` — derived from the seed by hand (100 and 103 diabetic and hypertensive; latest HbA1c 7.8 and 8.5; latest BP 132/85 against 145/92; 103's mammogram inside 27 months) and then confirmed by running it |
+| The same test after the rewrite | unchanged, still green — the three report payloads also compare **field for field identical** to the pre-change live responses, with only `calculatedAt` moving |
+| Query shape, measured from the instance log | the same three `/calculate` calls: patient queries **3 → 3**, observation queries **7 → 3** (one batched query per measure instead of one per patient per LOINC: CMS122 2, CMS125 1, CMS165 4 before). Paging also bounds memory, where the old code loaded every patient |
+| `mvn clean verify` | **213 tests** (212 + the new counter test), **0 failures**, `BUILD SUCCESS`; `repository references 3 (allowlisted 3)`, `entity references 3 (allowlisted 3)`, cycles 0 — only 52.7's entries remain |
+
+**Found while making the suite green — a test-isolation defect, fixed here.** `PatientIntegrationTest`'s update and delete targeted **seeded patient 103**: the update's form carries `null` for every field it omits, so it wiped 103's date of birth and medical history, and the delete then soft-deleted the row — for every class that ran afterwards, since `cleanup-test-data.sql` restores 100–103 only by deleting rows whose name or MRN looks like test data. Nothing depended on patient 103 until these counters did; the first full run failed with `CMS122v11 denominator ==> expected: <2> but was: <1>`. Those two tests now act on the patient the class creates at order 36, which the cleanup script does remove.
+
 ### Slices
 
 Each slice is one commit, leaves `mvn clean verify` green, and carries its own evidence in the project's usual style (no-wire-change comparisons, live probes, role checks).
@@ -4015,7 +4038,7 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 | 52.4 | ✅ `EmergencyAccessController` → `PatientLookup.exists` | `patient↔system` — **the last cycle**; 1 repository reference (9→8, and 1→**0** cycles) | break-glass 200 for a real patient and 404 for an unknown id, both re-checked live; 404 for a soft-deleted patient pinned by test; the check is a `count` under `is_deleted = 0` |
 | 52.5 | ✅ Integration writes through the patient module: the `AdtService` upsert and the `LabResultService` observation ingest | 3 repository **and 3 entity** references (integration→patient), including the only cross-module **write** path (8→5, 8→5) | acks unchanged (count present/absent per endpoint, duplicate and unmapped-MRN cases at 0); the writes now leave `patient/CREATE`, `patient/UPDATE` and `patient/LAB_INGEST` rows |
 | **52.5a** | ✅ **The observation uniqueness constraint permits one row per result, not one per message** — found by 52.5's tests: a lab message with two results answered 500 and stored nothing | the defect, not a boundary: `uk_source_message` → `(source_message_id, loinc_code)`, `SCHEMA_VERSION` 1 → 2, migration via the guard (measured: the old database refuses to start and names the fix) | a two-result message answers `recordsCreated 2` and an eight-result panel `8`, both readable back; the duplicate-message case still answers 0; the repeated-LOINC case is measured and left as a product decision |
-| 52.6 | A clinical read model for the eCQM engine (demographics page, latest observation by LOINC, condition codes) | 2 repository **and 2 entity** imports (quality→patient) | `GET /quality/measures/{cmsId}/report` returns the same 10 keys **and the same counters** before and after — 51.8's comparison method |
+| 52.6 | ✅ A clinical read model for the eCQM engine (`ClinicalMeasureReader`: a patient page plus the latest observation per LOINC) | 2 repository **and 2 entity** references (quality→patient), the last of each (5→3, 5→3) | the three reports compare field for field identical and the counters are pinned by test; observation queries 7→3 for the same three `/calculate` calls; the read model deliberately passes the free-text conditions and the raw value through unchanged, because codes or parsing anywhere else would move the numbers |
 | 52.7 | The portal's 360 aggregate stops importing appointment/prescription repositories (`PatientCaseService`, `PatientDataExport`) | 3 repository **and 3 entity** imports, the last of both | the portal pages re-checked in the browser; the 360 payload compared field by field |
 | 52.8 | Allowlist emptied and deleted; the rule stated in `CLAUDE.md` and `backend-architecture-explained.md` | the allowlist mechanism itself | 17 → 0 repository imports, 6 → 0 cycles (the 52.3a entries included — deleting the allowlist while a rule cannot see every edge would certify a number, not a rule) |
 

@@ -76,16 +76,14 @@ class LayeringGuardTest {
     private static final Map<String, String> PENDING_REPOSITORY = Map.ofEntries(
             Map.entry("module/patient/service/PatientCaseService.java → appointment.AppointmentRepository", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItemRepository", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionRepository", "52.7"),
-            Map.entry("module/quality/service/QualityMeasureService.java → patient.ObservationRepository", "52.6"),
-            Map.entry("module/quality/service/QualityMeasureService.java → patient.PatientRepository", "52.6"));
+            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionRepository", "52.7"));
+
 
     private static final Map<String, String> PENDING_ENTITY = Map.ofEntries(
             Map.entry("module/patient/service/PatientCaseService.java → appointment.Appointment", "52.7"),
             Map.entry("module/patient/service/PatientCaseService.java → prescription.Prescription", "52.7"),
-            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItem", "52.7"),
-            Map.entry("module/quality/service/QualityMeasureService.java → patient.Observation", "52.6"),
-            Map.entry("module/quality/service/QualityMeasureService.java → patient.Patient", "52.6"));
+            Map.entry("module/patient/service/PatientCaseService.java → prescription.PrescriptionItem", "52.7"));
+
 
     private static final Map<String, String> PENDING_CYCLE = Map.of();
 
