@@ -240,22 +240,34 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void patientChangePassword_wrongOldPassword_shouldBeRejected() throws Exception {
-        MvcResult result = changePassword("not-my-password", "N3wPatientPass!")
+        MvcResult result = changePassword(patientToken, "not-my-password", "N3wPatientPass!")
                 .andExpect(status().isBadRequest())
                 .andReturn();
         assertEquals("Old password is incorrect",
                 objectMapper.readTree(result.getResponse().getContentAsString()).get("message").asText());
     }
 
+    /**
+     * Password policy, on an account of its own: changing a password ends that
+     * account's sessions (R53-01), so this test re-signs in after every change and
+     * uses the fresh token. Patient 3 is the subject because nothing else signs in
+     * as that account — patient 1's session has to survive for the rest of this class.
+     */
     @Test
     void patientChangePassword_shouldApplyAndBlockReuse() throws Exception {
-        changePassword("patient123", "Pw!One2345").andExpect(status().isOk());
-        assertNotNull(patientLogin("patient1", "Pw!One2345"));
+        String firstToken = patientLogin("patient3", "patient123");
+        changePassword(firstToken, "patient123", "Pw!One2345").andExpect(status().isOk());
+        String token = patientLogin("patient3", "Pw!One2345");
+
+        // The change ended the session that made it: that token is refused now.
+        changePassword(firstToken, "Pw!One2345", "Pw!Two2345")
+                .andExpect(status().isUnauthorized());
 
         // Second change makes Pw!One2345 part of the recorded history.
-        changePassword("Pw!One2345", "Pw!Two2345").andExpect(status().isOk());
+        changePassword(token, "Pw!One2345", "Pw!Two2345").andExpect(status().isOk());
+        String latest = patientLogin("patient3", "Pw!Two2345");
 
-        MvcResult result = changePassword("Pw!Two2345", "Pw!One2345")
+        MvcResult result = changePassword(latest, "Pw!Two2345", "Pw!One2345")
                 .andExpect(status().isBadRequest())
                 .andReturn();
         assertEquals("New password must not match any of the last 3 passwords",
@@ -307,13 +319,13 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
         return names;
     }
 
-    private ResultActions changePassword(String oldPassword, String newPassword)
+    private ResultActions changePassword(String token, String oldPassword, String newPassword)
             throws Exception {
         Map<String, String> body = Map.of("oldPassword", oldPassword, "newPassword", newPassword);
         return mockMvc.perform(put("/api/v1/patient/me/password")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(body))
-                .header("Authorization", "Bearer " + patientToken));
+                .header("Authorization", "Bearer " + token));
     }
 
     /**

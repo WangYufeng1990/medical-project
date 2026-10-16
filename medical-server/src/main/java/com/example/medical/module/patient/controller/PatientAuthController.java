@@ -6,6 +6,8 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
+import com.example.medical.common.security.PatientSessionCheck;
+import com.example.medical.module.patient.service.PatientAuthSessionCheck;
 import com.example.medical.module.patient.service.PatientLockoutService;
 import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.common.validation.ValidPassword;
@@ -92,8 +94,10 @@ public class PatientAuthController {
         }
         patientLockoutService.resetFailedAttempts(auth.getId());
 
-        String token = generateToken(patient.getId(), auth.getUsername());
-        String refreshToken = generateRefreshToken(patient.getId(), auth.getUsername());
+        String token = generateToken(patient.getId(), auth.getUsername(),
+                PatientAuthSessionCheck.markerOf(auth));
+        String refreshToken = generateRefreshToken(patient.getId(), auth.getUsername(),
+                PatientAuthSessionCheck.markerOf(auth));
 
         return Result.ok(new PatientLoginResponse(token, refreshToken,
                 patient.getId(), patient.getName(), auth.getUsername()));
@@ -182,8 +186,20 @@ public class PatientAuthController {
             String username = jwt.getClaimAsString("username");
             if (username == null) username = "patient";
 
-            String newToken = generateToken(patientId, username);
-            String newRefreshToken = generateRefreshToken(patientId, username);
+            // The account is re-read here: a refresh token must not outlive the
+            // credentials it was issued for (R53-01). Success mints a token carrying
+            // the *current* marker, so an old refresh token cannot resurrect a session.
+            PatientAuth auth = patientAuthRepository.findByPatientId(patientId)
+                    .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token"));
+            if (!Integer.valueOf(1).equals(auth.getStatus())
+                    || !PatientAuthSessionCheck.markerOf(auth).equals(
+                            jwt.getClaimAsString(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM))) {
+                throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
+            }
+
+            String newToken = generateToken(patientId, username, PatientAuthSessionCheck.markerOf(auth));
+            String newRefreshToken = generateRefreshToken(patientId, username,
+                    PatientAuthSessionCheck.markerOf(auth));
 
             return Result.ok(new PatientLoginResponse(newToken, newRefreshToken,
                     null, null, null));
@@ -194,7 +210,7 @@ public class PatientAuthController {
         }
     }
 
-    private String generateToken(Long patientId, String username) {
+    private String generateToken(Long patientId, String username, String credentialMarker) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(username)
@@ -202,6 +218,7 @@ public class PatientAuthController {
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(patientTokenExpirySeconds))
                 .claim("uid", patientId.toString())
+                .claim(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM, credentialMarker)
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("openid", "profile", "patient/Patient.read", "patient/Observation.read"))
                 .claim("perm", List.of("patient:read", "patient:profile", "patient:appointments", "patient:prescriptions", "patient:bills", "patient:chat"))
@@ -209,7 +226,7 @@ public class PatientAuthController {
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }
 
-    private String generateRefreshToken(Long patientId, String username) {
+    private String generateRefreshToken(Long patientId, String username, String credentialMarker) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(patientId.toString())
@@ -217,6 +234,7 @@ public class PatientAuthController {
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(patientRefreshTokenExpirySeconds))
                 .claim("uid", patientId.toString())
+                .claim(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM, credentialMarker)
                 .claim("username", username)
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("refresh"))

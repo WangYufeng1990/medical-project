@@ -4124,7 +4124,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 
 | ID | Priority | Finding | Status |
 |----|----------|---------|--------|
-| R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [ ] Open |
+| R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [x] Done |
 | R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [ ] Open |
 | R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
 | R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [x] Done |
@@ -4149,6 +4149,20 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 - Make the patient profile UI handle the chosen post-password-change behavior explicitly (e.g. clear patient credentials and return to login if all sessions are invalidated). Do not silently invalidate credentials while leaving the page looking authenticated.
 
 **Tests first:** add `PatientSessionRevocationIntegrationTest`: valid credentials can access and refresh; after password change, both original tokens are rejected; a disabled/deleted patient cannot refresh or access; a new login with the new password works. Include staff/patient numeric-ID overlap and same-second changes in the identity/version tests. Cover password reset through the same revocation contract without exposing reset tokens in production responses.
+
+**Fix record — done.** The credential marker, not the clock: a patient token now carries the moment its account's password last changed (`pwd`, the same marker for a never-changed password), and `PatientSessionCheck` — the patient-side counterpart of `AccountRevocationCheck`, in its own identity domain — answers whether the account still exists, is enabled, and still carries that marker. `JwtClaimMapper` asks it on every request (where it previously skipped patient tokens entirely, because a patient id must never be compared with `sys_user` revocation), and `/patient/login` and `/patient/refresh` mint with the current marker. Refresh re-reads the account first, so an old refresh token cannot resurrect a session it was issued for.
+
+Comparing markers is an **equality test, not a timestamp comparison**, which is what the finding asked for and what keeps a password change in the same second as a login from invalidating the session that login just created. No schema change was needed: `patient_auth.password_changed_at` already existed and both password paths (change and reset) already set it.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `PatientSessionRevocationIntegrationTest`: 7 tests, **4 failures** — the old access token answered 200 after a password change, the old refresh token still minted replacements (200), and a disabled **and** a removed account kept answering 200. The three that passed are the anti-over-correction guards: a session that nothing changed keeps working, the new password signs in, another patient's password change is none of this session's business |
+| Green, after the fix | the same 7 pass, and the live instance agrees: after a real password change over HTTP, the old access token answers **401**, the old refresh token answers **401**, and the new password signs in with **200** |
+| Browser, `/patient/profile` | changing the password shows *"Password changed. Please sign in again with your new password."*, lands on `/patient/login`, and clears `patientToken`, `patientRefreshToken` and `patientInfo` — the page no longer looks authenticated while holding tokens the server will refuse. Screenshot `/tmp/ui-shots/105-r53-01-after-password-change.png` |
+| Existing test corrected | `PatientPortalIntegrationTest.patientChangePassword_shouldApplyAndBlockReuse` assumed a successful change left the session usable and kept calling the endpoint with the dead token. It now runs on patient 3 (which nothing else signs in as), re-signs in after each change, and asserts the pre-change token is refused — the reuse-policy intent is unchanged |
+| `mvn clean verify` | **229 tests** (222 + 7), **0 failures**, `BUILD SUCCESS`; `npm run check` clean |
+
+Two things left deliberately outside this slice, both worth their own decision: the access token's 24-hour and refresh token's 30-day lifetimes are unchanged (tighter TTLs are a product call, not a defect), and a token minted *before* this fix carries no marker and is therefore refused — correct for a session contract, but it does sign every live portal session out once on deploy.
 
 ### R53-02 — Separate conflict detection from disclosure of patient details
 
@@ -4327,4 +4341,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 2/11 complete** (R53-04 and R53-05 done; 3 P1 and 6 P2 findings open).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 3/11 complete** (R53-01, R53-04 and R53-05 done; 2 P1 and 6 P2 findings open).

@@ -1,6 +1,7 @@
 package com.example.medical.security;
 
 import com.example.medical.common.security.AccountRevocationCheck;
+import com.example.medical.common.security.PatientSessionCheck;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -20,6 +21,7 @@ import java.util.List;
 public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthenticationToken> {
 
     private final AccountRevocationCheck accountRevocationCheck;
+    private final PatientSessionCheck patientSessionCheck;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -42,15 +44,26 @@ public class JwtClaimMapper implements Converter<Jwt, UsernamePasswordAuthentica
         if (groups == null) groups = List.of();
 
         Long userId = extractUserId(jwt);
-        // Patient tokens carry a patient-table id in uid — never check it against
-        // sys_user force-logout, ids overlap between the two tables (R2-1).
+        // Patient tokens carry a patient-table id in uid, so they are never checked
+        // against sys_user force-logout — the two tables' ids overlap (R2-1). They get
+        // the patient module's own answer instead: the account must still exist, be
+        // enabled, and not have changed its password since the token was issued
+        // (R53-01). A token minted before this check existed carries no marker and is
+        // therefore refused, which is the point.
         boolean isPatient = groups.stream().anyMatch("PATIENT"::equalsIgnoreCase);
-        if (userId != null && userId > 0 && !isPatient) {
-            LocalDateTime forceLogout = accountRevocationCheck.forceLogoutAfter(userId);
-            if (forceLogout != null && jwt.getIssuedAt() != null) {
-                LocalDateTime issuedAt = LocalDateTime.ofInstant(jwt.getIssuedAt(), ZoneId.systemDefault());
-                if (issuedAt.isBefore(forceLogout)) {
-                    throw reject("Account was disabled or credentials changed after token issuance");
+        if (userId != null && userId > 0) {
+            if (isPatient) {
+                if (!patientSessionCheck.isUsable(userId,
+                        jwt.getClaimAsString(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM))) {
+                    throw reject("Patient session ended: account disabled, removed, or credentials changed");
+                }
+            } else {
+                LocalDateTime forceLogout = accountRevocationCheck.forceLogoutAfter(userId);
+                if (forceLogout != null && jwt.getIssuedAt() != null) {
+                    LocalDateTime issuedAt = LocalDateTime.ofInstant(jwt.getIssuedAt(), ZoneId.systemDefault());
+                    if (issuedAt.isBefore(forceLogout)) {
+                        throw reject("Account was disabled or credentials changed after token issuance");
+                    }
                 }
             }
         }
