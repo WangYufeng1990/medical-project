@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -58,6 +60,12 @@ abstract class IntegrationTestSupport {
     @Autowired
     protected ObjectMapper objectMapper;
 
+    @Autowired
+    protected JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    protected PasswordEncoder passwordEncoder;
+
     protected String login(String username, String password) throws Exception {
         return token("/api/v1/auth/login", username, password);
     }
@@ -75,5 +83,27 @@ abstract class IntegrationTestSupport {
         JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
         assertEquals(200, node.get("code").asInt());
         return node.get("data").get("token").asText();
+    }
+
+    /**
+     * Puts a seeded patient portal account back to the state the seed created: the
+     * seeded password, no credential marker, enabled and unlocked, its password history
+     * cleared, and its patient record un-deleted. Tests that change a password or delete
+     * a patient restore it here, so a class never depends on what ran before it (R53-01
+     * review: a class that left patient3 changed made a later class order-dependent).
+     */
+    protected void restorePatientPortalAccount(String username, long patientId) {
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM patient_auth WHERE username = ?", Integer.class, username);
+        if (rows == 0) {
+            jdbcTemplate.update("INSERT INTO patient_auth (patient_id, username, password, status) "
+                    + "VALUES (?,?,?,1)", patientId, username, passwordEncoder.encode("patient123"));
+        }
+        jdbcTemplate.update("UPDATE patient_auth SET password = ?, password_changed_at = NULL, "
+                        + "status = 1, is_deleted = 0, failed_attempts = 0, locked_until = NULL "
+                        + "WHERE username = ?", passwordEncoder.encode("patient123"), username);
+        jdbcTemplate.update("DELETE FROM password_history WHERE user_type = 'PATIENT' AND user_id = "
+                + "(SELECT id FROM patient_auth WHERE username = ?)", username);
+        jdbcTemplate.update("UPDATE patient SET is_deleted = 0 WHERE id = ?", patientId);
     }
 }

@@ -50,6 +50,7 @@ public class PatientAuthController {
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
     private final PatientLockoutService patientLockoutService;
+    private final PatientSessionCheck patientSessionCheck;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final JwtDecoder jwtDecoder;
@@ -189,13 +190,12 @@ public class PatientAuthController {
             // The account is re-read here: a refresh token must not outlive the
             // credentials it was issued for (R53-01). Success mints a token carrying
             // the *current* marker, so an old refresh token cannot resurrect a session.
-            PatientAuth auth = patientAuthRepository.findByPatientId(patientId)
-                    .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token"));
-            if (!Integer.valueOf(1).equals(auth.getStatus())
-                    || !PatientAuthSessionCheck.markerOf(auth).equals(
-                            jwt.getClaimAsString(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM))) {
+            if (!patientSessionCheck.isUsable(patientId,
+                    jwt.getClaimAsString(PatientSessionCheck.CREDENTIAL_MARKER_CLAIM))) {
                 throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
             }
+            PatientAuth auth = patientAuthRepository.findByPatientId(patientId)
+                    .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Invalid refresh token"));
 
             String newToken = generateToken(patientId, username, PatientAuthSessionCheck.markerOf(auth));
             String newRefreshToken = generateRefreshToken(patientId, username,

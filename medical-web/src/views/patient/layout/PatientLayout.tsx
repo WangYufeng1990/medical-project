@@ -1,10 +1,10 @@
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Outlet, useLocation, Link } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import patientRequest, { http } from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 import SessionWarningModal from '../../../layout/SessionWarningModal'
-import { readPatientInfo, tokenStore } from '../../../utils/auth'
+import { readPatientInfo, endPatientSession } from '../../../utils/auth'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -17,7 +17,7 @@ const items = [
 ]
 
 export default function PatientLayout() {
-  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const loc = useLocation()
   const cachedInfo = readPatientInfo()
   const [unread, setUnread] = useState(0)
@@ -38,7 +38,7 @@ export default function PatientLayout() {
     return () => { cancelled = true; clearInterval(timer) }
   }, [loc.pathname])
 
-  const handleLogout = () => { tokenStore.clearPatient(); navigate('/patient/login') }
+  const handleLogout = () => endPatientSession(queryClient)
   const { warningVisible, reset } = useIdleTimeout(handleLogout)
 
   return (
@@ -65,7 +65,7 @@ export default function PatientLayout() {
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }
           }}>📥 Export My Data</div>
-        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch (e) { console.warn('logout request failed', e) }; tokenStore.clearPatient(); navigate('/patient/login') }}>
+        <div style={{ marginTop: 8, color: '#fca5a5', cursor: 'pointer' }} onClick={async () => { try { await patientRequest.post('/patient/logout') } catch (e) { console.warn('logout request failed', e) }; endPatientSession(queryClient) }}>
           Logout</div>
       </aside>
       <main style={{ flex: 1, padding: 24, background: '#f5f7fa' }}><Outlet /></main>

@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/react-query'
 import { JwtPayload } from '../types/common'
 
 // Session-scoped credential storage (Review III C1-frontend): JWTs, refresh
@@ -67,4 +68,19 @@ export function hasRole(role: string): boolean {
 export function hasAnyRole(roles: string[]): boolean {
   const userRoles = getUserRoles()
   return roles.some(r => userRoles.includes(r))
+}
+
+/**
+ * Ends the patient session for good (R53-01 review). Clearing the token store is not
+ * enough: React Query keeps patient data in memory under keys like ['me','profile'],
+ * which carry no patient identity, so an SPA navigation to the login page leaves one
+ * patient's records available to whoever logs in next on the same browser — and with
+ * a 60-second staleTime the dashboard renders them without refetching. Clearing the
+ * cache and leaving the SPA discards every in-memory trace.
+ */
+export function endPatientSession(queryClient: QueryClient) {
+  queryClient.cancelQueries()
+  queryClient.clear()
+  tokenStore.clearPatient()
+  window.location.href = '/patient/login'
 }

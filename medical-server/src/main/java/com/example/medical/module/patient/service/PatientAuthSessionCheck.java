@@ -3,6 +3,7 @@ package com.example.medical.module.patient.service;
 import com.example.medical.common.security.PatientSessionCheck;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
+import com.example.medical.module.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -14,9 +15,18 @@ public class PatientAuthSessionCheck implements PatientSessionCheck {
     static final String NO_PASSWORD_CHANGE = "none";
 
     private final PatientAuthRepository patientAuthRepository;
+    private final PatientRepository patientRepository;
 
+    /**
+     * The credential row is not the whole answer: deleting a patient soft-deletes the
+     * patient and leaves the credential behind, so a session has to be refused when
+     * the record it belongs to is gone. {@code countById} runs under the entity's
+     * {@code is_deleted = 0} restriction (52.4), which is what makes "deleted" answer
+     * as absent here.
+     */
     @Override
     public boolean isUsable(Long patientId, String issuedCredentialMarker) {
+        if (patientRepository.countById(patientId) == 0) return false;
         return patientAuthRepository.findByPatientId(patientId)
                 .map(auth -> Integer.valueOf(1).equals(auth.getStatus())
                         && markerOf(auth).equals(issuedCredentialMarker))

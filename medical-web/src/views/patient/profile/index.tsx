@@ -1,8 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { http } from '../../../api/patientRequest'
-import { tokenStore } from '../../../utils/auth'
+import { endPatientSession } from '../../../utils/auth'
 import { PatientProfileVO, ChangePasswordForm } from '../../../types/entities'
 import styles from '../../shared.module.css'
 
@@ -36,7 +35,6 @@ const selfServicePayload = (form: Partial<PatientProfileVO>) =>
   Object.fromEntries(EDITABLE_KEYS.map(k => [k, form[k] ?? null]))
 
 export default function PatientProfile() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<PatientProfileVO>>({})
@@ -70,11 +68,11 @@ export default function PatientProfile() {
       setPwdForm({ oldPassword: '', newPassword: '', confirmPassword: '' })
       setPwdError('')
       // A password change ends every session, this one included — the server will not
-      // accept this page's tokens any more (R53-01). Say so and go to the login page
-      // rather than leaving a page that only looks authenticated until the next call.
-      tokenStore.clearPatient()
+      // accept this page's tokens any more (R53-01). Say so, drop what is cached
+      // locally, and leave the SPA rather than leaving a page that only looks
+      // authenticated until the next call.
       alert('Password changed. Please sign in again with your new password.')
-      navigate('/patient/login')
+      endPatientSession(queryClient)
     },
     onError: (err: Error) => alert(err?.message || 'Password change failed'),
   })

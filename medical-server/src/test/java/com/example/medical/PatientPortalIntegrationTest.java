@@ -27,6 +27,12 @@ class PatientPortalIntegrationTest extends IntegrationTestSupport {
         adminToken = login("admin", "admin123");
     }
 
+    /** The password-change test rewrites patient 3's credential; put it back. */
+    @AfterAll
+    void restoreChangedCredentials() {
+        restorePatientPortalAccount("patient3", 102L);
+    }
+
     /**
      * Books an appointment {@code daysAhead} out for {@code patientId} and returns
      * its id. Callers pass distinct offsets: two bookings for the same doctor

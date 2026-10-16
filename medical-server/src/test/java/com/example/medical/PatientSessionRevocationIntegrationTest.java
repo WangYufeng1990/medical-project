@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Map;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -36,6 +37,8 @@ class PatientSessionRevocationIntegrationTest extends IntegrationTestSupport {
 
     private static final String PROBE = "patient2";
     private static final String OTHER = "patient3";
+    /** The seeded pairing (DataInitializer): patient2↔101, patient3↔102. */
+    private static final Map<String, Long> SEEDED_PATIENT_IDS = Map.of(PROBE, 101L, OTHER, 102L);
     private static final String CURRENT_PASSWORD = "patient123";
     /** Satisfies the policy: 8+ characters with upper, lower, digit and special. */
     private static final String NEW_PASSWORD = "Probe1234!";
@@ -44,27 +47,15 @@ class PatientSessionRevocationIntegrationTest extends IntegrationTestSupport {
             "id, patient_id, username, password, status, last_login_time, failed_attempts, "
                     + "locked_until, password_changed_at, create_time, update_time, is_deleted, version";
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    private final Map<String, Map<String, Object>> snapshots = new java.util.HashMap<>();
-
-    @BeforeAll
-    void snapshotProbeAccounts() {
-        for (String username : new String[]{PROBE, OTHER}) {
-            snapshots.put(username, jdbcTemplate.queryForMap(
-                    "SELECT * FROM patient_auth WHERE username = ?", username));
-        }
-    }
-
     @BeforeEach
     void restoreProbeAccounts() {
-        snapshots.keySet().forEach(this::restoreAccount);
+        restoreAccount(PROBE);
+        restoreAccount(OTHER);
     }
 
     @AfterAll
     void restoreProbeAccountsAfterwards() {
-        snapshots.keySet().forEach(this::restoreAccount);
+        restoreProbeAccounts();
     }
 
     // ──────────────────────────────────────────────────────
@@ -127,6 +118,27 @@ class PatientSessionRevocationIntegrationTest extends IntegrationTestSupport {
         refresh(tokens[1], 401);
     }
 
+    /**
+     * The real deletion path, as the review insisted: {@code DELETE /patients/{id}}
+     * soft-deletes the patient and leaves the credential row behind, so a session that
+     * only consults the credential keeps working — and the portal endpoints it reaches
+     * are keyed by patient id, not by the patient's own visibility.
+     */
+    @Test
+    void afterThePatientIsDeletedItsSessions_shouldBeRejected() throws Exception {
+        String[] tokens = loginTokens(PROBE, CURRENT_PASSWORD);
+        long patientId = jdbcTemplate.queryForObject(
+                "SELECT patient_id FROM patient_auth WHERE username = ?", Long.class, PROBE);
+        me(tokens[0], 200);
+
+        mockMvc.perform(delete("/api/v1/patients/" + patientId)
+                        .header("Authorization", "Bearer " + login("admin", "admin123")))
+                .andExpect(status().isOk());
+
+        me(tokens[0], 401);
+        refresh(tokens[1], 401);
+    }
+
     /** The marker belongs to one credential: another patient's change is none of this session's business. */
     @Test
     void aPasswordChangeOnAnotherAccount_shouldNotAffectThisOne() throws Exception {
@@ -173,14 +185,15 @@ class PatientSessionRevocationIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
-    /** Puts one probe account back exactly as it was seeded, row and all. */
+    /**
+     * Puts one probe account back to the state it was seeded in — the seeded password,
+     * no credential marker, enabled, unlocked, with its password history cleared.
+     * Restoring whatever the row happened to contain would make this class depend on
+     * which test class ran before it, which is exactly how a green full-suite run can
+     * hide a broken one.
+     */
     private void restoreAccount(String username) {
-        Map<String, Object> row = snapshots.get(username);
-        jdbcTemplate.update("DELETE FROM patient_auth WHERE username = ?", username);
-        jdbcTemplate.update("INSERT INTO patient_auth (" + COLUMNS + ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                row.get("id"), row.get("patient_id"), row.get("username"), row.get("password"),
-                row.get("status"), row.get("last_login_time"), row.get("failed_attempts"),
-                row.get("locked_until"), row.get("password_changed_at"), row.get("create_time"),
-                row.get("update_time"), row.get("is_deleted"), row.get("version"));
+        restorePatientPortalAccount(username, SEEDED_PATIENT_IDS.get(username));
     }
+
 }
