@@ -4127,7 +4127,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [ ] Open |
 | R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [ ] Open |
 | R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
-| R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [ ] Open |
+| R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [x] Done |
 | R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [ ] Open |
 | R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [ ] Open |
 | R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [ ] Open |
@@ -4192,6 +4192,19 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 - Keep local patient/emergency trust separate from external IdP validation.
 
 **Tests first:** add `SecurityConfigProdTest` exercising the actual encoder/decoder with a synthetic key: valid patient, refresh and emergency tokens validate according to the chosen issuer contract; wrong issuer, wrong signing key and expired tokens fail. Retain a request-level check that a refresh token is rejected as an access token.
+
+**Fix record — done.** `TrustedIssuerValidator` (`common/config`) accepts membership in a trusted set, and `SecurityConfigProd.localDecoder()` now composes it with `JwtTimestampValidator` instead of three ANDed issuer validators. The trusted set is no longer a fourth copy of the issuer strings: it is built from `DevJwtEncoder.STAFF_ISSUER_URI` and `PATIENT_ISSUER_URI`, the two values the encoder can actually emit, so "the decoder trusts what the signer signs" is structural rather than remembered. The third value (`.../patient/refresh`) is gone, and with it the refresh builder's `.issuer(...)` line that the encoder silently overwrote — a token type is distinguished by its `scp`/`roles` claims, as it always was in practice.
+
+Measured red→green (the four positive cases were red, the three negative ones green before *and* after, which is what makes them useful):
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `SecurityConfigProdTest`: 7 tests, **4 errors** — staff, patient, refresh and emergency tokens all failed with `An error occurred while attempting to decode the Jwt: The iss claim is not valid`, i.e. the decoder refused every token this server signs |
+| Green, after the fix | 7 tests, 0 failures. The negative cases assert *which* check refuses them, so none of them can pass for the wrong reason: the foreign issuer names `iss`, the other key names `signature`, the stale one names `expired` |
+| `mvn clean verify` | **220 tests** (213 + 7), **0 failures**, `BUILD SUCCESS` |
+| Encoder contract | the test decodes each token the encoder emits for `ADMIN`/`DOCTOR`/`PATIENT` roles, so a future divergence between signer and decoder fails here rather than in production |
+
+Scope note, since this finding is about the `prod` profile only: the same absence of coverage is the real reason it survived — no test built the production security configuration at all, and the dev/h2 profiles use a different decoder, so the demo was never affected. The request-level rule that a refresh token cannot act as an access token is unchanged and still covered by `AuthIntegrationTest`; a `SecurityConfigProdTest` case for it would need a MockMvc context on the prod profile, which is a separate decision.
 
 ### R53-05 — Commit failed patient-login attempts independently
 
@@ -4300,4 +4313,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 0/11 complete.**
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 1/11 complete** (R53-04 done; 4 P1 and 6 P2 findings open).

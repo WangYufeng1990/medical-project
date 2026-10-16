@@ -219,7 +219,6 @@ public class PatientAuthController {
                 .claim("username", username)
                 .claim("roles", List.of("PATIENT"))
                 .claim("scp", List.of("refresh"))
-                .issuer("https://medical-server/patient/refresh")
                 .build();
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }

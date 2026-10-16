@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import javax.crypto.spec.SecretKeySpec;
@@ -64,11 +64,9 @@ public class SecurityConfigProd {
     private JwtDecoder localDecoder() {
         SecretKeySpec key = new SecretKeySpec(signingKey, "HmacSHA256");
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithValidators(
-                new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
-                        JwtValidators.createDefaultWithIssuer("https://medical-server"),
-                        JwtValidators.createDefaultWithIssuer("https://medical-server/patient"),
-                        JwtValidators.createDefaultWithIssuer("https://medical-server/patient/refresh"))));
+        decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                new JwtTimestampValidator(),
+                new TrustedIssuerValidator(CompositeJwtDecoder.LOCAL_ISSUERS)));
         return decoder;
     }
 

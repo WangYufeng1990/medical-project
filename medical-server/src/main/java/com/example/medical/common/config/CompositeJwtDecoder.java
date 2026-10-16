@@ -1,5 +1,6 @@
 package com.example.medical.common.config;
 
+import com.example.medical.security.DevJwtEncoder;
 import com.nimbusds.jwt.SignedJWT;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -21,10 +22,16 @@ import java.util.Set;
  */
 public class CompositeJwtDecoder implements JwtDecoder {
 
-    private static final Set<String> LOCAL_ISSUERS = Set.of(
-            "https://medical-server",
-            "https://medical-server/patient",
-            "https://medical-server/patient/refresh");
+    /**
+     * The issuers {@link com.example.medical.security.DevJwtEncoder} can emit, and
+     * therefore the set the local decoder trusts. A third value
+     * ({@code .../patient/refresh}) used to be listed here: it came from the refresh
+     * builder's {@code .issuer(...)}, which the encoder overwrote, so no token ever
+     * carried it (R53-04).
+     */
+    static final Set<String> LOCAL_ISSUERS = Set.of(
+            DevJwtEncoder.STAFF_ISSUER_URI,
+            DevJwtEncoder.PATIENT_ISSUER_URI);
 
     private final JwtDecoder oktaDecoder;
     private final JwtDecoder localDecoder;

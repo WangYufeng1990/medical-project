@@ -13,10 +13,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Signs locally-issued tokens. The issuer is <b>derived from the roles</b> and a
+ * caller-provided {@code iss} is deliberately ignored — these two values are the
+ * whole contract, and {@code CompositeJwtDecoder.LOCAL_ISSUERS} is built from them,
+ * so the decoder trusts exactly what this class can emit (R53-04).
+ */
 public class DevJwtEncoder implements JwtEncoder {
 
-    private static final String STAFF_ISSUER_URI = "https://medical-server";
-    private static final String PATIENT_ISSUER_URI = "https://medical-server/patient";
+    public static final String STAFF_ISSUER_URI = "https://medical-server";
+    public static final String PATIENT_ISSUER_URI = "https://medical-server/patient";
     private static final List<String> STAFF_AUDIENCE = List.of("staff");
     private static final List<String> PATIENT_AUDIENCE = List.of("patient");
 
