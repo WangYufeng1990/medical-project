@@ -4128,7 +4128,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [ ] Open |
 | R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
 | R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [x] Done |
-| R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [ ] Open |
+| R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [x] Done |
 | R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [ ] Open |
 | R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [ ] Open |
 | R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [ ] Open |
@@ -4219,6 +4219,20 @@ Scope note, since this finding is about the `prod` profile only: the same absenc
 - Preserve generic invalid-credentials responses and the existing lock duration.
 
 **Tests first:** add a real transactional integration test in `AuthIntegrationTest`: five wrong passwords persist the threshold; the next attempt, even with the correct password, is locked; after expiry, a successful login leaves counters reset. Restore the synthetic account between cases. Mockito verification that an increment method was called does not prove the counter committed.
+
+**Fix record — done.** `PatientLockoutService` (patient module) owns both writes, each in `Propagation.REQUIRES_NEW`, mirroring the staff-side `LockoutService`: `recordFailedAttempt` increments and arms the 15-minute lock, `resetFailedAttempts` clears the counter **and** stamps the login in the same bulk update. The controller no longer touches the counter or saves `PatientAuth` at all.
+
+That last part fixes the second half of the finding, which the headline reproduction hides: the old success path reset through a bulk update and then called `save(auth)` on the entity it had read *before* that update, so the entity's stale `failedAttempts` was merged straight back over the reset. With the counter never persisting, nobody could see it.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `AuthIntegrationTest.patientLockout_shouldCountFailuresAndResetOnSuccess`: `five failed attempts must be persisted, not rolled back with the 401 ==> expected: <5> but was: <0>` — five 401s left the counter at zero, so no lock ever engaged and the correct password worked on the sixth attempt |
+| Green, after the fix | the same test passes end to end: five failures persist and lock the account; the correct password is refused with 403 while the lock holds and does not add another failure; once the lock is backdated, a real login succeeds and leaves `failed_attempts = 0`, `locked_until = null` |
+| **The stale-merge half, proved by injection** | `patientLogin_shouldClearAPreExistingFailureCount` plants four failures, logs in successfully and requires the counter to end at 0. Re-injecting the pre-fix sequence (bulk reset followed by `save` of the stale entity) turns it red: `expected: <0> but was: <4>`. Without that test the merge would have gone on hiding behind a counter that never rose above zero |
+| Weak mock test rewired | `PatientAuthControllerTest` verified the controller's calls on the *repository*; it now verifies them on `PatientLockoutService`, and its `save(auth)` expectation is gone with the stale write. As the finding notes, this proves wiring, not commit — the integration test above is what proves commit |
+| `mvn clean verify` | **222 tests** (220 + 2), **0 failures**, `BUILD SUCCESS` |
+
+The probe account is `patient2`: no other test signs in as it, and the test restores its row in a `finally` block, so a locked account cannot leak into another class the way the patient-module seed data leaked in 52.6.
 
 ### R53-06 — Allow clinical status updates after the appointment start
 
@@ -4313,4 +4327,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 1/11 complete** (R53-04 done; 4 P1 and 6 P2 findings open).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 2/11 complete** (R53-04 and R53-05 done; 3 P1 and 6 P2 findings open).

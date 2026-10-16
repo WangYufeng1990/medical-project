@@ -6,6 +6,7 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
+import com.example.medical.module.patient.service.PatientLockoutService;
 import com.example.medical.module.patient.repository.PatientRepository;
 import com.example.medical.common.validation.ValidPassword;
 import jakarta.validation.Valid;
@@ -36,7 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class PatientAuthController {
 
-    private static final int LOCK_DURATION_MINUTES = 15;
     private static final long RESET_TOKEN_TTL_MINUTES = 30;
 
     /**
@@ -47,6 +47,7 @@ public class PatientAuthController {
 
     private final PatientRepository patientRepository;
     private final PatientAuthRepository patientAuthRepository;
+    private final PatientLockoutService patientLockoutService;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final JwtDecoder jwtDecoder;
@@ -85,11 +86,11 @@ public class PatientAuthController {
                 .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "Patient record not found"));
 
         if (!passwordEncoder.matches(request.getPassword(), auth.getPassword())) {
-            recordFailedAttempt(auth);
+            patientLockoutService.recordFailedAttempt(auth.getId());
             auditLoginFailure(auth.getPatientId(), request.getUsername(), "BAD_CREDENTIALS");
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Invalid username or password");
         }
-        resetFailedAttempts(auth);
+        patientLockoutService.resetFailedAttempts(auth.getId());
 
         String token = generateToken(patient.getId(), auth.getUsername());
         String refreshToken = generateRefreshToken(patient.getId(), auth.getUsername());
@@ -221,17 +222,6 @@ public class PatientAuthController {
                 .claim("scp", List.of("refresh"))
                 .build();
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
-    }
-
-    private void recordFailedAttempt(PatientAuth auth) {
-        patientAuthRepository.incrementFailedAttempts(auth.getId(),
-                LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
-    }
-
-    private void resetFailedAttempts(PatientAuth auth) {
-        patientAuthRepository.resetFailedAttempts(auth.getId());
-        auth.setLastLoginTime(LocalDateTime.now());
-        patientAuthRepository.save(auth);
     }
 
     private void auditLoginFailure(Long patientId, String username, String reason) {

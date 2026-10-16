@@ -7,6 +7,7 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.patient.entity.Patient;
 import com.example.medical.module.patient.entity.PatientAuth;
 import com.example.medical.module.patient.repository.PatientAuthRepository;
+import com.example.medical.module.patient.service.PatientLockoutService;
 import com.example.medical.module.patient.repository.PatientRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,7 @@ class PatientAuthControllerTest {
 
     @Mock private PatientRepository patientRepository;
     @Mock private PatientAuthRepository patientAuthRepository;
+    @Mock private PatientLockoutService patientLockoutService;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtEncoder jwtEncoder;
     @Mock private AuditLogWriter auditLogWriter;
@@ -77,8 +79,7 @@ class PatientAuthControllerTest {
         assertEquals(PATIENT_ID, result.getData().getPatientId());
         assertEquals("James Anderson", result.getData().getName());
         assertEquals(USERNAME, result.getData().getUsername());
-        verify(patientAuthRepository).resetFailedAttempts(auth.getId());
-        verify(patientAuthRepository).save(auth);
+        verify(patientLockoutService).resetFailedAttempts(auth.getId());
     }
 
     @Test
@@ -224,12 +225,12 @@ class PatientAuthControllerTest {
 
         assertEquals(ResultCode.UNAUTHORIZED.getCode(), ex.getCode());
         assertEquals("Invalid username or password", ex.getMessage());
-        verify(patientAuthRepository).incrementFailedAttempts(eq(auth.getId()), any(LocalDateTime.class));
+        verify(patientLockoutService).recordFailedAttempt(auth.getId());
         verify(auditLogWriter).writeAsync(
                 isNull(), eq(USERNAME), eq(PATIENT_ID),
                 eq("auth"), eq("PATIENT_LOGIN_FAILED"), eq(USERNAME),
                 contains("BAD_CREDENTIALS"), any(), any(Instant.class));
-        verify(patientAuthRepository, never()).resetFailedAttempts(anyLong());
+        verify(patientLockoutService, never()).resetFailedAttempts(anyLong());
     }
 
     @Test
@@ -243,8 +244,8 @@ class PatientAuthControllerTest {
         assertThrows(BusinessException.class, () ->
                 controller.login(req(USERNAME, "bad")));
 
-        verify(patientAuthRepository).incrementFailedAttempts(eq(auth.getId()), any(LocalDateTime.class));
-        verify(patientAuthRepository, never()).resetFailedAttempts(anyLong());
+        verify(patientLockoutService).recordFailedAttempt(auth.getId());
+        verify(patientLockoutService, never()).resetFailedAttempts(anyLong());
     }
 
     // ──────────────────────────────────────────────────────
@@ -262,8 +263,8 @@ class PatientAuthControllerTest {
 
         assertEquals(ResultCode.UNAUTHORIZED.getCode(), ex.getCode());
         assertTrue(ex.getMessage().contains("Patient record not found"));
-        verify(patientAuthRepository, never()).resetFailedAttempts(anyLong());
-        verify(patientAuthRepository, never()).incrementFailedAttempts(anyLong(), any());
+        verify(patientLockoutService, never()).resetFailedAttempts(anyLong());
+        verify(patientLockoutService, never()).recordFailedAttempt(anyLong());
     }
 
     // ──────────────────────────────────────────────────────

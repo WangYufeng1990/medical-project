@@ -22,6 +22,7 @@ public interface PatientAuthRepository extends JpaRepository<PatientAuth, Long> 
                                 @Param("lockedUntil") java.time.LocalDateTime lockedUntil);
 
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE PatientAuth a SET a.failedAttempts = 0, a.lockedUntil = NULL WHERE a.id = :id")
-    void resetFailedAttempts(@Param("id") Long id);
+    @Query("UPDATE PatientAuth a SET a.failedAttempts = 0, a.lockedUntil = NULL, "
+            + "a.lastLoginTime = :now WHERE a.id = :id")
+    void resetFailedAttempts(@Param("id") Long id, @Param("now") java.time.LocalDateTime now);
 }
