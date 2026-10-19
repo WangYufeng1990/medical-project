@@ -4445,3 +4445,245 @@ For each slice: write the named regression scenario first, record the failing be
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
 **Review verdict at the baseline: Blocked on the P1 findings. Fix status: 11/11 complete.** Every finding in this round has a red state recorded above and a regression that holds it: R53-01 to R53-05 (the P1s), R53-06/07 (visit completion and diagnosis propagation), R53-08 (audit chain), R53-09 (FHIR time), R53-10 (local-time bounds) and R53-11 (chat stale responses).
+
+
+---
+
+## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
+
+**Status: planned; all slices in Rounds 54–59 are Pending. No implementation or benchmark result is claimed by this plan.**
+
+Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
+
+### Scope and architecture decisions
+
+Build an AI-assisted Patient Messaging Agent within the existing patient/staff workflow, using synthetic patient data for development, evaluation and demonstration. Spring Boot remains the authority for authentication, authorization, business data, message persistence, staff decisions and final publication. Python owns AI orchestration, retrieval and evaluation; it receives no MySQL credentials and cannot bypass the business layer.
+
+- **AI service:** same-repository `medical-agent/`, Python 3.12, FastAPI, Pydantic, LangGraph; pyproject.toml, dependency lockfile, pytest, Ruff and type checking.
+- **Provider:** DeepSeek API is the first real provider, alongside MockProvider. API key, base URL and model ID are environment configuration. Verify the selected model's actual structured-output/tool-calling behavior during integration; do not assume compatibility from an API label. Validate outputs with Pydantic; bounded retries or human fallback on invalid output. Keep the adapter replaceable; do not implement OpenAI/Anthropic in parallel initially. Do not hardcode prices or claim cost savings without measurements.
+- **Storage:** retain MySQL for business state. Add one PostgreSQL instance for versioned knowledge and LangGraph checkpoints, with separate schemas/permissions. Retain Redis where the existing application needs it; introduce no new broker.
+- **Delivery:** MySQL durable jobs and a Java polling dispatcher, with leases, attempts, deadlines and fencing generations. Java and Python are initially single-instance deployments.
+- **RAG:** PostgreSQL full-text retrieval plus pgvector; lexical and dense baselines before RRF hybrid retrieval. Reranking is evidence-driven and deferred.
+- **Human review:** all model-generated replies are draft-only initially. Administrative FAQ auto-response is a later, default-off gate. Clinical questions receive a routing summary for staff, not autonomous diagnosis or medication advice.
+- **Tools:** first GetUpcomingAppointments and GetAppointmentStatus; appointment writes, medication changes and sensitive-record writes are excluded.
+- **Observability:** basic structured events, timings and sensitive-data controls from the first slice; expand to OpenTelemetry and Langfuse in Round 59.
+- **Frontend:** reuse React/TypeScript portals and messaging. First release is English and synthetic clinic policy content.
+- **Deployment:** Docker Compose private/local demonstration. Real PHI, clinical deployment and any claim of legal compliance require a separate reviewed scope. Describe engineering controls as HIPAA-oriented, not certification.
+- **Non-goals:** multi-agent architecture, model training, a second Java AI implementation, full FHIR bundles in model context, provider-availability promises, commercial clinical infrastructure and Azure deployment.
+
+Python is chosen for the explicit AI-engineering goal and durable graph/evaluation ecosystem, accepting a second runtime, cross-service contracts, database operations and failure domain. It does not justify splitting the existing business monolith into microservices.
+
+The existing CLAUDE.md single-backend/MySQL-only constraints need a narrowly documented exception during implementation: business modules remain a monolith; Python and PostgreSQL serve only the AI workflow. Preserve Round 52's dependency guard. Put message jobs/review/publication under `module/chat/`, appointment tool business logic under appointment, and shared authorization interfaces under `common/security`. Avoid a chat → agent → chat cycle and cross-module repository/entity imports.
+
+### Changes already completed and not to repeat
+
+| Existing work | Treatment in this plan |
+|---|---|
+| R53-02 / 647bf58: ConflictSlotVO removes patient details from conflict responses | Reuse the minimal DTO principle; do not reopen the disclosure fix |
+| R53-06/07: historical visit completion and correct ICD propagation | Already fixed; not an Agent prerequisite task |
+| R53-03 / e588402: full rotation scan, remaining verification and concurrent-update protection | Reuse; register every new encrypted AI field in rotation coverage |
+| R53-08 / 5ccd2b8: JVM lock for audit append, timestamp canonicalization, break reasons | Single-JVM fix is complete; database locking is only required before multi-JVM deployment |
+| R53-09/10: FHIR serialization and local date/time inputs | Preserve; define the new appointment tool's timezone contract explicitly |
+| R53-11 / 94a9f2b: stale chat load response guards | Preserve; new review views need equivalent protection |
+| b73f771: Round 53 closure | Leave historical records intact |
+
+Occupied-slot lookup is not a complete availability engine: the current ±30-minute conflict search does not model working hours, leave, visit types and duration policy. GetProviderAvailability remains deferred. The existing getConversation marks messages read, so a future read-only GetMessageStatus must not reuse it.
+
+### Implementation contracts
+
+**Message intake and delivery**
+1. Validate actor, receiver existence/enabled state and permitted communication relationship.
+2. Deduplicate using clientMessageId scoped to sender identity; the same key with a different payload is a conflict.
+3. Persist the message and, when AI is enabled, agent_run in one MySQL transaction.
+4. Return after commit without waiting for Python, PostgreSQL or the model. AI downtime must not break human messaging.
+5. Dispatch asynchronously from durable rows. SSE is an after-commit refresh hint, not a job queue; reconnect by database reconciliation.
+6. Database failure must not be presented as successful delivery; preserve user input and allow retry.
+
+**Authorization**
+- Separate directional service credentials from short-lived task capabilities. Service authentication alone does not authorize access to patient records.
+- Java creates a random opaque capability, stores its digest, and binds it to run ID, patient, allowed tools, expiry and execution generation.
+- Every tool call and result submission checks the current account state, run state, capability, generation and ownership. Patient identity comes from server-owned run context, never a freely supplied model argument.
+- A retry fences the old worker. Old capabilities cannot call tools or publish results.
+- Keep credentials/capabilities outside prompts, traces and serialized checkpoints. Never share patient JWT signing keys with Python.
+- Change DoctorPatientScope's missing/invalid authentication behavior to fail closed and regression-test existing authenticated callers. Do not masquerade as a doctor for machine calls.
+- Define account-state lookup through module-owned implementations and shared interfaces; display-name lookup is not authorization.
+
+**State and review**
+- chat_conversation: canonical pair of typed party identities, revision, latest message ordering.
+- agent_run: message/input version, state, lease, attempt, nextAttemptAt, deadline, execution generation, idempotency and pinned workflow versions.
+- agent_result: validated classification, risk, encrypted draft, source references, model/prompt/KB/schema versions.
+- message_review: queue/claim, reason, expected conversation/result version, reviewer, decision and edited response.
+- agent_action_event: allow/deny/failure, review/publication and recovery events with stable event IDs; durable business evidence, not merely best-effort traces.
+- Core run path: PENDING → RUNNING → WAITING_REVIEW → COMPLETED. Exceptional terminals: FAILED, CANCELLED, SUPERSEDED. Review completion and run completion are distinct.
+- Java commits the approval/edit and final message publication atomically; repeated approvals publish once. A changed conversation or intervening human reply invalidates an old draft.
+- Staff can publish while Python is down. Java later reliably delivers the review outcome to resume/finish the graph. Graph resume must not resend the already-published reply.
+- Persist draft/review creation idempotently: LangGraph resumes can re-execute the beginning of an interrupted node. Checkpointing is not exactly-once business delivery.
+- MySQL is business authority; PostgreSQL is execution state. Use retries and reconciliation, not a cross-database transaction.
+- Route initially to the original valid staff receiver; ADMIN can assign. Do not introduce a new nurse role/team hierarchy. Preserve established valid communication relationships; new conversations select from a server-authorized recipient list.
+
+**AI safety and data**
+- Classification schema: intent, secondaryIntents, riskLevel, recommendedAction, reasonCodes, evidenceSpans, abstain, schemaVersion. Cover General FAQ, Appointment/Scheduling, Billing/Insurance, Medication, Clinical, Urgent/Emergency and Other/Unknown.
+- Risk is independent of intent. A billing question with urgent indicators must retain urgent routing.
+- No model-reported confidence probability in v1. Invalid enums, extra fields, invalid evidence spans and malformed output cannot reach publication.
+- Deterministic safety rules cannot be downgraded by the model. Unclear intent, invalid output, insufficient evidence, clinical advice and tool failures go to staff.
+- Display a fixed, reviewed emergency/help notice without waiting for the model; the channel does not promise real-time emergency response. Rule misses are not evidence of safety. Synthetic clinical demonstrations are not clinically validated triage.
+- Treat all patient text, retrieval documents and tool output as untrusted data; none may grant permissions or change the tool allowlist.
+- Only approved synthetic clinic policies in the initial KB. Do not embed patient conversations or medical records into the public-policy index.
+- Ingest a manifest with document ID, version, effective date, approval state and content hash; title-aware chunking; idempotent ingestion; explicit release/withdrawal.
+- Construct citations from retrieved server-known IDs. Source existence alone does not establish claim support. Missing/conflicting/withdrawn evidence triggers fallback.
+- Pin prompt/model configuration, schema and KB release per run; recheck source withdrawal and conversation freshness before publication.
+- Encrypt sensitive drafts/review text and include new columns in key rotation. Checkpoints, backups, embeddings and eval fixtures have explicit data-retention treatment. Prefer references over copying full conversations into checkpoints.
+- Never export raw PHI, JWTs, capabilities or unrestricted prompt/tool bodies through telemetry. Verify third-party instrumentation with sensitive canaries.
+
+### Proposed files and API surface
+
+| Location | Responsibility |
+|---|---|
+| medical-agent/pyproject.toml and dependency lockfile | Python runtime and checks |
+| medical-agent/src/medical_agent/api/ | Run, resume, status and health endpoints |
+| medical-agent/src/medical_agent/schemas/ | Classification, draft, tool and execution schemas |
+| medical-agent/src/medical_agent/graph/ | State, nodes, conditional routing and recovery |
+| medical-agent/src/medical_agent/providers/ | MockProvider and DeepSeekProvider |
+| medical-agent/src/medical_agent/rag/ | Ingestion, retrieval, citation and version control |
+| medical-agent/src/medical_agent/tools/ | Spring client and allowlisted tool registry |
+| medical-agent/tests/ and medical-agent/evals/ | Deterministic tests, datasets and real-provider evaluation |
+| Java module/chat/ | Conversations, jobs, results, reviews and publication |
+| Java module/appointment/ | Minimal appointment read DTOs/services/controllers |
+| Java common/security/ | Shared internal authorization contracts |
+| medical-web/src/views/chat/reviews/ | Staff review queue and detail |
+| contracts/agent/ | Versioned JSON Schema and cross-language fixtures |
+| compose.yaml and .github/workflows/ | Reproducible runtime and verification |
+
+| Proposed endpoint | Caller / behavior |
+|---|---|
+| Python POST /internal/v1/runs | Java dispatcher starts/continues a fenced execution |
+| Python GET /internal/v1/runs/{runId} | Java reconciliation; authenticated, scoped status |
+| Python POST /internal/v1/runs/{runId}/resume | Java delivers persisted staff decision |
+| Java POST /api/v1/internal/agent/runs/{runId}/results | Python submits classification/draft idempotently; no patient-send authority |
+| Java GET /api/v1/internal/agent/appointments/upcoming | Task-scoped patient query, bounded horizon/count |
+| Java GET /api/v1/internal/agent/appointments/{id}/status | Task scope plus appointment ownership |
+| Java GET /api/v1/message-reviews | Staff-authorized queue |
+| Java POST /api/v1/message-reviews/{id}/decision | Approve-and-send/edit/reject with expectedVersion and idempotency |
+
+Schemas must be validated on both sides. Keep existing Result<T> conventions for Java and document status/error semantics. Do not expose internal endpoints through general patient privileges.
+
+Database evolution is part of Round 54.2: introduce a versioned baseline and upgrade path, recommended Flyway for Java/MySQL and independent versioned PostgreSQL migrations for Python-owned tables. Coordinate Spring SQL initialization and DevSchemaGuard rather than allowing two schema owners. Test fresh installation and upgrade from the reviewed schema. Do not enable blind baselining or make data deletion the normal upgrade path. Manage LangGraph checkpoint setup against locked dependency versions.
+
+## Round 54 — Messaging foundation (Pending)
+
+**Goal:** reliable human messaging before AI integration. **Estimate:** 28–44 hours. Depends on a fresh baseline test run and reviewed migration/contract design.
+
+| Slice | Priority / status | Work and files | Tests first / acceptance |
+|---|---|---|---|
+| 54.1 Identity and recipients | P0 / Pending | DoctorPatientScope fail-closed; ChatService receiver checks; fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; authenticated existing flows preserved |
+| 54.2 Conversations and migration | P0 / Pending | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision | ChatConversationIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean and upgrade migrations pass |
+| 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
+| 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
+
+Preserve the completed stale-response guards. Keep new-conversation selection server-authorized. Specify how revision increments serialize messages and review publication; do not rely on browser timestamps.
+
+## Round 55 — Python service and reliable execution (Pending)
+
+**Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
+
+| Slice | Priority / status | Work | Tests first / acceptance |
+|---|---|---|---|
+| 55.1 Service and contract skeleton | P0 / Pending | FastAPI, configuration, Pydantic, Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied; missing required credentials fail; Java/Python agree on fixtures |
+| 55.2 Durable dispatcher | P0 / Pending | agent_run atomic intake; claim/lease/attempt/deadline; bounded backoff; separate executor; reconcile expired claims | AgentDispatchIntegrationTest: Python down does not break message send; restart replays pending work; duplicate dispatch produces one logical result |
+| 55.3 Service/task authorization | P0 / Pending | Directional credentials, opaque capability digests, generations, current account check and internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked access and stale workers rejected; capability not persisted in graph state |
+| 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
+
+Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
+
+## Round 56 — Classification and versioned RAG (Pending)
+
+**Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
+
+| Slice | Priority / status | Work | Tests first / acceptance |
+|---|---|---|---|
+| 56.1 Classification and safety | P0 / Pending | Seven intents/multi-intent/risk, non-downgradable rules, DeepSeekProvider; configurable model/base URL/key and bounded invalid-output handling | test_safety_routing.py: mixed intent preserves risk; malformed/uncertain output escalates; clinical decisions never auto-publish; provider contract and timeout behavior measured |
+| 56.2 KB ingestion and release | P0 / Pending | Approved synthetic policy manifest, parsing, title-aware chunks/hash/embedding, version publish/withdraw | test_kb_ingestion.py: repeated ingestion idempotent; unapproved content unavailable; withdrawn evidence cannot be published |
+| 56.3 Retrieval and citations | P1 / Pending | Lexical/dense baselines, RRF hybrid, diagnostics, server-built citations | test_retrieval.py, test_citations.py: references belong to retrieved evidence; empty/conflicting evidence escalates; baseline comparison recorded |
+| 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
+
+Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
+
+## Round 57 — Staff review and safe publication (Pending)
+
+**Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
+
+| Slice | Priority / status | Work | Tests first / acceptance |
+|---|---|---|---|
+| 57.1 Review queue | P0 / Pending | Queue/claim/risk/reason/draft/source UI; permit human-only entries without AI draft; original receiver/ADMIN assignment | AgentReviewAuthorizationTest: patients cannot read drafts; unauthorized staff cannot review; AI failure preserves human handling |
+| 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
+| 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
+
+Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
+
+## Round 58 — Read-only appointment tools (Pending)
+
+**Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
+
+| Slice | Priority / status | Work | Tests first / acceptance |
+|---|---|---|---|
+| 58.1 Minimal appointment reads | P0 / Pending | Appointment-owned DTO/service/controller; task-derived patient; bounded upcoming query; clinic timezone contract | AgentAppointmentToolIntegrationTest: only own appointments; no chiefComplaint/notes/ICD payload; explicit time semantics and ownership on ID lookup |
+| 58.2 Tool selection/execution | P1 / Pending | Tool registry and strict schemas; maximum calls/deadline; failure to human route | test_tool_execution.py: unknown tool denied; invalid args never execute; instructions inside tool results cannot grant access |
+| 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
+
+Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
+
+## Round 59 — Evaluation, observability and release evidence (Pending)
+
+**Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
+
+| Slice | Priority / status | Work | Completion gate |
+|---|---|---|---|
+| 59.1 Golden dataset/regression | P1 / Pending | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
+| 59.2 Tracing/cost | P1 / Pending | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
+| 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
+| 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
+| 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
+
+### Evaluation and release criteria
+
+All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
+
+| Dimension | Measurement / candidate gate |
+|---|---|
+| Intent | Accuracy, macro-F1 and per-class recall; candidate macro-F1 ≥0.85 |
+| Safety escalation | Recall and false-positive rate on held-out high-risk cases; all designated critical blocking scenarios must pass; report sample counts and uncertainty |
+| Retrieval | Evidence Recall@5, candidate ≥0.90; compare lexical, dense and hybrid |
+| Groundedness | Human claim-level assessment, candidate ≥95%; any critical fabricated policy blocks automatic release |
+| Tools | Selection and argument correctness separately, candidate ≥95%; deterministic ownership/schema gates cannot be bypassed regardless of average quality |
+| Unauthorized access | Zero successful unauthorized requests in the enumerated suite; report its scope, never claim universally zero risk |
+| Completion | Per-route definition; correct human escalation can be success; merely generating text is not success |
+| Latency/cost | Fixed environment/model/concurrency; P50/P95, failures, retries, tokens and estimated cost per task |
+| Staff value | Draft acceptance, substantive edit rate and review time; measure a real comparison before claiming improvement |
+
+Use Mock LLM for deterministic PR tests. Real-model eval is separately triggered and versioned with a cost budget. pytest is the baseline; choose at most one of Ragas/DeepEval if it solves a measured need. LLM-as-a-Judge is auxiliary and must be checked against human labels for agreement and systematic mistakes. It must not decide whether access control, idempotency, token leakage or critical safety routing passed.
+
+### Security and observability acceptance
+
+- Re-authorize on tool calls, review and publication, including account disablement during execution.
+- Prompt/document/tool-output injection cannot select arbitrary URLs/tools, change patient identity or request secret disclosure.
+- Logs/traces default to opaque run correlation IDs, versions, node status, timings, bounded retrieval diagnostics and usage; no unrestricted input/output capture.
+- Include checkpoint payloads, backups and evaluation exports in retention and encryption decisions; demonstrate cleanup of synthetic sensitive canaries.
+- Preserve fail-safe human access even when AI, model provider, retrieval or tracing fails.
+- Existing audit locking is valid for the initial single JVM. Database-level audit serialization and multi-instance SSE are P2 prerequisites for a later horizontally scaled deployment, not unfinished Round 53 fixes.
+- No real PHI to DeepSeek or another external service in this scope. Any future real-data deployment separately reviews applicable provider terms, data processing/BAA requirements, retention, access and clinical oversight.
+
+### Execution order, documentation and completion rules
+
+1. Record a clean source SHA and fresh baseline results. Stop any instance using target/classes before clean builds, as CLAUDE.md requires.
+2. Implement 54.1 → 54.2 → 54.3 → 54.4, then 55.1–55.4.
+3. Implement 56.1–56.4 with the initial dataset; finish 57.1–57.3 for the first complete demo.
+4. Implement 58.1–58.3; expand 59.1–59.4. 59.5 remains optional and blocked on evaluated release gates.
+5. For each slice: specify behavior and schema; write the named meaningful failing test; record the red state; implement narrowly; run targeted and required regression checks; record actual outputs and limitations; only then mark Done.
+6. Update this Roadmap per slice, API-LAYOUT for changed APIs, and schema/README instructions for migrations. Keep historical results intact and distinguish source-inspected evidence from tests actually run.
+7. Preserve LayeringGuardTest without new allowlists. Do not broaden into unrelated refactoring or add frameworks merely for portfolio keywords.
+8. Backend gate: mvn clean verify; frontend gate: npm run check and npm run build where affected; Python: locked install, lint/type checks and pytest. Add real MySQL/PostgreSQL coverage for migration/lease/concurrency behavior that H2 cannot establish.
+9. Final artifacts: architecture and workflow diagrams, threat model, evaluated report with raw evidence, benchmark configuration, engineering trade-offs, reproducible README/demo and truthful resume/interview material. No invented accuracy, savings or performance gains.
+
+Estimated focused implementation total: **176–276 hours**. With Python refresh and rework reserve, budget **210–330 hours**. These estimates exclude real clinical rollout, compliance certification, external clinical review and optional optimization.
+
+**Remaining P2:** reranker only after retrieval evaluation; calibrated confidence only with adequate labeled data; real provider availability policy; model-requested write tools; multi-instance notification/audit; additional providers; Azure deployment. None blocks the draft/review/read-only-tool portfolio milestone.
