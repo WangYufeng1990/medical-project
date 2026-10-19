@@ -6,6 +6,7 @@ import { getDoctors } from '../../api/user'
 import { AppointmentForm, AppointmentVO } from '../../types/entities'
 import { APPOINTMENT_STATUS, VISIT_TYPES, PAGE_SIZE, APPOINTMENT_STATUS_COLOR, TERMINAL_APPOINTMENT_STATUSES } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
+import { localDateTimeInputValue } from '../../utils/datetime'
 import styles from '../shared.module.css'
 
 const emptyForm: AppointmentForm = { patientId: '', doctorId: '', appointmentTime: '', visitType: 'FOLLOW_UP', chiefComplaint: '', department: '', duration: 30, cptCode: '', description: '', icd10Codes: '', notes: '', status: 0 }
@@ -118,7 +119,7 @@ export default function Appointments() {
               <option value="">-- Select --</option>
               {(doctors ?? []).map(d => <option key={d.id} value={d.id}>{d.realName || d.username}</option>)}
             </select></div>
-          <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} min={new Date().toISOString().slice(0, 16)} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
+          <div className={styles.formGroup}><label>Time</label><input disabled={viewOnly} type="datetime-local" value={form.appointmentTime} min={localDateTimeInputValue()} onChange={e => setForm({ ...form, appointmentTime: e.target.value })} /></div>
           <div className={styles.formGroup}><label>Visit Type</label>
             <select disabled={viewOnly} value={form.visitType} onChange={e => setForm({ ...form, visitType: e.target.value })}>
               {VISIT_TYPES.map(v => <option key={v} value={v}>{v.replace(/_/g,' ')}</option>)}</select></div>

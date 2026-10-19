@@ -10,10 +10,11 @@ import { getPendingRefillRequests, approveRefillRequest, denyRefillRequest } fro
 import { PrescriptionForm, PrescriptionItemForm, PrescriptionVO, PrescriptionCreatePayload, PharmacyVO, CdsWarning } from '../../types/entities'
 import { PAGE_SIZE, NON_DELETABLE_RX_STATUSES } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
+import { localDateValue } from '../../utils/datetime'
 import styles from '../shared.module.css'
 
 const emptyItem: PrescriptionItemForm = { drugName: '', rxnormCode: '', dosage: '', frequency: '', duration: '', quantity: '', refills: '', notes: '' }
-const emptyForm: PrescriptionForm = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: new Date().toISOString().slice(0, 10), prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
+const emptyForm: PrescriptionForm = { patientId: '', doctorId: '', diagnosis: '', icd10Codes: '', prescriptionDate: localDateValue(), prescriptionType: 'MEDICATION', rxStatus: 'active', items: [{ ...emptyItem }] }
 
 export default function Prescriptions() {
   const queryClient = useQueryClient()

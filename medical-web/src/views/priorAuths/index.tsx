@@ -5,6 +5,7 @@ import { getPatientPage } from '../../api/patient'
 import { PriorAuthForm } from '../../types/entities'
 import { PAGE_SIZE } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
+import { localDateValue } from '../../utils/datetime'
 import styles from '../shared.module.css'
 
 const STATUS_COLOR: Record<string, string> = { PENDING: '#E6A23C', APPROVED: '#67C23A', DENIED: '#F56C6C' }
@@ -60,8 +61,8 @@ export default function PriorAuths() {
           <td>
             {r.status === 'PENDING' && (
               <>
-                <button className={styles.btnSm} onClick={async () => { const n = await promptDialog('Auth number:'); if (n) updateMutation.mutate({ id: r.id, data: { status: 'APPROVED', authNumber: n, resolvedAt: new Date().toISOString().slice(0, 10) } }) }}>Approve</button>
-                <button className={styles.btnSmDanger} onClick={() => updateMutation.mutate({ id: r.id, data: { status: 'DENIED', resolvedAt: new Date().toISOString().slice(0, 10) } })}>Deny</button>
+                <button className={styles.btnSm} onClick={async () => { const n = await promptDialog('Auth number:'); if (n) updateMutation.mutate({ id: r.id, data: { status: 'APPROVED', authNumber: n, resolvedAt: localDateValue() } }) }}>Approve</button>
+                <button className={styles.btnSmDanger} onClick={() => updateMutation.mutate({ id: r.id, data: { status: 'DENIED', resolvedAt: localDateValue() } })}>Deny</button>
               </>
             )}
             {r.status === 'APPROVED' && <span style={{ fontSize: 11, color: '#909399' }}>Auth #{r.authNumber}</span>}

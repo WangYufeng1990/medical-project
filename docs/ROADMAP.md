@@ -4133,7 +4133,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [x] Done |
 | R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [x] Done |
 | R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [x] Done |
-| R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [ ] Open |
+| R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [x] Done |
 | R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [ ] Open |
 
 ### R53-01 — Revoke patient sessions on credential/state changes
@@ -4393,6 +4393,21 @@ The test class clears `audit_log` in `@BeforeEach`: each test asserts on a chain
 
 **Verification first:** a fixed-clock check at 12:00 America/Los_Angeles must allow 13:00 and reject 11:00 when creating an appointment. Include UTC and a positive-offset zone, and a browser check of editing an existing past-start appointment. Use existing tools or a small pure-function check; do not add a frontend test framework solely for this change.
 
+**Fix record (R53-10) — done.** `<input type="datetime-local">` speaks the browser's wall clock while `toISOString()` speaks UTC, so the minimum was wrong by the viewer's offset in both directions. `medical-web/src/utils/datetime.ts` now owns the two conversions (`localDateValue`, `localDateTimeInputValue`) and every place that was pasting a UTC string into a local-time control uses them.
+
+| Measured before the fix (same instant, three zones) | 19:30 in Los Angeles | 01:00 in Tokyo | UTC |
+|---|---|---|---|
+| `min` the input received | `2026-10-20T02:30` — **7 h in the future**, so a valid 19:45 could not be picked | `2026-10-19T16:00` — **9 h in the past** | `2026-10-20T02:30` |
+| date-only default (`slice(0, 10)`) | `2026-10-20` while it was still the 19th locally | `2026-10-19` while it was already the 20th | correct |
+
+UTC agreeing with itself in every column is why this survived: the bug is invisible on a UTC machine, which is where it was written.
+
+After the fix, the compiled `datetime.ts` measured under `TZ=America/Los_Angeles`, `Asia/Tokyo` and `UTC` returns the local wall clock in all three (`2026-10-19T19:30`, `2026-10-20T01:00`, `2026-10-20T02:30`) — UTC is unchanged, which is the point of a fix that must not reinterpret stored times.
+
+Scope: the same defect was in five date defaults that computed "today" in UTC (`patients` ×3 for a resolution/onset/administration date, the patient layout footer, `priorAuths` ×2, `prescriptions`' default prescription date). They are one bug class and one helper, so they were fixed together; each only changes which calendar day a default offers, never how a stored date is read.
+
+Verification: `npm run check` — 0 errors, the same 4 pre-existing warnings; `tsc --noEmit` clean; no frontend test framework was added, per the finding. The picker bound is the only client-side gate — the server keeps its own rule (R53-06), so a client clock that lies cannot put a past appointment into the database.
+
 ### R53-11 — Ignore responses belonging to a conversation that is no longer selected
 
 **Location:** `medical-web/src/views/chat/index.tsx:42–54` and `medical-web/src/views/patient/chat/index.tsx:30–43`.
@@ -4420,4 +4435,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 9/11 complete** (R53-01 to R53-09 done — every P1 closed; 2 P2 findings open: R53-10, R53-11).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 10/11 complete** (R53-01 to R53-10 done — every P1 closed; 1 P2 finding open: R53-11).

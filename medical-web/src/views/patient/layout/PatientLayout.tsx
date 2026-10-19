@@ -5,6 +5,7 @@ import patientRequest, { http } from '../../../api/patientRequest'
 import { useIdleTimeout } from '../../../utils/useIdleTimeout'
 import SessionWarningModal from '../../../layout/SessionWarningModal'
 import { readPatientInfo, endPatientSession } from '../../../utils/auth'
+import { localDateValue } from '../../../utils/datetime'
 
 const items = [
   { path: '/patient/dashboard', label: 'Dashboard' },
@@ -60,7 +61,7 @@ export default function PatientLayout() {
               const exportData = res
               const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
               const url = URL.createObjectURL(blob)
-              const date = new Date().toISOString().slice(0, 10)
+              const date = localDateValue()
               const a = document.createElement('a'); a.href = url; a.download = `health-data-${date}.json`; a.click()
               URL.revokeObjectURL(url)
             } catch { alert('Export failed') }

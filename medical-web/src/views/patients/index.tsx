@@ -12,6 +12,7 @@ import { getCarePlans, createCarePlan } from '../../api/carePlan'
 import { PatientForm, PatientVO, ConsentVO, PrescriptionVO, MedicalHistoryEntry, AllergyEntry, VitalSignVO, ProblemVO, ImmunizationVO, CarePlanVO, PrescriptionItem } from '../../types/entities'
 import { PAGE_SIZE, CONSENT_TYPES, CONSENT_STATUS_COLOR } from '../../utils/labels'
 import { useConfirm } from '../../utils/ConfirmDialog'
+import { localDateValue } from '../../utils/datetime'
 import styles from '../shared.module.css'
 
 const emptyForm: PatientForm = { name: '', mrn: '', ssn: '', dateOfBirth: '', sexAtBirth: 'M', genderIdentity: '', race: '', ethnicity: '', preferredLanguage: 'en', maritalStatus: '', phoneMobile: '', phoneHome: '', phoneWork: '', email: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '', insurancePayer: '', insuranceMemberId: '', insuranceGroupNumber: '', primaryCareProvider: '', patientStatus: 'active', medicalHistory: '', allergies: '' }
@@ -500,7 +501,7 @@ export default function Patients() {
                           {p.status === 'ACTIVE' && (
                             <button type="button" className={styles.btnSm} onClick={async () => {
                               if (!editId || !confirm('Resolve this problem?')) return
-                              await updateProblem(editId, p.id, { status: 'RESOLVED', resolutionDate: new Date().toISOString().slice(0, 10) })
+                              await updateProblem(editId, p.id, { status: 'RESOLVED', resolutionDate: localDateValue() })
                               setProblems((await getProblems(editId, { page: 1, size: 100 }))?.records ?? [])
                             }}>Resolve</button>
                           )}
@@ -521,7 +522,7 @@ export default function Patients() {
                           snomedCode: newProblem.snomedCode.trim() || null,
                           icd10Code: newProblem.icd10Code.trim() || null,
                           severity: newProblem.severity,
-                          onsetDate: newProblem.onsetDate || new Date().toISOString().slice(0, 10),
+                          onsetDate: newProblem.onsetDate || localDateValue(),
                           notes: newProblem.notes || null,
                         })
                         setProblems((await getProblems(editId, { page: 1, size: 100 }))?.records ?? [])
@@ -561,7 +562,7 @@ export default function Patients() {
                       await createImmunization(editId, {
                         vaccineName: newImmunization.vaccineName.trim(),
                         cvxCode: newImmunization.cvxCode.trim() || null,
-                        administrationDate: newImmunization.administrationDate || new Date().toISOString().slice(0, 10),
+                        administrationDate: newImmunization.administrationDate || localDateValue(),
                         doseNumber: newImmunization.doseNumber.trim() || null,
                         lotNumber: newImmunization.lotNumber.trim() || null,
                         manufacturer: newImmunization.manufacturer.trim() || null,
