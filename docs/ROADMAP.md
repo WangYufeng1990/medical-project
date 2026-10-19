@@ -4132,7 +4132,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [x] Done |
 | R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [x] Done |
 | R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [x] Done |
-| R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [ ] Open |
+| R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [x] Done |
 | R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [ ] Open |
 | R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [ ] Open |
 
@@ -4371,6 +4371,15 @@ The test class clears `audit_log` in `@BeforeEach`: each test asserts on a chain
 
 **Tests first:** extend `FhirIntegrationTest` with minute-only, nonzero-second and fractional-second observations. Both detail and search must return 200 and produce resources parseable by HAPI with the expected effective time. Add an explicit timezone/offset assertion.
 
+**Fix record (R53-09) — done.** `buildFhirObservation` now formats the effective time with two explicit formatters instead of concatenating `toString()` with a seconds segment: seconds are always emitted, milliseconds are emitted when the row carries them.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `fhirObservation_withNonZeroSeconds_shouldSerialiseEffectiveTime`: `Status expected:<200> but was:<500>` — `2026-06-04T08:00:30` became `2026-06-04T08:00:30:00` before HAPI ever saw it |
+| Second red, on the first attempt | truncating to whole seconds made the request succeed but `fhirObservationDetail_shouldSerialiseEveryPrecisionToOneWellFormedTime` then failed with `expected: <2026-06-04T08:00:30.500> but was: <2026-06-04T08:00:30>` — a silent loss is not a fix |
+| Green, after the fix | minute-only → `2026-06-04T08:00:00`, non-zero seconds → `2026-06-04T08:00:30`, fractional → `2026-06-04T08:00:30.500`; search and detail agree because both go through the same builder |
+| Offset | none emitted, deliberately. `observation.effective_date` is wall-clock time with no zone, so a `Z` or an offset would assert a zone the data never had; FHIR allows a local dateTime. Recorded in `docs/API-LAYOUT.md` as the endpoint's contract rather than left implicit |
+
 ### R53-10 — Generate datetime-local bounds in local time
 
 **Location:** `medical-web/src/views/appointments/index.tsx:121`.
@@ -4411,4 +4420,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 8/11 complete** (R53-01 to R53-08 done — every P1 closed; 3 P2 findings open: R53-09, R53-10, R53-11).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 9/11 complete** (R53-01 to R53-09 done — every P1 closed; 2 P2 findings open: R53-10, R53-11).

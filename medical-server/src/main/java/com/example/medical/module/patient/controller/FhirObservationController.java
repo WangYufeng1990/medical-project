@@ -15,6 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @RestController
@@ -115,11 +118,30 @@ public class FhirObservationController {
         }
 
         if (o.getEffectiveDate() != null) {
-            fhirObs.setEffective(new DateTimeType(
-                    o.getEffectiveDate().toString() + ":00"));
+            fhirObs.setEffective(new DateTimeType(fhirEffectiveTime(o.getEffectiveDate())));
         }
 
         return fhirObs;
+    }
+
+    private static final DateTimeFormatter FHIR_SECONDS =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter FHIR_MILLIS =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+
+    /**
+     * One well-formed FHIR dateTime at the precision the row has: seconds always,
+     * milliseconds when present. {@code LocalDateTime.toString()} already prints
+     * seconds when they are non-zero, so the old {@code toString() + ":00"} turned
+     * 08:00:30 into 08:00:30:00 and failed the request (R53-09). No offset is
+     * emitted because {@code effective_date} is wall-clock time — adding one would
+     * invent a zone the row never carried.
+     */
+    private static String fhirEffectiveTime(LocalDateTime effective) {
+        LocalDateTime whole = effective.truncatedTo(ChronoUnit.SECONDS);
+        return whole.equals(effective)
+                ? whole.format(FHIR_SECONDS)
+                : effective.truncatedTo(ChronoUnit.MILLIS).format(FHIR_MILLIS);
     }
 
     private ResponseEntity<String> encode(Resource resource) {

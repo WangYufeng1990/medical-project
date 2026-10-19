@@ -370,6 +370,10 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 | GET | `/metadata` | public | CapabilityStatement (FHIR 4.0.1 + SMART on FHIR security) |
 | GET | `/Patient/{id}` | ADMIN,DOCTOR | FHIR Patient resource (SSN masked to last-4); DOCTOR limited to own patient scope (403 otherwise, emergency token exempt) |
 | GET | `/Patient` | ADMIN,DOCTOR | FHIR search (`?_id=100`) returning Bundle; DOCTOR: `_id` outside scope → 403, no `_id` → results filtered to scope |
+| GET | `/Observation/{id}` | ADMIN,DOCTOR | FHIR Observation resource; DOCTOR limited to own patient scope |
+| GET | `/Observation` | ADMIN,DOCTOR | FHIR search `?patient=&code=&_count=` returning Bundle (default 100, capped at 500) |
+
+Observation `effectiveDateTime` is serialised as one well-formed FHIR dateTime at the precision the row has — seconds always (minute-only input becomes `…T08:00:00`), milliseconds when present (`…T08:00:30.500`) — and carries **no offset**: `observation.effective_date` is stored as wall-clock time, so emitting `Z` or an offset would assert a time zone the data never had. Both the detail and the search response go through the same builder, so they cannot drift (R53-09).
 
 ### Consent — `/api/v1/consent`
 
