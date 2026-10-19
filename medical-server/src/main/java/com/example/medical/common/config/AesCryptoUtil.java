@@ -55,11 +55,11 @@ public class AesCryptoUtil {
     // put the previous value back (see AesAttributeConverterTest). These are the only
     // entry points that bypass app.aes.key/rotate, and nothing in src/main calls them.
 
-    static void initializeForTest(String key) {
+    public static void initializeForTest(String key) {
         initializeForTest(key, null);
     }
 
-    static void initializeForTest(String key, String previousKey) {
+    public static void initializeForTest(String key, String previousKey) {
         try {
             CURRENT_KEY = deriveKey(key);
             PREVIOUS_KEY = previousKey != null ? deriveKey(previousKey) : null;
@@ -76,13 +76,13 @@ public class AesCryptoUtil {
      * changes encryption for every other test in the same JVM — snapshot first
      * and restore afterwards instead of leaving the JVM on test material.
      */
-    record KeySnapshot(String current, String previous) {}
+    public record KeySnapshot(String current, String previous) {}
 
-    static KeySnapshot snapshotKeysForTest() {
+    public static KeySnapshot snapshotKeysForTest() {
         return new KeySnapshot(currentRawKey, previousRawKey);
     }
 
-    static void restoreKeysForTest(KeySnapshot snapshot) {
+    public static void restoreKeysForTest(KeySnapshot snapshot) {
         // No key was configured yet (no Spring context has initialised one):
         // there is no prior state to put back, and the next init() sets it.
         if (snapshot.current() == null) return;

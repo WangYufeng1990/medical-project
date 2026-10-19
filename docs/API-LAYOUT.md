@@ -399,7 +399,7 @@ Requires `ADMIN`.
 |--------|------|-------------|
 | GET | `/history` | Key lifecycle audit trail (KEY_INIT / KEY_ROTATION events) |
 | POST | `/rotate` | Trigger runtime key rotation — body: {newKey, oldKey}. Records the new key fingerprint in key_audit; **must** be followed by updating AES_KEY (new) and AES_KEY_PREVIOUS (old) in env before restart (Review III C2) |
-| GET | `/rotation-status` | Key rotation migration progress — per-table migrated row counts |
+| GET | `/rotation-status` | Key rotation migration progress — `remainingByTable` is the **rows still on the previous key** per column, counted by a read-only verification pass after the scan (R53-03). It used to report rows migrated, then force the value to zero, so a completed-looking entry could hide a skipped batch |
 
 ### CDS — `/api/v1/cds`
 

@@ -96,6 +96,8 @@ public class KeyRotationService {
     private final Executor rotationExecutor;
 
     private final Map<String, Integer> remainingByTable = new ConcurrentHashMap<>();
+    /** Pause between batches, to keep a rotation from saturating the database; tests set it to 0. */
+    private long pauseMillis = SLEEP_MS;
     private volatile boolean running;
     private volatile boolean complete;
 
@@ -119,6 +121,17 @@ public class KeyRotationService {
      * Called from the admin API to trigger a runtime key rotation.
      * The caller must have already called {@link AesCryptoUtil#rotate(String, String)}.
      */
+    /** Test entry point: a scan under test should not spend its time pacing itself. */
+    void setPauseMillisForTest(long millis) {
+        this.pauseMillis = millis;
+    }
+
+    /** Test entry point: resets the published state without spawning the background run. */
+    void resetStateForTest() {
+        complete = false;
+        remainingByTable.clear();
+    }
+
     public void startRuntimeRotation() {
         complete = false;
         remainingByTable.clear();
@@ -142,12 +155,21 @@ public class KeyRotationService {
         }
         running = true;
         try {
+            int remaining = 0;
             for (TableColumn tc : ENCRYPTED_COLUMNS) {
-                migrateColumn(tc);
+                remaining += migrateColumn(tc);
+            }
+            if (remaining > 0) {
+                // Retiring the old key now would make exactly these rows unreadable.
+                log.warn("Key rotation scanned every column but {} rows are still on the previous key — "
+                        + "completion withheld, the old key stays in service", remaining);
+                writeAudit("ROTATION_INCOMPLETE",
+                        remaining + " rows re-encrypted were not reachable; old key retained");
+                return;
             }
             complete = true;
             AesCryptoUtil.markRotationComplete();
-            log.info("Key rotation complete — all {} encrypted columns migrated", ENCRYPTED_COLUMNS.size());
+            log.info("Key rotation complete — all {} encrypted columns verified migrated", ENCRYPTED_COLUMNS.size());
             writeAudit("ROTATION_COMPLETE", "All legacy ciphertexts re-encrypted with current key");
         } catch (Exception e) {
             log.error("Key rotation aborted — will retry on next safety check", e);
@@ -156,57 +178,98 @@ public class KeyRotationService {
         }
     }
 
-    private void migrateColumn(TableColumn tc) {
+    private int migrateColumn(TableColumn tc) {
+        return migrateColumn(tc, BATCH_SIZE);
+    }
+
+    /**
+     * Walks one column by id and re-encrypts every row still on the previous key.
+     * <p>
+     * Keyset paging rather than OFFSET, and the walk ends when a batch comes back
+     * <em>empty</em> — never because a batch happened to need no rewrite, which is how a
+     * resumed rotation used to stop at its first already-migrated page and leave the
+     * rest of the column behind (R53-03). What is reported is a second, read-only pass
+     * that counts the rows still on the previous key, so a scan cannot claim zero
+     * remaining while leaving ciphertext only the retired key can read.
+     *
+     * @return rows of this column still on the previous key when the pass ends
+     */
+    int migrateColumn(TableColumn tc, int batchSize) {
         String table = tc.table;
         String column = tc.column;
-        int totalMigrated = 0;
-        int offset = 0;
+        int migrated = 0;
+        long lastId = -1;
 
-        // Full scan with OFFSET paging (Review III C2): the old predicate
-        // `NOT LIKE '01%'` excluded every v1 row, so nothing was ever
-        // re-encrypted after a rotation. Now every non-null row is examined
-        // and only rows still encrypted with the PREVIOUS key are rewritten.
         while (true) {
-            final int off = offset;
-            Integer batchCount = transactionTemplate.execute(status -> {
-                String sql = "SELECT id, " + column + " FROM " + table
-                           + " WHERE " + column + " IS NOT NULL"
-                           + " ORDER BY id LIMIT " + BATCH_SIZE + " OFFSET " + off;
-                List<RowData> rows = jdbc.query(sql,
-                        (rs, i) -> new RowData(rs.getLong("id"), rs.getString(column)));
-
-                if (rows.isEmpty()) return 0;
-
-                int count = 0;
+            final long after = lastId;
+            BatchOutcome outcome = transactionTemplate.execute(status -> {
+                List<RowData> rows = jdbc.query(
+                        "SELECT id, " + column + " FROM " + table
+                                + " WHERE " + column + " IS NOT NULL AND id > ? ORDER BY id LIMIT " + batchSize,
+                        (rs, i) -> new RowData(rs.getLong("id"), rs.getString(column)), after);
+                int rewrote = 0;
                 for (RowData row : rows) {
                     if (!AesCryptoUtil.isEncryptedWithPreviousKey(row.ciphertext)) continue;
                     String newCipher = AesCryptoUtil.reencrypt(row.ciphertext);
-                    if (newCipher != null) {
-                        jdbc.update("UPDATE " + table + " SET " + column + " = ? WHERE id = ?",
-                                newCipher, row.id);
-                        count++;
-                    } else {
+                    if (newCipher == null) {
                         log.warn("Rotation: skipping row id={} in {}.{} — decryption failed", row.id, table, column);
+                        continue;
                     }
+                    if (migrateRow(table, column, row.id, row.ciphertext, newCipher) == 0) {
+                        // The ciphertext read a moment ago is gone: someone edited the row.
+                        // Rewriting now would overwrite their content, so leave it to the
+                        // verification pass to report and the next run to migrate.
+                        log.warn("Rotation: row id={} in {}.{} changed while rotating — left for the next pass",
+                                row.id, table, column);
+                        continue;
+                    }
+                    rewrote++;
                 }
-                return count;
+                return new BatchOutcome(rows.size(), rewrote, rows.isEmpty() ? -1 : rows.get(rows.size() - 1).id());
             });
 
-            if (batchCount == null || batchCount == 0) break;
+            if (outcome == null || outcome.scanned() == 0) break;
+            migrated += outcome.migrated();
+            lastId = outcome.lastId();
 
-            offset += BATCH_SIZE;
-            totalMigrated += batchCount;
-            remainingByTable.put(table + "." + column, totalMigrated);
-            log.info("Rotation: migrated {} rows in {}.{} (total so far: {})", batchCount, table, column, totalMigrated);
-
+            if (pauseMillis <= 0) continue;
             try {
-                Thread.sleep(SLEEP_MS);
+                Thread.sleep(pauseMillis);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
         }
-        remainingByTable.put(table + "." + column, 0);
+
+        int remaining = countPreviousKeyRows(tc);
+        remainingByTable.put(table + "." + column, remaining);
+        log.info("Rotation: {}.{} — migrated {} rows, {} still on the previous key",
+                table, column, migrated, remaining);
+        return remaining;
+    }
+
+    /**
+     * Rewrites one row. Package-visible so its compare-and-set can be exercised directly.
+     * The read ciphertext is part of the predicate: an edit that landed between the
+     * SELECT and the UPDATE wins, and this returns 0 instead of overwriting it (R53-03).
+     */
+    int migrateRow(String table, String column, long id, String readCiphertext, String newCiphertext) {
+        return jdbc.update("UPDATE " + table + " SET " + column + " = ? WHERE id = ? AND " + column + " = ?",
+                newCiphertext, id, readCiphertext);
+    }
+
+    /** Rows of this column still encrypted with the previous key — the truth a scan must not round to zero. */
+    int countPreviousKeyRows(TableColumn tc) {
+        Integer count = jdbc.query(
+                "SELECT " + tc.column + " FROM " + tc.table + " WHERE " + tc.column + " IS NOT NULL",
+                rs -> {
+                    int n = 0;
+                    while (rs.next()) {
+                        if (AesCryptoUtil.isEncryptedWithPreviousKey(rs.getString(1))) n++;
+                    }
+                    return n;
+                });
+        return count == null ? 0 : count;
     }
 
     private void writeAudit(String eventType, String detail) {
@@ -225,4 +288,7 @@ public class KeyRotationService {
 
     record TableColumn(String table, String column) {}
     record RowData(long id, String ciphertext) {}
+
+    /** What one batch did: how many rows it looked at, how many it rewrote, and where to resume. */
+    record BatchOutcome(int scanned, int migrated, long lastId) {}
 }

@@ -4126,7 +4126,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 |----|----------|---------|--------|
 | R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [x] Done |
 | R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [x] Done |
-| R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
+| R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [x] Done |
 | R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [x] Done |
 | R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [x] Done |
 | R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [x] Done |
@@ -4212,6 +4212,19 @@ Two things left deliberately outside this slice, both worth their own decision: 
 - Retain the required previous key until migration is verified complete.
 
 **Tests first:** add `KeyRotationServiceIntegrationTest` with 501 rows: first 500 new-key / final row old-key; resume after a partial batch; ordinary all-old data; and a concurrent edit that must survive migration. Assert both ciphertext readability with the new key and truthful completion/remaining status.
+
+**Fix record — done.** The column walk is now keyset paging (`WHERE id > ? ORDER BY id LIMIT n`) that ends when a batch comes back **empty** — never because a batch happened to need no rewrite, which is how a resumed rotation stopped at its first already-migrated page. Two further rules make the report trustworthy: every rewrite is a compare-and-set (`... WHERE id = ? AND column = ?`) so a clinical edit that lands mid-rotation wins instead of being overwritten, and the number reported is a second read-only pass that counts the rows still on the previous key — a scan can no longer claim zero while leaving ciphertext only the retired key can read. Completion (and `markRotationComplete`, which retires the old key) is published only when that count is zero across every column; otherwise an `ROTATION_INCOMPLETE` audit row is written, the old key stays in service, and the nightly safety check resumes.
+
+**Scale note on the test.** The unit of the bug is a batch boundary, not the number 500, so the tests drive one column with an explicit batch size (`migrateColumn(tc, 1)`) instead of inserting 501 rows; the same scenario is a batch of already-migrated rows followed by one that is not. The pacing sleep between batches is a field the test sets to zero, which took the class from 38 s to 8 s.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `aBatchThatNeedsNoRewrite_shouldNotEndTheScan`: the legacy row behind an already-migrated batch was **never migrated** (`still on the previous key: expected false, was true`) while the column still reported zero remaining. `aRowEditedSinceItWasRead_shouldNotBeOverwritten`: the rotation overwrote the concurrent edit (`expected 0, was 1`) |
+| Green, after the fix | both pass, plus `countPreviousKeyRows_shouldReportWhatIsStillOnTheOldKey` (the reporting primitive) and `aFullRun_shouldMigrateAndComplete` (a whole run migrates what it finds and only then retires the key) |
+| `mvn clean verify` | **239 tests** (235 + 4), **0 failures**, `BUILD SUCCESS` |
+| `docs/API-LAYOUT.md` | `/rotation-status` now states what `remainingByTable` means, and what it used to mean |
+
+Left alone deliberately: the review also suggested keyset-plus-CAS *plus* a row-level resume checkpoint. Resuming from a checkpoint solves a cost problem (re-scanning already-clean pages), not a correctness one — the verification pass already decides completion — so it stays out of a defect fix. Also unchanged: a rotation runs *columns* sequentially and an exception still aborts the whole run (now without publishing completion), which is the pre-existing behaviour.
 
 ### R53-04 — Accept one trusted issuer, not every issuer at once
 
@@ -4379,4 +4392,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 6/11 complete** (R53-01, R53-02, R53-04, R53-05, R53-06 and R53-07 done; every P1 closed, 5 P2 findings open: R53-03, R53-08, R53-09, R53-10, R53-11).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 7/11 complete** (R53-01 to R53-07 done — every P1 closed; 4 P2 findings open: R53-08, R53-09, R53-10, R53-11).

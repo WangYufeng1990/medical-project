@@ -52,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.rate-limit.enabled=false",
 })
 @Sql(scripts = "/cleanup-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
-abstract class IntegrationTestSupport {
+public abstract class IntegrationTestSupport {
 
     @Autowired
     protected MockMvc mockMvc;
