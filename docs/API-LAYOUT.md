@@ -172,7 +172,7 @@ All require `PATIENT` role.
 | POST | `/refill-requests` | body: {prescriptionId, reason?} | Request a refill for a prescription |
 | GET | `/messages/conversations` | `?page=1&size=20` | My chat conversations (partner is matched on type **and** id, so a patient and a staff user sharing a number stay distinct) |
 | GET | `/messages/{partnerId}` | `?page=1&size=50` | Chat messages with a staff member |
-| POST | `/messages` | body: {receiverId, content} | Send a chat message to a staff account the patient may reach — see `POST /api/v1/messages` for the recipient rules and error codes |
+| POST | `/messages` | body: {receiverId, content} | Send a chat message to a staff account the patient may reach — see `POST /api/v1/messages` for the recipient rules and error codes (the patient needs an established conversation or a care relationship with that account) |
 | PUT | `/bills/{id}/pay` | body: `PatientPayBillFormDTO` {paymentAmount (> 0, required), paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified (403 for someone else's bill). DRAFT is not payable; a missing amount is 400, not 500 |
 | PUT | `/password` | body: `PatientPasswordChangeFormDTO` {oldPassword, newPassword} | Change password — verifies the old one (400), enforces complexity (`@ValidPassword`) and the last-3 history policy |
 | POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
@@ -326,11 +326,17 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 
 | Pair | Accepted when | Rejection |
 |------|---------------|-----------|
-| STAFF → PATIENT | the patient exists (not soft-deleted), and a `DOCTOR` is scoped to them (appointment or prescription), an `ADMIN` is unscoped, or the caller holds a valid emergency token for that patient | `404` patient not found, `403` outside the doctor's scope |
+| STAFF → PATIENT | the patient record exists (not soft-deleted) **and** its portal account exists, is not deleted and is enabled **and** either the two already have a conversation **or** the sender has clinical access to the patient (`DOCTOR` scoped by appointment/prescription, `ADMIN` unscoped, or a valid emergency token for that patient) | `404` patient not found, `404` portal account not found/disabled/deleted, `403` no care relationship and no existing conversation |
 | STAFF → STAFF | the receiver exists and is enabled | `404` not found or disabled |
-| PATIENT → STAFF | the receiver exists and is enabled, and the patient has a care relationship with that account (appointment or prescription) or an existing message thread | `404` not found or disabled, `403` no relationship |
+| PATIENT → STAFF | the receiver exists and is enabled **and** either the two already have a conversation **or** the patient has a care relationship with that account (appointment or prescription) | `404` not found or disabled, `403` no care relationship and no existing conversation |
 | PATIENT → PATIENT | never | `403` (not reachable through the portal controller, which pins `receiverType` to `STAFF`; enforced at the service boundary) |
 | any → self, unknown `receiverType`, missing `receiverId` | never | `400` |
+
+**An existing conversation authorizes both directions, identically.** A thread whose appointment or prescription has since ended stays two-way: the same relationship rule (care relationship **or** established conversation) is applied whether the staff member or the patient is sending, so one side can never be able to reply where the other cannot.
+
+**Messaging permission is not record permission.** The clinical scope is only *read* by the messaging check (`DoctorPatientScope.permits`) as one accepted reason to reach a patient; an existing conversation is never added to that scope. A doctor who may reply in a thread with a patient they are no longer related to still gets `403` on that patient's clinical, billing, export and FHIR reads.
+
+**A locked-out portal account is still a deliverable mailbox.** Lockout (`locked_until`) is a temporary login state, not a disabled account, so it does not block delivery; only a missing, soft-deleted or status-disabled portal account does.
 
 A staff identity that cannot be verified (no authentication, an unexpected principal, or a principal with no `ADMIN`/`DOCTOR` role) can never resolve the patient scope to "unfiltered": `DoctorPatientScope` answers `401`/`403` instead, and the same rule backs every scoped clinical/billing/export/FHIR read.
 

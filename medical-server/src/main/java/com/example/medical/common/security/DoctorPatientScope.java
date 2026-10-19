@@ -66,10 +66,23 @@ public class DoctorPatientScope {
 
     /** Throws FORBIDDEN when the patient is outside the current user's scope. */
     public void requireAccess(Long patientId) {
-        Set<Long> scope = resolve();
-        if (scope != null && !scope.contains(patientId)) {
+        if (!permits(patientId)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "Access denied: patient outside your scope");
         }
+    }
+
+    /**
+     * Whether the current identity may access the patient clinically — the same
+     * rule as {@link #requireAccess} as a question rather than an exception.
+     * <p>
+     * Read-only for callers that need to combine it with a rule of their own.
+     * Messaging uses it that way (Round 54.1) and never the other way round: no
+     * messaging relationship is ever merged into this scope, so a conversation
+     * cannot widen what clinical reads are allowed.
+     */
+    public boolean permits(Long patientId) {
+        Set<Long> scope = resolve();
+        return scope == null || scope.contains(patientId);
     }
 
     /**

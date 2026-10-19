@@ -3,6 +3,10 @@ DELETE FROM sys_user_role WHERE user_id NOT IN (1, 2);
 DELETE FROM sys_role WHERE role_code IN ('TEST_ROLE', 'NURSE');
 DELETE FROM sys_menu WHERE (menu_name LIKE 'Test%' OR menu_name = 'Updated Menu') AND id != 14;
 DELETE FROM patient WHERE mrn LIKE '%TEST%' OR name LIKE 'Test%' OR name LIKE 'Updated%';
+-- Portal credential rows for patients a test registered: patient ids restart at 104
+-- for every class, so a leftover row would collide with the next class's insert
+-- (Round 54.1 adds a messaging test that creates its own portal accounts).
+DELETE FROM patient_auth WHERE patient_id NOT IN (100, 101, 102, 103);
 DELETE FROM emergency_access WHERE user_id IS NOT NULL;
 DELETE FROM bill WHERE id NOT IN (500, 501, 502);
 DELETE FROM prescription_item WHERE prescription_id NOT IN (300, 301, 302);

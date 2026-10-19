@@ -8,6 +8,7 @@ import com.example.medical.common.lookup.PatientLookup;
 import com.example.medical.common.lookup.StaffLookup;
 import com.example.medical.common.result.PageResult;
 import com.example.medical.common.security.DoctorPatientScope;
+import com.example.medical.common.security.PatientPortalAccountState;
 import com.example.medical.common.security.StaffAccountState;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageVO;
@@ -41,6 +42,7 @@ public class ChatService {
     private final PatientLookup patientLookup;
     private final StaffLookup staffLookup;
     private final StaffAccountState staffAccountState;
+    private final PatientPortalAccountState patientPortalAccountState;
     private final DoctorPatientScope doctorPatientScope;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -175,11 +177,7 @@ public class ChatService {
                 throw new BusinessException(ResultCode.FORBIDDEN, "Patients may only message staff");
             }
             requireActiveStaff(receiver.id());
-            // A care relationship is the clinic's own notion of who a patient may
-            // reach; an existing thread is preserved whether or not that
-            // relationship still has an appointment or prescription behind it.
-            if (!doctorPatientScope.isRelated(receiver.id(), sender.id())
-                    && !messageRepository.hasConversation(sender.id(), PATIENT, receiver.id(), STAFF)) {
+            if (!established(sender, receiver) && !doctorPatientScope.isRelated(receiver.id(), sender.id())) {
                 throw new BusinessException(ResultCode.FORBIDDEN,
                         "No care relationship or existing conversation with this staff member");
             }
@@ -187,14 +185,38 @@ public class ChatService {
         }
 
         if (PATIENT.equals(receiver.type())) {
-            if (!patientLookup.exists(receiver.id())) {
-                throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
+            requireDeliverablePatient(receiver.id());
+            // Clinical scope decides who a clinician may contact, but messaging
+            // never feeds back into it: permits() is read here, nothing is merged.
+            if (!established(sender, receiver) && !doctorPatientScope.permits(receiver.id())) {
+                throw new BusinessException(ResultCode.FORBIDDEN,
+                        "No care relationship or existing conversation with this patient");
             }
-            doctorPatientScope.requireAccess(receiver.id());
             return;
         }
 
         requireActiveStaff(receiver.id());
+    }
+
+    /**
+     * The relationship clause is shared by both directions on purpose: an
+     * established conversation authorizes a reply from either side. The first
+     * 54.1 implementation applied it to the patient only, so a thread that outlived
+     * its appointment could be answered one way and refused the other.
+     */
+    private boolean established(Party sender, Party receiver) {
+        return messageRepository.hasConversation(
+                sender.id(), sender.type(), receiver.id(), receiver.type());
+    }
+
+    /** The record must exist, and there must be a portal account behind it to deliver to. */
+    private void requireDeliverablePatient(Long patientId) {
+        if (!patientLookup.exists(patientId)) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "Patient not found");
+        }
+        if (!patientPortalAccountState.isActive(patientId)) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "Patient portal account not found or not active");
+        }
     }
 
     private void requireActiveStaff(Long staffId) {
