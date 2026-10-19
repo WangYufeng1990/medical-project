@@ -4569,14 +4569,14 @@ Schemas must be validated on both sides. Keep existing Result<T> conventions for
 
 Database evolution is part of Round 54.2: introduce a versioned baseline and upgrade path, recommended Flyway for Java/MySQL and independent versioned PostgreSQL migrations for Python-owned tables. Coordinate Spring SQL initialization and DevSchemaGuard rather than allowing two schema owners. Test fresh installation and upgrade from the reviewed schema. Do not enable blind baselining or make data deletion the normal upgrade path. Manage LangGraph checkpoint setup against locked dependency versions.
 
-## Round 54 — Messaging foundation (In progress: 54.1 Done, 54.2–54.4 Pending)
+## Round 54 — Messaging foundation (In progress: 54.1–54.2 Done, 54.3–54.4 Pending)
 
 **Goal:** reliable human messaging before AI integration. **Estimate:** 28–44 hours. Depends on a fresh baseline test run and reviewed migration/contract design.
 
 | Slice | Priority / status | Work and files | Tests first / acceptance |
 |---|---|---|---|
 | 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks (staff and patient account state, symmetric conversation rule); fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; existing conversation authorizes both directions; portal account state gates delivery; authenticated existing flows preserved — 31/31 pass, 19 were red before the two fix passes (see 54.1 record below) |
-| 54.2 Conversations and migration | P0 / Pending | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision | ChatConversationIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean and upgrade migrations pass |
+| 54.2 Conversations and migration | P0 / **Done** (2026-10-19) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision | ChatConversationIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean and upgrade migrations pass — 5/5 pass, 2 red first (see 54.2 record below) |
 | 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
 | 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
 
@@ -4668,6 +4668,51 @@ Rejection tests now assert three things each: the typed pair's row count is unch
 **Coverage of the acceptance list:** no valid identity cannot obtain unbounded scope (3 tests, plus 401/403 codes asserted); ADMIN/DOCTOR/emergency behaviour preserved (3 tests, HTTP and direct); missing/deleted/disabled receivers rejected (staff and patient, including a disabled, soft-deleted or absent portal account) with the typed pair count asserted unchanged; permitted sends still work (staff→in-scope patient, patient→related doctor, staff→staff, and both directions of a thread whose care relationship has ended); patient and staff sharing numeric id keep correct counterpart and message ownership in both directions (3 tests); every rejection asserts no row **and** no `NewMessageEvent`.
 
 **Limits of this slice (not claimed):** the conversation list still reads the newest 20 messages and groups in memory — real conversation pagination, tie ordering and the `chat_conversation` table are 54.2. `clientMessageId` idempotency is 54.3, after-commit notification and the fixed safety notice are 54.4. `getConversation` (the read path) still has no scope check of its own: it can only return messages the caller is a party to, and tightening it is not part of 54.1 — recorded here so it is not mistaken for done. Rejection is proven not to publish `NewMessageEvent` (a context listener records them, and an accepted send asserts exactly one), but the event is still published inside the transaction and pushed to SSE without an after-commit step — that ordering belongs to 54.4, which stays Pending. Loopback/SSE delivery itself is not asserted here.
+
+### Round 54.2 — Conversations and migration (Done, 2026-10-19)
+
+**Source baseline:** `8c5f58be` (Round 54.1 complete), clean tree. **Recorded test baseline (this round):** `mvn clean verify` → **276 tests, 0 failures**. Runs on the in-memory `jdbc:h2:mem:medical_test` profile; the development database was not touched.
+
+**What the source actually had:** `ChatService.getConversations` loaded the newest **20 messages** (`PageRequest.of(0, 20)`) and grouped them in memory, so a thread with more than 20 messages hid every quieter thread, `page`/`size` paginated that in-memory list rather than the threads, and ordering was "first appearance in the message window" with no tie-break. There was no conversation entity, no revision, and no way to address a thread without scanning messages. (Verified in source; not assumed from the plan.)
+
+**Red state (before any production change):** `mvn test -Dtest=ChatConversationIntegrationTest` → `Tests run: 2, Failures: 2`, both through the public endpoint:
+
+```
+busyThread_shouldNotHideAnOlderOne:50  patient 101's thread must still be listed after 22 newer messages in another thread ==> expected: <true> but was: <false>
+pages_shouldCoverEveryThreadOnce_andStayStable:72  doctor1 has exactly three threads here: [PATIENT:100] ==> expected: <3> but was: <1>
+```
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `resources/sql/schema.sql` | `chat_conversation`: canonical typed pair with `uk_chat_conversation_pair`, `last_message_id/time`, `message_count`, `revision`, plus one index per party side; `DevSchemaGuard.SCHEMA_VERSION` 3 → 4 |
+| `module/chat/service/Party.java` | Typed party value with the canonical ordering (`type`, then `id`) the pair relies on; replaces the private record in `ChatService` |
+| `module/chat/entity/ChatConversation.java` | Entity over the new table (`BaseEntity` rules: soft delete, version) |
+| `module/chat/repository/ChatConversationRepository.java` | Pair lookup accepting either orientation, a paged fetch for one party ordered `lastMessageTime DESC, id DESC`, and the incrementing `recordMessage` update |
+| `module/chat/service/ChatConversationService.java` | Canonicalises the pair, increments an existing thread in one statement, creates the row for a first message |
+| `module/chat/service/ChatConversationBackfill.java` | Startup backfill: one ordered scan of history → one row per thread with no row yet; idempotent; plain JDBC so it can run against a standalone database in tests |
+| `module/chat/service/ChatService.java` | `sendMessage` records the thread in the same transaction; `getConversations` is now a paged database query with partner/unread/last-message assembly |
+| `module/chat/repository/MessageRepository.java` | Adds one grouped unread query for the whole page; drops the now-unused 20-message window and per-row unread count |
+| `src/test/java/com/example/medical/ChatConversationIntegrationTest.java` | New: 5 tests (below) |
+| `src/test/resources/cleanup-test-data.sql` | Removes conversation rows that name a party no test owns any more |
+| `docs/API-LAYOUT.md`, `README.md` | Conversation list semantics, schema version note, startup backfill, MySQL manual-DDL note |
+
+**Decisions and their evidence.**
+
+- **Schema evolution stays on the repository's existing mechanism** (`schema.sql` + `spring.sql.init` + `DevSchemaGuard`), not Flyway. Asked and decided in this round: there is no MySQL instance here to verify a migration framework against, Round 50 M-series recorded migration tooling as out of scope for an H2-only demo, and adopting Flyway for part of the schema while `spring.sql.init` still created tables would leave two schema owners — the outcome the plan forbids. Flyway is therefore an **open infrastructure item**, not part of 54.2's completion: MySQL deployments currently apply the new DDL by hand (documented in `README.md`).
+- **Upgrade path, tested rather than asserted.** `schemaScript_shouldServeACleanInstallAndUpgradeAnOlderDatabase` builds two standalone H2 databases: one empty (clean install → table present, canonical pair enforced as a unique constraint), and one holding only the reviewed v3 `message` table with history (upgrade → the schema step adds the table, the backfill creates exactly one thread with `message_count` 3, `revision` 3, the patient first in the canonical pair, and the message rows untouched).
+- **Revision is internal for now.** It increments per recorded message and is the anchor later work (57.3 freshness) will read; exposing it through `ConversationVO` was not needed by any caller, so the API shape is unchanged.
+- **Tie ordering is decided, not left to the database:** `ORDER BY last_message_time DESC, id DESC`.
+
+**Verification (actually run):**
+
+- Red → green on the public endpoint: `Tests run: 2, Failures: 2` → `Tests run: 5, Failures: 0, Errors: 0` for `ChatConversationIntegrationTest`.
+- Method-order independence: the class passes under JUnit's random orderer with seeds 1, 5 and 42 (`-Djunit.jupiter.testmethod.order.default='org.junit.jupiter.api.MethodOrderer$Random' -Djunit.jupiter.execution.order.random.seed=<seed>`) → `Tests run: 5, Failures: 0` each. The fixtures create their own patients, portal accounts and appointments and delete them per test; threads on the **seeded** patients are deliberately left as history so a later class still finds the seeded conversations it asserts on.
+- `mvn clean verify` → **281 tests, 0 failures, 0 errors, BUILD SUCCESS**; `LayeringGuardTest` green with 0 repository references, 0 entity references, 0 import cycles and no allowlist (the new types are all inside `module/chat`).
+- Round 54.1's suite still passes unchanged in behaviour; its fixtures were updated to run the backfill after writing raw history, because the conversation list is now driven by conversation rows rather than by a message scan.
+
+**Limits of this slice (not claimed):** no migration tool (see the decision above) and no MySQL-executed DDL — the upgrade path is proven on H2 in MySQL mode only. Deleting a message does not re-point or shrink its conversation row (the product has no message deletion; only tests remove rows, and they remove the thread with them). A conversation row is not removed when both its parties disappear, beyond the test-data cleanup. The startup backfill inserts missing threads only; it never rewrites an existing row, so a corrupt revision would need a separate repair. `clientMessageId` idempotency (54.3) and after-commit notification (54.4) remain Pending, and the list still returns at most `Pages.MAX_SIZE` rows per page with no cursor.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

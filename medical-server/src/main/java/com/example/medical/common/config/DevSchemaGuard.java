@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
 public class DevSchemaGuard implements CommandLineRunner {
 
     /** Baseline for the current sql/schema.sql. Bump on every schema change. */
-    static final int SCHEMA_VERSION = 3;
+    static final int SCHEMA_VERSION = 4;
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;

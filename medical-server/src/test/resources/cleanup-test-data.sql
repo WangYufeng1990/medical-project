@@ -7,6 +7,14 @@ DELETE FROM patient WHERE mrn LIKE '%TEST%' OR name LIKE 'Test%' OR name LIKE 'U
 -- for every class, so a leftover row would collide with the next class's insert
 -- (Round 54.1 adds a messaging test that creates its own portal accounts).
 DELETE FROM patient_auth WHERE patient_id NOT IN (100, 101, 102, 103);
+-- Conversations belong to the party pair (Round 54.2); a test patient or probe
+-- staff account that this file removes must not leave a thread behind that names
+-- an id nothing owns any more.
+DELETE FROM chat_conversation WHERE
+    (party_a_type = 'PATIENT' AND party_a_id NOT IN (100, 101, 102, 103))
+ OR (party_b_type = 'PATIENT' AND party_b_id NOT IN (100, 101, 102, 103))
+ OR (party_a_type = 'STAFF' AND party_a_id NOT IN (1, 2))
+ OR (party_b_type = 'STAFF' AND party_b_id NOT IN (1, 2));
 DELETE FROM emergency_access WHERE user_id IS NOT NULL;
 DELETE FROM bill WHERE id NOT IN (500, 501, 502);
 DELETE FROM prescription_item WHERE prescription_id NOT IN (300, 301, 302);

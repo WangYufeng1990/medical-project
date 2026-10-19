@@ -56,7 +56,15 @@ Forgetting this is now a loud failure rather than a mysterious one:
 `DevSchemaGuard` records the schema version the file was built with and refuses
 to start on a mismatch, telling you which version the file is and how to reset.
 When you edit `schema.sql`, bump `SCHEMA_VERSION` in
-`common/config/DevSchemaGuard.java` in the same commit.
+`common/config/DevSchemaGuard.java` in the same commit (currently `4`, which added
+`chat_conversation` in Round 54.2).
+
+`chat_conversation` (Round 54.2) is filled the same way a fresh database is: a
+startup backfill derives one row per existing message thread, and only inserts
+threads it cannot already find, so restarting is safe. A **MySQL** deployment does
+not run this file — apply the `chat_conversation` DDL from `sql/schema.sql` by hand
+and keep `SCHEMA_VERSION` in step; the project has no migration tool yet (Flyway is
+an open infrastructure item, see `docs/ROADMAP.md`).
 
 The reset also discards `audit_log`, and that is the intended path rather than a
 loss to be migrated: each row's digest covers the exact timestamp the column

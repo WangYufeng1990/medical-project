@@ -12,13 +12,14 @@ import com.example.medical.common.security.PatientPortalAccountState;
 import com.example.medical.common.security.StaffAccountState;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageVO;
+import com.example.medical.module.chat.entity.ChatConversation;
 import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -26,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -41,6 +43,7 @@ public class ChatService {
     private final MessageRepository messageRepository;
     private final PatientLookup patientLookup;
     private final StaffLookup staffLookup;
+    private final ChatConversationService chatConversationService;
     private final StaffAccountState staffAccountState;
     private final PatientPortalAccountState patientPortalAccountState;
     private final DoctorPatientScope doctorPatientScope;
@@ -74,6 +77,8 @@ public class ChatService {
         msg.setContent(content);
         msg.setIsRead(0);
         messageRepository.save(msg);
+        LocalDateTime sentAt = msg.getCreateTime() != null ? msg.getCreateTime() : LocalDateTime.now();
+        chatConversationService.recordMessage(sender, receiver, msg.getId(), sentAt);
         MessageVO vo = MessageVO.fromEntity(msg);
         eventPublisher.publishEvent(new NewMessageEvent(sender.id(), sender.type(),
                 receiver.id(), receiver.type(), vo));
@@ -99,36 +104,54 @@ public class ChatService {
 
     public PageResult<ConversationVO> getConversations(Long currentUserId, String currentUserType,
                                                         long page, long size) {
-        List<Message> allMessages = messageRepository.findRecentMessagesByUser(
-                currentUserId, currentUserType, PageRequest.of(0, 20));
-        if (allMessages.isEmpty()) {
-            return PageResult.of(0, size, page, List.of());
+        Page<ChatConversation> found = chatConversationService.page(
+                currentUserId, currentUserType, Pages.of(page, size));
+        if (found.isEmpty()) {
+            return PageResult.of(found.getTotalElements(), found.getSize(), page, List.of());
         }
 
-        Map<Party, List<Message>> grouped = allMessages.stream()
-                .collect(Collectors.groupingBy(m -> partnerOf(m, currentUserId, currentUserType),
-                        LinkedHashMap::new,
-                        Collectors.toList()));
+        Map<Party, Integer> unread = unreadByPartner(currentUserId, currentUserType);
+        Map<Long, Message> lastMessages = messageRepository
+                .findAllById(found.getContent().stream()
+                        .map(ChatConversation::getLastMessageId)
+                        .filter(Objects::nonNull)
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(Message::getId, message -> message));
 
-        List<ConversationVO> conversations = new ArrayList<>();
-        for (Map.Entry<Party, List<Message>> entry : grouped.entrySet()) {
-            Party partner = entry.getKey();
-            List<Message> msgs = entry.getValue();
-            Message lastMsg = msgs.get(0);
-            // Use countUnread query for accurate count (not limited to 20 latest)
-            int unread = messageRepository.countUnread(
-                    currentUserId, currentUserType, partner.id(), partner.type());
+        List<ConversationVO> records = found.getContent().stream().map(conversation -> {
+            Party partner = partnerOf(conversation, currentUserId, currentUserType);
+            Message last = lastMessages.get(conversation.getLastMessageId());
+            return ConversationVO.of(partner.id(), partner.type(),
+                    resolveName(partner.type(), partner.id()),
+                    last != null ? last.getContent() : "",
+                    conversation.getLastMessageTime(),
+                    unread.getOrDefault(partner, 0));
+        }).toList();
+        return PageResult.of(found.getTotalElements(), found.getSize(), found.getNumber() + 1, records);
+    }
 
-            conversations.add(ConversationVO.of(partner.id(), partner.type(),
-                    resolveName(partner.type(), partner.id()), lastMsg.getContent(),
-                    lastMsg.getCreateTime(), unread));
+    /**
+     * The other side of a stored conversation. The row holds both parties with their
+     * own type, so "which one is not me" is answered by the pair itself — patient 103
+     * and staff 103 are different people with the same number (Round 54.1), and a bare
+     * id comparison filed the staff's messages as the patient's own.
+     */
+    private Party partnerOf(ChatConversation conversation, Long currentUserId, String currentUserType) {
+        boolean callerIsA = Objects.equals(currentUserType, conversation.getPartyAType())
+                && Objects.equals(currentUserId, conversation.getPartyAId());
+        return callerIsA
+                ? new Party(conversation.getPartyBType(), conversation.getPartyBId())
+                : new Party(conversation.getPartyAType(), conversation.getPartyAId());
+    }
+
+    private Map<Party, Integer> unreadByPartner(Long receiverId, String receiverType) {
+        Map<Party, Integer> counts = new HashMap<>();
+        for (Object[] row : messageRepository.countUnreadGroupedBySender(receiverId, receiverType)) {
+            counts.put(new Party((String) row[0], ((Number) row[1]).longValue()),
+                    ((Number) row[2]).intValue());
         }
-
-        long offset = (page - 1) * size;
-        long total = conversations.size();
-        List<ConversationVO> paged = conversations.stream()
-                .skip(offset).limit(size).toList();
-        return PageResult.of(total, size, page, paged);
+        return counts;
     }
 
     /**
@@ -239,5 +262,4 @@ public class ChatService {
         return patientLookup.displayName(userId).orElse("Unknown");
     }
 
-    private record Party(String type, Long id) {}
 }

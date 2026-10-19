@@ -315,7 +315,7 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
-| GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`) |
+| GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`). Ordering is `lastMessageTime` DESC then conversation id DESC, and `total` is the number of threads (Round 54.2) |
 | GET | `/unread-count` | — | Total unread message count (sidebar badge) |
 | GET | `/{partnerId}` | `?partnerType=STAFF\|PATIENT&page=1&size=50` | Paginated messages with partner (auto-read). `partnerType` required, invalid value → 400 |
 | POST | `/` | body: {receiverId, receiverType, content} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400 |
@@ -339,6 +339,8 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 **A locked-out portal account is still a deliverable mailbox.** Lockout (`locked_until`) is a temporary login state, not a disabled account, so it does not block delivery; only a missing, soft-deleted or status-disabled portal account does.
 
 A staff identity that cannot be verified (no authentication, an unexpected principal, or a principal with no `ADMIN`/`DOCTOR` role) can never resolve the patient scope to "unfiltered": `DoctorPatientScope` answers `401`/`403` instead, and the same rule backs every scoped clinical/billing/export/FHIR read.
+
+**Conversations are stored rows (Round 54.2).** A thread is a `chat_conversation` record holding the canonical typed pair (`partyAType/partyAId` sorted before `partyBType/partyBId`), its last message and time, a message count and a revision that increments per message. Listing is therefore a database query with real paging: a busy thread can no longer push a quieter one out of the list, and `page=2` means the second page of threads rather than the second page of a 20-message window. Sending a message updates the thread in the same transaction (one incrementing `UPDATE`, so two senders cannot lose each other's revision); history that predates the table — and a database upgraded from the previous schema — is filled in by a startup backfill that only inserts threads it cannot find. The request and response shapes did not change.
 
 ### Chat SSE Ticket — `POST /api/v1/chat/sse-ticket`
 

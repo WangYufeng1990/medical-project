@@ -27,15 +27,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                                       @Param("userId2") Long userId2, @Param("type2") String type2,
                                       Pageable pageable);
 
-    @Query("SELECT m FROM Message m WHERE ((m.senderId = :userId AND m.senderType = :type) " +
-            "OR (m.receiverId = :userId AND m.receiverType = :type)) ORDER BY m.createTime DESC")
-    List<Message> findRecentMessagesByUser(@Param("userId") Long userId, @Param("type") String type,
-                                           Pageable pageable);
-
-    @Query("SELECT COUNT(m) FROM Message m WHERE m.receiverId = :userId AND m.receiverType = :type " +
-            "AND m.senderId = :partnerId AND m.senderType = :partnerType AND m.isRead = 0")
-    int countUnread(@Param("userId") Long userId, @Param("type") String type,
-                    @Param("partnerId") Long partnerId, @Param("partnerType") String partnerType);
+    /**
+     * Unread counts for every partner at once: the conversation list needs one count
+     * per row it renders, and asking the database once beats one query per row.
+     */
+    @Query("SELECT m.senderType, m.senderId, COUNT(m) FROM Message m "
+            + "WHERE m.receiverId = :userId AND m.receiverType = :type AND m.isRead = 0 "
+            + "GROUP BY m.senderType, m.senderId")
+    List<Object[]> countUnreadGroupedBySender(@Param("userId") Long userId, @Param("type") String type);
 
     @Query("SELECT COUNT(m) FROM Message m WHERE ((m.senderId = :userId1 AND m.senderType = :type1 " +
             "AND m.receiverId = :userId2 AND m.receiverType = :type2) " +

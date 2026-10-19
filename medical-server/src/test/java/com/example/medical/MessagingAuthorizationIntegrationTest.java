@@ -5,6 +5,7 @@ import com.example.medical.common.exception.BusinessException;
 import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
+import com.example.medical.module.chat.service.ChatConversationBackfill;
 import com.example.medical.module.chat.service.ChatService;
 import com.example.medical.security.LoginUser;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -83,6 +84,9 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
     private MessageRepository messageRepository;
 
     @Autowired
+    private ChatConversationBackfill chatConversationBackfill;
+
+    @Autowired
     private ConfigurableApplicationContext applicationContext;
 
     /** Every NewMessageEvent published while the current test runs. */
@@ -129,6 +133,7 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
     void tearDown() {
         if (messageListener != null) applicationContext.removeApplicationListener(messageListener);
         deleteMessagesForPair(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID, ChatService.PATIENT);
+        deleteConversationForPair(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID, ChatService.PATIENT);
         jdbcTemplate.update("DELETE FROM sys_user_role WHERE user_id IN (?,?)", PROBE_STAFF_ID, DISABLED_STAFF_ID);
         jdbcTemplate.update("DELETE FROM sys_user WHERE id IN (?,?)", PROBE_STAFF_ID, DISABLED_STAFF_ID);
     }
@@ -143,6 +148,7 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void cleanUpFixtures() {
         for (Long messageId : createdMessageIds) {
+            jdbcTemplate.update("DELETE FROM chat_conversation WHERE last_message_id = ?", messageId);
             jdbcTemplate.update("DELETE FROM message WHERE id = ?", messageId);
         }
         createdMessageIds.clear();
@@ -652,6 +658,13 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
         return messageRepository.countBetween(idA, typeA, idB, typeB);
     }
 
+    private void deleteConversationForPair(long idA, String typeA, long idB, String typeB) {
+        jdbcTemplate.update("DELETE FROM chat_conversation WHERE (party_a_type = ? AND party_a_id = ? "
+                        + "AND party_b_type = ? AND party_b_id = ?) OR (party_a_type = ? AND party_a_id = ? "
+                        + "AND party_b_type = ? AND party_b_id = ?)",
+                typeA, idA, typeB, idB, typeB, idB, typeA, idA);
+    }
+
     private void deleteMessagesForPair(long idA, String typeA, long idB, String typeB) {
         jdbcTemplate.update("DELETE FROM message WHERE (sender_id = ? AND sender_type = ? AND receiver_id = ? "
                         + "AND receiver_type = ?) OR (sender_id = ? AND sender_type = ? AND receiver_id = ? "
@@ -699,16 +712,33 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
 
     /** Empties the one colliding pair this class seeds, then writes both directions. */
     private void seedCollidingThread() {
-        seedExistingThread("colliding staff to patient");
+        resetCollidingThread();
+        LocalDateTime base = LocalDateTime.now().minusMinutes(5);
+        createdMessageIds.add(saveMessage(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID,
+                ChatService.PATIENT, "colliding staff to patient", 0, base));
         createdMessageIds.add(saveMessage(COLLIDING_PATIENT_ID, ChatService.PATIENT, PROBE_STAFF_ID,
-                ChatService.STAFF, "colliding patient to staff", 0, LocalDateTime.now().minusMinutes(4)));
+                ChatService.STAFF, "colliding patient to staff", 0, base.plusMinutes(1)));
+        chatConversationBackfill.backfillMissing();
     }
 
-    /** One pre-existing message from the staff side — the arrangement P1 is about. */
+    /**
+     * One pre-existing message from the staff side — the arrangement P1 is about.
+     * <p>
+     * From Round 54.2 the conversation list is driven by conversation rows, so a
+     * fixture that writes raw history also runs the backfill: that is exactly how
+     * real history becomes a thread.
+     */
     private void seedExistingThread(String content) {
-        deleteMessagesForPair(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID, ChatService.PATIENT);
+        resetCollidingThread();
         createdMessageIds.add(saveMessage(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID,
                 ChatService.PATIENT, content, 0, LocalDateTime.now().minusMinutes(5)));
+        chatConversationBackfill.backfillMissing();
+    }
+
+    /** The pair starts as history only: no messages, and no conversation row pointing at them. */
+    private void resetCollidingThread() {
+        deleteConversationForPair(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID, ChatService.PATIENT);
+        deleteMessagesForPair(PROBE_STAFF_ID, ChatService.STAFF, COLLIDING_PATIENT_ID, ChatService.PATIENT);
     }
 
     private long saveMessage(long senderId, String senderType, long receiverId, String receiverType,

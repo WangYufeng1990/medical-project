@@ -273,6 +273,32 @@ CREATE TABLE IF NOT EXISTS message (
     PRIMARY KEY (id)
 );
 
+-- Round 54.2: a conversation is a first-class row, so listing one is a query
+-- instead of a scan of the newest messages. The pair is canonical and typed:
+-- both sides carry their own type (patient id and sys_user id overlap), ordered
+-- by (type, id) so the same thread cannot be stored twice with its parties
+-- swapped. last_message_time + id is the list ordering; revision increments per
+-- message and is the freshness anchor later review/publication work reads.
+CREATE TABLE IF NOT EXISTS chat_conversation (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    party_a_type VARCHAR(10) NOT NULL,
+    party_a_id BIGINT NOT NULL,
+    party_b_type VARCHAR(10) NOT NULL,
+    party_b_id BIGINT NOT NULL,
+    last_message_id BIGINT DEFAULT NULL,
+    last_message_time TIMESTAMP NOT NULL,
+    message_count INT NOT NULL DEFAULT 0,
+    revision BIGINT NOT NULL DEFAULT 1,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_chat_conversation_pair (party_a_type, party_a_id, party_b_type, party_b_id),
+    INDEX idx_chat_conversation_party_a (party_a_type, party_a_id, last_message_time),
+    INDEX idx_chat_conversation_party_b (party_b_type, party_b_id, last_message_time)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,
