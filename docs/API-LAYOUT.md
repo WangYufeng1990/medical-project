@@ -361,7 +361,7 @@ Requires `ADMIN`. HIPAA §164.312(b) compliance.
 |--------|------|--------|-------------|
 | GET | `/` | `?page=1&size=20&userId=&patientId=&module=&action=&fromDate=&toDate=` | Search/filter audit logs |
 | GET | `/distinct-values` | — | Distinct module/action values for filter dropdowns |
-| GET | `/verify` | — | Tamper-evidence check: verifies row_hash chain, returns `IntegrityReportVO` `{intact, brokenRowId}` (Review III M2) |
+| GET | `/verify` | — | Tamper-evidence check: verifies every row_hash and the prev_hash chain, returns `IntegrityReportVO` `{intact, brokenRowId, breakReason}` where `breakReason` is `ROW_HASH` (the row's fields no longer hash to its stored digest — rewrite) or `CHAIN` (the row hashes correctly but points at a different predecessor — a forked append, not tampering); `brokenRowId` is `-1` and `breakReason` null when intact (Review III M2, R53-08) |
 
 ### FHIR — `/api/v1/fhir`
 

@@ -58,6 +58,15 @@ to start on a mismatch, telling you which version the file is and how to reset.
 When you edit `schema.sql`, bump `SCHEMA_VERSION` in
 `common/config/DevSchemaGuard.java` in the same commit.
 
+The reset also discards `audit_log`, and that is the intended path rather than a
+loss to be migrated: each row's digest covers the exact timestamp the column
+stores and its predecessor's digest, so rows written under an older column
+definition can never be made to verify again. `GET /api/v1/audit-logs/verify`
+reports which kind of break it found — `ROW_HASH` for a row whose fields no
+longer match their digest, `CHAIN` for a row that hashes correctly but points at
+a different predecessor — so a chain forked by an old build reads as history and
+a rewrite reads as tampering.
+
 `H2_DB_PATH` overrides the database location — a plain path, not a JDBC URL
 (the URL template already supplies `jdbc:h2:file:`):
 

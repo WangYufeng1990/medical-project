@@ -81,24 +81,34 @@ public class AuditLogService {
 
     /**
      * Tamper-evidence check (Review III M2): verifies every row's hash and the
-     * prev_hash chain. Returns the first broken row id, or null when the chain
-     * is intact.
+     * prev_hash chain, and says which of the two broke so a rewritten row can be
+     * told apart from a chain that was written wrongly in the first place
+     * (R53-08: a concurrent append forked the chain, which is not tampering).
+     * Returns null when the log is intact.
      */
-    public Long verifyIntegrity() {
+    public ChainBreak verifyIntegrity() {
         List<AuditLog> rows = auditLogRepository.findAllByOrderByIdAsc();
         String previousRowHash = null;
         for (AuditLog row : rows) {
-            if (previousRowHash != null
-                    && row.getPrevHash() != null
-                    && !row.getPrevHash().equals(previousRowHash)) {
-                return row.getId();
-            }
             String computed = row.computeRowHash();
             if (computed == null || !computed.equals(row.getRowHash())) {
-                return row.getId();
+                return new ChainBreak(row.getId(), Reason.ROW_HASH);
+            }
+            if (previousRowHash != null && !previousRowHash.equals(row.getPrevHash())) {
+                return new ChainBreak(row.getId(), Reason.CHAIN);
             }
             previousRowHash = row.getRowHash();
         }
         return null;
+    }
+
+    public enum Reason {
+        /** The row's own fields no longer hash to its stored digest. */
+        ROW_HASH,
+        /** The row hashes correctly but does not link to the row before it. */
+        CHAIN
+    }
+
+    public record ChainBreak(long rowId, Reason reason) {
     }
 }

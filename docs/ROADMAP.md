@@ -4131,7 +4131,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [x] Done |
 | R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [x] Done |
 | R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [x] Done |
-| R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [ ] Open |
+| R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [x] Done |
 | R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [ ] Open |
 | R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [ ] Open |
 | R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [ ] Open |
@@ -4340,6 +4340,25 @@ Both tests remove what they created — including, for the completed visit, the 
 
 **Tests first:** add `AuditIntegrityIntegrationTest`: nanosecond input survives normalization plus database round trip with a valid hash; a multi-row chain validates after fresh reads; changing a hashed field is detected. Assert the timestamp normalization contract directly.
 
+**Fix record (R53-08) — done.** Measuring the live database first changed what this finding is. `GET /api/v1/audit-logs/verify` on the dev instance answered `{"intact":false,"brokenRowId":4}` over 43 rows, and the SQL under it named the cause: rows 3 and 4 both carried `prev_hash = 6d3b…` (row 2's digest), and rows 6 and 7 both carried row 5's. That is not a timestamp, it is a **forked chain** — `AuditLogWriter.writeAsync` ran "read the head, insert the successor" unserialised on an `auditExecutor` whose core size is 2, so two audit threads read the same head and chained from it. The timestamp defect the review described is real but latent: `AuditLog.onCreate` hashed `LocalDateTime.toString()` at full precision while `audit_log.create_time` stores what the column allows.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix — precision | `microsecondPrecisionSurvivesTheRoundTrip`: written at `2026-01-01T00:00:00.123456789Z`, the stored digest `0c53fd27…` does not equal the recomputed `66e00fe4…` |
+| Red, before the fix — chain | `concurrentAsyncWritesChainOntoDistinctPredecessors`: 16 async appends land as 16 rows with **15** distinct predecessors — one pair chained from the same row, the dev-database symptom reproduced in a test |
+| Green, after the fix | both pass: 16 distinct predecessors forming one contiguous chain, and the nanosecond row verifies after a fresh read |
+| Reason tests | `aRewrittenRowIsReportedAsARowHashBreak` and `aMisLinkedRowIsReportedAsAChainBreak` assert the new distinction. The second one has to rewrite `row_hash` too: changing only `prev_hash` breaks the row's own digest first, which is `ROW_HASH` — a fork is a row that is internally consistent and still points at the wrong neighbour |
+
+What changed:
+- `AuditLogWriter.appendToChain` holds a `ReentrantLock` across the head read and the insert. `save` is transactional, so the row is committed before the lock is released and the next writer sees it. This serialises one JVM — the deployment this monolith has — and the Javadoc says so, because two instances would need a lock on the head row in the database rather than in memory.
+- `AuditLog.onCreate` truncates `createTime` to microseconds *before* hashing, so the digest covers exactly what a read returns.
+- `audit_log.create_time` is `TIMESTAMP(6) WITH DEFAULT CURRENT_TIMESTAMP(6)` (was `TIMESTAMP`). The column, not the hash, was the weak side: MySQL's plain `TIMESTAMP` keeps whole seconds, so microsecond hashes would still have failed there. `DevSchemaGuard.SCHEMA_VERSION` goes 2 → 3 and the reset path is the documented one: `rm -rf ~/.medical-dev/data` then restart.
+- `verifyIntegrity` returns a `ChainBreak(rowId, ROW_HASH | CHAIN)` and `IntegrityReportVO` exposes it as `breakReason`. It checks the row's own digest before the link, so a changed field reports `ROW_HASH` and a self-consistent row pointing at the wrong predecessor reports `CHAIN`.
+
+The legacy policy is the one the review asked for, minus the rewriting: **no historical digest is recomputed.** The pre-fix dev rows are forked and the only supported way forward is the schema reset, which the version bump forces anyway; after it, `breakReason` means an operator can read an old fork as history (`CHAIN`) and a `ROW_HASH` mismatch as a rewrite, instead of one undifferentiated "broken".
+
+The test class clears `audit_log` in `@BeforeEach`: each test asserts on a chain of its own making, and one earlier broken row masks the break a later test injects. Production never deletes audit rows; this is fixture hygiene in the in-memory test database only.
+
 ### R53-09 — Serialize Observation effective time without appending seconds
 
 **Location:** `module/patient/controller/FhirObservationController.java:117–119`.
@@ -4392,4 +4411,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 7/11 complete** (R53-01 to R53-07 done — every P1 closed; 4 P2 findings open: R53-08, R53-09, R53-10, R53-11).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 8/11 complete** (R53-01 to R53-08 done — every P1 closed; 3 P2 findings open: R53-09, R53-10, R53-11).

@@ -7,6 +7,7 @@ import org.hibernate.annotations.SQLRestriction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Data
 @Entity
@@ -58,6 +59,10 @@ public class AuditLog {
     protected void onCreate() {
         if (createTime == null) createTime = LocalDateTime.now();
         if (archived == null) archived = 0;
+        // The digest must cover exactly what the column can store, or every row
+        // written with finer input looks tampered with the moment it is read
+        // back (R53-08: nanosecond create_time hashed, microseconds stored).
+        createTime = createTime.truncatedTo(ChronoUnit.MICROS);
         this.rowHash = computeRowHash();
     }
 
