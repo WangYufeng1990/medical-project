@@ -183,7 +183,7 @@ All require `PATIENT` role.
 | Method | Path | Auth | Params | Description |
 |--------|------|------|--------|-------------|
 | GET | `/` | ADMIN,DOCTOR | `?page=1&size=10&status=&patientId=` | Paginated list (DOCTOR scoped to own patients) |
-| GET | `/conflicts` | ADMIN,DOCTOR | `?doctorId=&time=&excludeId=` | Appointments overlapping the doctor's 30-min window (excludes cancelled; excludeId = self when editing) |
+| GET | `/conflicts` | ADMIN,DOCTOR | `?doctorId=&time=&excludeId=` | **Occupancy only** (R53-02): `[{ appointmentTime, durationMinutes }]` for slots overlapping the doctor's 30-min window (cancelled excluded; excludeId = self when editing). It used to return whole appointment records — patient name, chief complaint, notes — for any doctor's calendar, which bypassed the patient scope the detail endpoints enforce. Detailed conflicts remain available through `GET /appointments/{id}`, which is scoped |
 | GET | `/{id}` | ADMIN,DOCTOR | path | Appointment detail |
 | POST | `/` | ADMIN,DOCTOR | body: AppointmentFormDTO | Create (30-min conflict check) |
 | PUT | `/{id}` | ADMIN,DOCTOR | path + body | Update (30-min conflict check) |

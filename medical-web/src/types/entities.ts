@@ -129,10 +129,10 @@ export interface AppointmentQuery extends PageQuery {
   doctorId?: number
 }
 
+/** Occupancy only: the lookup answers "is this slot taken", never who is in it (R53-02). */
 export interface AppointmentConflict {
-  id: number
   appointmentTime: string
-  patientName: string
+  durationMinutes: number | null
 }
 
 // ── Billing ────────────────────────────────────────────────────────────────

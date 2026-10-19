@@ -4125,12 +4125,12 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | ID | Priority | Finding | Status |
 |----|----------|---------|--------|
 | R53-01 | P1 | Patient access and refresh tokens survive password changes and account disablement | [x] Done |
-| R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [ ] Open |
+| R53-02 | P1 | Appointment conflict lookup discloses out-of-scope patient information | [x] Done |
 | R53-03 | P1 | Resumed key rotation stops at an already-migrated batch and reports no remaining work | [ ] Open |
 | R53-04 | P1 | Production local JWT validator requires three mutually exclusive issuers simultaneously | [x] Done |
 | R53-05 | P1 | Failed patient-login counters roll back with the authentication exception | [x] Done |
-| R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [ ] Open |
-| R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [ ] Open |
+| R53-06 | P2 | An appointment that has started cannot be marked completed without changing its time | [x] Done |
+| R53-07 | P2 | Visit-generated charges store chief complaint in the ICD-10 field | [x] Done |
 | R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [ ] Open |
 | R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [ ] Open |
 | R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [ ] Open |
@@ -4185,6 +4185,18 @@ Two things left deliberately outside this slice, both worth their own decision: 
 - Document the reduced response in `docs/API-LAYOUT.md`.
 
 **Tests first:** extend `AppointmentIntegrationTest`: an out-of-scope doctor cannot retrieve patient identifiers/clinical text through conflicts, but the same occupied slot still blocks booking; authorized appointment detail reads remain scoped and functional.
+
+**Fix record — done.** The endpoint answers occupancy and nothing else: `ConflictSlotVO` carries `appointmentTime` and `durationMinutes`, where it used to hand back whole `AppointmentVO` rows (eighteen fields, including `patientName`, `chiefComplaint` and `notes`) for any doctor's calendar. The two callers are now separate in the service, so the split is structural rather than a filter someone could widen later: the public path maps to the slot DTO, and booking still asks `hasConflict`, which must see every appointment of that doctor no matter whose patient occupies it.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `conflictLookup_shouldDiscloseNoPatientDetails` asserted the response key set and got eighteen fields: `[appointmentTime, checkInTime, checkOutTime, chiefComplaint, cptCode, createTime, department, description, doctorId, doctorName, duration, icd10Codes, id, notes, patientId, patientName, status, visitType]` |
+| Green, after the fix | the same test passes, and the live endpoint returns `[{"appointmentTime":"2026-05-20T10:30:00","durationMinutes":30}]` |
+| The guard against over-correcting | `anOccupantOutsideTheCallersScope_shouldStillBlockTheBooking`: an appointment for patient 103 with the same doctor still refuses doctor1's booking with **409**, so narrowing the response did not narrow the check. It deletes its occupant afterwards — leaving it would quietly widen doctor1's patient scope (which is derived from exactly these rows) for every later test |
+| Detail reads unchanged | `detailReadOutsideTheCallersScope_shouldBeForbidden`: the same record is still **403** through `GET /appointments/{id}`, so "who is in this slot" remains answerable only through the scoped path. The appointment belongs to doctor 3, a doctor the caller has no relationship with, so the test does not lean on any seeded patient's scope |
+| Browser, `/appointments` → Add | the conflict warning now reads `Doctor already has 1 appointment(s) within 30 minutes: 2026-05-20T10:30:00 (30m)` where it used to append the patient's name. Screenshot `/tmp/ui-shots/107-r53-02-conflict-warning.png` |
+| `docs/API-LAYOUT.md` | the `/conflicts` row states the new response shape and why it changed |
+| `mvn clean verify` / `npm run check` | see the combined verification below (this slice's own class: 11 tests green) |
 
 ### R53-03 — Finish the scan before declaring key rotation complete
 
@@ -4269,6 +4281,16 @@ The probe account is `patient2`: no other test signs in as it, and the test rest
 
 **Tests first:** extend `AppointmentIntegrationTest`: a past-start SCHEDULED/ARRIVED appointment completes without changing its time and generates one charge; rescheduling into the past remains rejected; an already terminal visit remains protected. Use this scenario with R53-07's field assertions.
 
+**Fix record (R53-06) — done.** The future-time rule now belongs to *scheduling*: `update` asks whether the request changes the time or the doctor, and only then requires the result to be in the future. A status or clinical edit leaves the recorded start time alone, so a visit that has already started can be recorded; an actual reschedule into the past is still refused. The doctor lock and the conflict check are skipped when nothing about the schedule changed — they were being taken for a status flip.
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `completingAPastVisit_shouldSucceedWithoutChangingItsTime`: the visit is created in the future, its `appointment_time` is moved ten minutes into the past (the state a real visit is in), and the completion answers `400 Cannot schedule appointments in the past` |
+| Green, after the fix | the completion answers 200, the charge it generates is found, and the recorded start time is untouched |
+| Guard | `reschedulingIntoThePast_shouldStillBeRejected` keeps the rule where it belongs: moving a future booking into the past is still 400 |
+
+Both tests remove what they created — including, for the completed visit, the charge and the appointment rows, because a completed appointment cannot be deleted through the API and leaving it would change the counts other classes assert.
+
 ### R53-07 — Preserve diagnosis codes in visit-generated charges
 
 **Location:** `module/appointment/service/AppointmentService.java:141–144` and `module/billing/service/ChargeService.createForVisit`.
@@ -4282,6 +4304,14 @@ The probe account is `patient2`: no other test signs in as it, and the test rest
 - Inspect previously generated demo charges/bills if correcting historical records; do not blindly reinterpret arbitrary text as diagnosis codes.
 
 **Tests first:** extend `AppointmentIntegrationTest.completingAVisit_shouldCreateTheChargeThroughTheBillingService` and billing conversion coverage: complaint and ICD-10 deliberately differ; both charge and resulting bill retain `R51.9`; no duplicate charge or extra false CREATE audit is emitted.
+
+**Fix record (R53-07) — done.** `generateCharge` now passes `a.getIcd10Codes()` into the parameter it always meant, so a visit's charge carries the diagnosis code rather than the chief complaint. **The characterization assertion from 52.3b was updated deliberately**: that slice pinned "the chief complaint is carried onto the charge as `icd10Codes`" as behaviour to preserve, which was a faithful record of what the code did and no evidence that it was right — the review said so explicitly, and the test now asserts the opposite, with the complaint and the code set to deliberately different values (`synthetic headache` against `R51.9`).
+
+| Check | Result |
+|-------|--------|
+| Red, before the fix | `completingAVisit_shouldCreateTheChargeThroughTheBillingService`: `expected: <R51.9> but was: <synthetic headache>` — the complaint, verbatim, in the diagnosis field |
+| Green, after the fix | the charge reads `R51.9`, and so does anything converted from it (charge → bill copies `icd10Codes`) |
+| Historical data | not backfilled. Existing demo charges whose `icd10_codes` hold complaint text stay as they are: reinterpreting free text as diagnosis codes would be a guess, and the dev database is regenerated from seed on a schema change anyway |
 
 ### R53-08 — Hash the same timestamp that the database stores
 
@@ -4349,4 +4379,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 3/11 complete** (R53-01, R53-04 and R53-05 done; 2 P1 and 6 P2 findings open).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 6/11 complete** (R53-01, R53-02, R53-04, R53-05, R53-06 and R53-07 done; every P1 closed, 5 P2 findings open: R53-03, R53-08, R53-09, R53-10, R53-11).

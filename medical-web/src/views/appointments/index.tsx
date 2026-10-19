@@ -135,7 +135,7 @@ export default function Appointments() {
           {!viewOnly && conflicts && conflicts.length > 0 && (
             <div style={{ gridColumn: 'span 2', background: '#fef0f0', border: '1px solid #fbc4c4', color: '#F56C6C', fontSize: 12, padding: '8px 10px', borderRadius: 4 }}>
               ⚠️ Doctor already has {conflicts.length} appointment(s) within 30 minutes:{' '}
-              {conflicts.map(c => `${c.appointmentTime} (${c.patientName})`).join('; ')}
+              {conflicts.map(c => `${c.appointmentTime}${c.durationMinutes != null ? ` (${c.durationMinutes}m)` : ''}`).join('; ')}
             </div>
           )}
           {formError && <div style={{ gridColumn: 'span 2', color: '#F56C6C', fontSize: 12 }}>{formError}</div>}

@@ -8,6 +8,7 @@ import com.example.medical.common.lookup.StaffLookup;
 import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
+import com.example.medical.module.appointment.dto.ConflictSlotVO;
 import com.example.medical.module.appointment.entity.Appointment;
 import com.example.medical.module.appointment.repository.AppointmentRepository;
 import com.example.medical.module.billing.service.ChargeService;
@@ -120,15 +121,23 @@ public class AppointmentService {
         if (AppointmentStatus.isTerminal(a.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "Terminal appointments cannot be modified");
         }
-        if (dto.getAppointmentTime() != null && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
+        // The future-time rule belongs to scheduling, not to editing: a visit that has
+        // already started must be recordable, and completing it used to require
+        // rewriting its start time — which is what the record must not allow (R53-06).
+        boolean rescheduled = (dto.getAppointmentTime() != null
+                        && !dto.getAppointmentTime().equals(a.getAppointmentTime()))
+                || (dto.getDoctorId() != null && !dto.getDoctorId().equals(a.getDoctorId()));
+        if (rescheduled && dto.getAppointmentTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "Cannot schedule appointments in the past");
         }
         // Re-scope the target patient: applyTo overwrites patientId (Review III H5).
         if (dto.getPatientId() != null && !dto.getPatientId().equals(a.getPatientId())) {
             doctorPatientScope.requireAccess(dto.getPatientId());
         }
-        withDoctorLock(dto.getDoctorId());
-        checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
+        if (rescheduled) {
+            withDoctorLock(dto.getDoctorId());
+            checkConflict(dto.getDoctorId(), dto.getAppointmentTime(), id);
+        }
         Integer previousStatus = a.getStatus();
         dto.applyTo(a);
         appointmentRepository.save(a);
@@ -141,7 +150,7 @@ public class AppointmentService {
     private void generateCharge(Appointment a) {
         if (chargeService.visitAlreadyCharged(a.getId(), a.getPatientId())) return;
         chargeService.createForVisit(a.getId(), a.getPatientId(), a.getDoctorId(),
-                a.getCptCode(), a.getChiefComplaint(), a.getVisitType());
+                a.getCptCode(), a.getIcd10Codes(), a.getVisitType());
     }
 
     @Transactional
@@ -158,19 +167,34 @@ public class AppointmentService {
         appointmentRepository.deleteById(id);
     }
 
-    public List<AppointmentVO> findConflicts(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
+    /**
+     * The availability answer for the public endpoint: an occupied slot says nothing
+     * about who occupies it (R53-02). Booking keeps using {@link #hasConflict}, which
+     * must see every appointment of that doctor whatever the caller's patient scope.
+     */
+    public List<ConflictSlotVO> findOccupiedSlots(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
+        return conflicting(doctorId, appointmentTime, excludeId).stream()
+                .map(ConflictSlotVO::fromEntity)
+                .toList();
+    }
+
+    private boolean hasConflict(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
+        return !conflicting(doctorId, appointmentTime, excludeId).isEmpty();
+    }
+
+    /** Every appointment of that doctor within 30 minutes of the time, minus the one being edited. */
+    private List<Appointment> conflicting(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
         LocalDateTime windowStart = appointmentTime.minusMinutes(30);
         LocalDateTime windowEnd = appointmentTime.plusMinutes(30);
         return appointmentRepository
                 .findConflicting(doctorId, AppointmentStatus.CANCELLED.code(), windowStart, windowEnd)
                 .stream()
                 .filter(a -> excludeId == null || !a.getId().equals(excludeId))
-                .map(this::toVO)
                 .toList();
     }
 
     private void checkConflict(Long doctorId, LocalDateTime appointmentTime, Long excludeId) {
-        if (!findConflicts(doctorId, appointmentTime, excludeId).isEmpty()) {
+        if (hasConflict(doctorId, appointmentTime, excludeId)) {
             throw new BusinessException(ResultCode.CONFLICT,
                     "Doctor has a conflicting appointment within 30 minutes of this time");
         }

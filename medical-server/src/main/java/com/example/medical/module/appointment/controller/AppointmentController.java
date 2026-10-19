@@ -7,6 +7,7 @@ import java.util.List;
 import com.example.medical.common.result.Result;
 import com.example.medical.module.appointment.dto.AppointmentFormDTO;
 import com.example.medical.module.appointment.dto.AppointmentVO;
+import com.example.medical.module.appointment.dto.ConflictSlotVO;
 import com.example.medical.module.appointment.service.AppointmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,10 +34,10 @@ public class AppointmentController {
 
     @GetMapping("/conflicts")
     @PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
-    public Result<List<AppointmentVO>> conflicts(@RequestParam Long doctorId,
-                                                           @RequestParam LocalDateTime time,
-                                                           @RequestParam(required = false) Long excludeId) {
-        return Result.ok(appointmentService.findConflicts(doctorId, time, excludeId));
+    public Result<List<ConflictSlotVO>> conflicts(@RequestParam Long doctorId,
+                                                   @RequestParam LocalDateTime time,
+                                                   @RequestParam(required = false) Long excludeId) {
+        return Result.ok(appointmentService.findOccupiedSlots(doctorId, time, excludeId));
     }
 
     @GetMapping("/{id}")
