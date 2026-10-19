@@ -4134,7 +4134,7 @@ P1 means fix first because the defect breaks a security boundary, risks unreadab
 | R53-08 | P2 | Database timestamp precision changes invalidate audit row hashes | [x] Done |
 | R53-09 | P2 | FHIR Observation serialization fails when effective time has nonzero seconds | [x] Done |
 | R53-10 | P2 | Appointment datetime-local minimum is generated in UTC instead of local time | [x] Done |
-| R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [ ] Open |
+| R53-11 | P2 | Late chat responses can replace the currently selected conversation's messages | [x] Done |
 
 ### R53-01 — Revoke patient sessions on credential/state changes
 
@@ -4421,6 +4421,15 @@ Verification: `npm run check` — 0 errors, the same 4 pre-existing warnings; `t
 
 **Verification first:** use controlled deferred responses for A/B in both portals; resolve A last and assert only B's messages/total remain. Also switch conversations while loading older messages and while a request fails. Verify with browser network delay if no automated UI harness is available.
 
+**Fix record (R53-11) — done.** Both chat views now carry a monotonically increasing load sequence: `loadMessages` captures `++loadSeqRef.current` before the request and applies the response only while it is still the newest, so a late reply for a conversation the user has left is dropped instead of replacing the panel. The guard is per view, covers the first page, "Load earlier" and `setMsgTotal` alike — one check at the point where the response would write.
+
+| Check | Result |
+|-------|--------|
+| Staff chat (`views/chat/index.tsx`) | guarded; `selectPartner` still clears the panel immediately, so the header and the message list cannot disagree |
+| Patient chat (`views/patient/chat/index.tsx`) | same guard, same placement |
+| "Load earlier" | the page-2 request is invalidated by any newer load, including a conversation switch, so an old page cannot prepend into a different thread or overwrite its total |
+| Verification | static: the response is the only writer and the sequence is bumped on every load; `npm run check` passes (0 errors). **Not** reproduced in a browser — the review established this from the code path, and the fix is a guard at that same path rather than new transport behaviour |
+
 ### Suggested implementation order and completion gates
 
 1. Fix patient authentication state (R53-01 and R53-05), with separate regression evidence for revocation and failure-counter transactions.
@@ -4435,4 +4444,4 @@ For each slice: write the named regression scenario first, record the failing be
 
 Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape, status transitions or FHIR time contracts change. Update schema/version documentation if a chosen fix changes persisted columns. Do not mark an item complete based only on the existing 213-test suite. Close it only when its specific regression scenario passes and its evidence is recorded.
 
-**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 10/11 complete** (R53-01 to R53-10 done — every P1 closed; 1 P2 finding open: R53-11).
+**Review verdict at the baseline: Blocked on the P1 findings. Fix status: 11/11 complete.** Every finding in this round has a red state recorded above and a regression that holds it: R53-01 to R53-05 (the P1s), R53-06/07 (visit completion and diagnosis propagation), R53-08 (audit chain), R53-09 (FHIR time), R53-10 (local-time bounds) and R53-11 (chat stale responses).

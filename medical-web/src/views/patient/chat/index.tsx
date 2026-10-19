@@ -15,6 +15,10 @@ export default function PatientChat() {
   const [msgTotal, setMsgTotal] = useState(0)
   const [input, setInput] = useState('')
   const messageListRef = useRef<HTMLDivElement>(null)
+  // Same guard as the staff chat: only the newest load may write into the panel,
+  // so a response for a conversation the patient already left cannot replace the
+  // one on screen (R53-11).
+  const loadSeqRef = useRef(0)
 
   const token = tokenStore.get('patientToken')
   const raw = token ? parseJwt(token) : {}
@@ -28,8 +32,10 @@ export default function PatientChat() {
   useEffect(() => { loadConversations() }, [loadConversations])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
+    const seq = ++loadSeqRef.current
     return http.get<PageResult<MessageVO>>(`/patient/me/messages/${partnerId}`, { params: { page, size: 50 } })
       .then(r => {
+        if (seq !== loadSeqRef.current) return // a newer load owns the panel now
         const batch = (r.records ?? []).reverse()
         setMessages(prev => page === 1 ? batch : [...batch, ...prev])
         setMsgTotal(r.total ?? 0)
