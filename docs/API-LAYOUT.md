@@ -170,9 +170,9 @@ All require `PATIENT` role.
 | GET | `/consent` | — | My consent records |
 | GET | `/refill-requests` | — | My prescription refill requests |
 | POST | `/refill-requests` | body: {prescriptionId, reason?} | Request a refill for a prescription |
-| GET | `/messages/conversations` | `?page=1&size=20` | My chat conversations |
+| GET | `/messages/conversations` | `?page=1&size=20` | My chat conversations (partner is matched on type **and** id, so a patient and a staff user sharing a number stay distinct) |
 | GET | `/messages/{partnerId}` | `?page=1&size=50` | Chat messages with a staff member |
-| POST | `/messages` | body: {receiverId, content} | Send a chat message |
+| POST | `/messages` | body: {receiverId, content} | Send a chat message to a staff account the patient may reach — see `POST /api/v1/messages` for the recipient rules and error codes |
 | PUT | `/bills/{id}/pay` | body: `PatientPayBillFormDTO` {paymentAmount (> 0, required), paymentMethod} | Pay own bill (PENDING → PAID). Ownership verified (403 for someone else's bill). DRAFT is not payable; a missing amount is 400, not 500 |
 | PUT | `/password` | body: `PatientPasswordChangeFormDTO` {oldPassword, newPassword} | Change password — verifies the old one (400), enforces complexity (`@ValidPassword`) and the last-3 history policy |
 | POST | `/patient/forgot-password` | body: {username} | Public. Issues a 30-min single-use reset token (logged to console in dev; identical response for unknown users — no enumeration) |
@@ -321,6 +321,18 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 | POST | `/` | body: {receiverId, receiverType, content} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400 |
 
 `MessageVO` carries `senderType`/`receiverType`; `ConversationVO` carries `partnerType`.
+
+**Sender and recipient rules (Round 54.1).** The sender is the Bearer token's identity — no request field can name it, so a staff token cannot send as a patient or as another staff member. `ChatService` validates the pair before anything is persisted; a rejected send writes no `message` row and publishes no `new_message` event.
+
+| Pair | Accepted when | Rejection |
+|------|---------------|-----------|
+| STAFF → PATIENT | the patient exists (not soft-deleted), and a `DOCTOR` is scoped to them (appointment or prescription), an `ADMIN` is unscoped, or the caller holds a valid emergency token for that patient | `404` patient not found, `403` outside the doctor's scope |
+| STAFF → STAFF | the receiver exists and is enabled | `404` not found or disabled |
+| PATIENT → STAFF | the receiver exists and is enabled, and the patient has a care relationship with that account (appointment or prescription) or an existing message thread | `404` not found or disabled, `403` no relationship |
+| PATIENT → PATIENT | never | `403` (not reachable through the portal controller, which pins `receiverType` to `STAFF`; enforced at the service boundary) |
+| any → self, unknown `receiverType`, missing `receiverId` | never | `400` |
+
+A staff identity that cannot be verified (no authentication, an unexpected principal, or a principal with no `ADMIN`/`DOCTOR` role) can never resolve the patient scope to "unfiltered": `DoctorPatientScope` answers `401`/`403` instead, and the same rule backs every scoped clinical/billing/export/FHIR read.
 
 ### Chat SSE Ticket — `POST /api/v1/chat/sse-ticket`
 
@@ -496,6 +508,7 @@ For `DOCTOR`, clinical/billing data endpoints are scoped to the doctor's own pat
 - **Create endpoints** (vitals, problems, care-plans, immunizations, patient history/allergies, referrals, prior-auths) return **403** when the target patient is out of scope.
 - **The patient directory** (`GET /patients`, `GET /patients/{id}`, patient search dropdowns, patient creation) stays open — booking or prescribing for a new patient establishes the care relationship.
 - **Emergency break-glass tokens** (`scope=EMERGENCY`, `patientId` claim) bypass the scope for the named patient.
+- **Only a verified staff identity is unscoped or scoped at all** (Round 54.1): `ADMIN` resolves to "no filter", `DOCTOR` to its own patient set. A missing `Authentication`, a principal this application did not issue, or a principal without `ADMIN`/`DOCTOR` now fails closed — `401` and `403` respectively — instead of reading as `ADMIN`. A patient identity is refused rather than resolved through the doctor providers, which used to hand patient *N* the patient list of doctor *N*.
 
 ### Data Encryption
 - **Passwords**: BCrypt hashed + complexity policy (8+ chars, upper/lower/digit/special) + history enforcement (last 3 cannot be reused). The complexity rule applies to a password that is **supplied**: where the field is optional (`PUT /api/v1/users/{id}`), an absent or blank value keeps the current password rather than failing validation (M8.5) — required fields carry `@NotBlank` of their own

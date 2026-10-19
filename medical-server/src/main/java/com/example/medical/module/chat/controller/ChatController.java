@@ -49,14 +49,13 @@ public class ChatController {
     }
 
     @PostMapping
-    public Result<MessageVO> send(@AuthenticationPrincipal LoginUser loginUser,
-                                   @Valid @RequestBody MessageFormDTO dto) {
+    public Result<MessageVO> send(@Valid @RequestBody MessageFormDTO dto) {
         if (dto.getReceiverType() == null || dto.getReceiverType().isBlank()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "receiverType is required (STAFF or PATIENT)");
         }
         validateType(dto.getReceiverType());
-        return Result.ok(chatService.sendMessage(loginUser.getUserId(), ChatService.STAFF,
-                dto.getReceiverId(), dto.getReceiverType(), dto.getContent()));
+        // The sender is the security context's identity, not a request field.
+        return Result.ok(chatService.sendMessage(dto.getReceiverId(), dto.getReceiverType(), dto.getContent()));
     }
 
     private void validateType(String type) {

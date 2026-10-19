@@ -46,9 +46,9 @@ public class PatientChatController {
     }
 
     @PostMapping
-    public Result<MessageVO> send(@AuthenticationPrincipal LoginUser loginUser,
-                                   @Valid @RequestBody MessageFormDTO dto) {
-        return Result.ok(chatService.sendMessage(loginUser.getUserId(), ChatService.PATIENT,
-                dto.getReceiverId(), ChatService.STAFF, dto.getContent()));
+    public Result<MessageVO> send(@Valid @RequestBody MessageFormDTO dto) {
+        // The sender is the security context's identity; the patient portal never
+        // names a receiver type, and patients only message staff.
+        return Result.ok(chatService.sendMessage(dto.getReceiverId(), ChatService.STAFF, dto.getContent()));
     }
 }

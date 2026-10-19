@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: planned; all slices in Rounds 54–59 are Pending. No implementation or benchmark result is claimed by this plan.**
+**Status: 54.1 implemented and verified (2026-10-19); 54.2–59 remain Pending. No implementation or benchmark result is claimed beyond 54.1.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -4569,18 +4569,70 @@ Schemas must be validated on both sides. Keep existing Result<T> conventions for
 
 Database evolution is part of Round 54.2: introduce a versioned baseline and upgrade path, recommended Flyway for Java/MySQL and independent versioned PostgreSQL migrations for Python-owned tables. Coordinate Spring SQL initialization and DevSchemaGuard rather than allowing two schema owners. Test fresh installation and upgrade from the reviewed schema. Do not enable blind baselining or make data deletion the normal upgrade path. Manage LangGraph checkpoint setup against locked dependency versions.
 
-## Round 54 — Messaging foundation (Pending)
+## Round 54 — Messaging foundation (In progress: 54.1 Done, 54.2–54.4 Pending)
 
 **Goal:** reliable human messaging before AI integration. **Estimate:** 28–44 hours. Depends on a fresh baseline test run and reviewed migration/contract design.
 
 | Slice | Priority / status | Work and files | Tests first / acceptance |
 |---|---|---|---|
-| 54.1 Identity and recipients | P0 / Pending | DoctorPatientScope fail-closed; ChatService receiver checks; fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; authenticated existing flows preserved |
+| 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks; fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; authenticated existing flows preserved — 22/22 pass, 14 were red first (see 54.1 record below) |
 | 54.2 Conversations and migration | P0 / Pending | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision | ChatConversationIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean and upgrade migrations pass |
 | 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
 | 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
 
 Preserve the completed stale-response guards. Keep new-conversation selection server-authorized. Specify how revision increments serialize messages and review publication; do not rely on browser timestamps.
+
+### Round 54.1 — Identity and recipients (Done, 2026-10-19)
+
+**Source baseline:** `e0eb770` on master, clean working tree. **Recorded test baseline (this round):** `mvn clean test` → **245 tests, 0 failures, BUILD SUCCESS**. (CLAUDE.md's "204 tests" line is stale; the number above is the measured one.) No instance was running against `target/classes` — `curl` on `:8080` refused the connection — so `clean` was safe.
+
+**What the source actually had (verified by reading it, not by trusting the plan):**
+
+1. `DoctorPatientScope.resolve()` returned `null` — the code for "ADMIN, no filter" — whenever `Authentication` was missing or the principal was not a `LoginUser`. Any identity the security context could not name was therefore read as "every patient". A logged-in principal with no `ADMIN`/`DOCTOR` role fell through to the provider branch, so patient *N* resolved to the patient list of doctor *N* (same reason R2-1 exists on the message side).
+2. `ChatService.sendMessage(senderId, senderType, receiverId, receiverType, content)` persisted whatever it was handed: no receiver type check beyond the staff controller's, no existence check, no deleted/disabled check, no relationship check — a patient could address any numeric staff id, and a doctor any patient. The sender was a controller argument rather than the verified context. Only two callers existed (`ChatController`, `PatientChatController`); no background job or scheduler reached either `resolve()` or `sendMessage` (checked: `AppointmentScheduler`, `QualityScheduler`, `DataRetentionJob`, `KeyRotationService`, `ChatEventListener` touch neither).
+3. `getConversations()` decided "this message is mine" with `m.getSenderId().equals(currentUserId)` — a bare id across two independent id spaces — so an inbound message from staff 103 was filed as patient 103's own outgoing message and the patient was shown a conversation with themselves.
+
+**Red state (first run of the new class, before any production change):** `mvn test -Dtest=MessagingAuthorizationIntegrationTest` → `Tests run: 22, Failures: 14`. Representative lines, verbatim:
+
+```
+noSecurityContext_shouldNotResolveToUnboundedScope:105 missing authentication must not mean 'no filter' ==> Expected BusinessException to be thrown, but nothing was thrown.
+patientPrincipal_shouldNotInheritTheDoctorWithTheSameId:136 Expected BusinessException to be thrown, but nothing was thrown.
+staffToPatient_outsideScope_shouldRejectAndPersistNothing:219 Status expected:<403> but was:<200>
+staffToPatient_missingPatient_shouldRejectAndPersistNothing:229 Status expected:<404> but was:<200>
+patientToUnrelatedStaff_shouldRejectAndPersistNothing:280 Status expected:<403> but was:<200>
+patientToMissingStaff_shouldRejectAndPersistNothing:301 Status expected:<404> but was:<200>
+patientConversations_shouldNotInventAConversationWithItself:343 patient 103 was shown a conversation with patient 103 ... expected:<false> but was:<true>
+staffConversations_shouldNotInventAConversationWithItself:361 ... expected:<false> but was:<true>
+```
+
+The remaining 8 tests in that class (ADMIN/DOCTOR/emergency controls, in-scope sends, staff-to-staff, typed ownership) passed on the same run, which is what makes the 14 failures attributable to the three defects rather than to a broken harness. Two service-boundary tests were written against the 5-argument signature for the red run and moved to the new 3-argument signature in the same commit as the fix, since the sender argument itself is what the slice removes.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `common/security/DoctorPatientScope.java` | `resolve()` fails closed: no/invalid `Authentication`, a non-`LoginUser` principal, or a non-positive user id → 401; an authenticated identity without `ADMIN`/`DOCTOR` → 403. `null` ("no filter") is now reachable only for `ADMIN`. Adds `isRelated(staffId, patientId)` — the same provider-backed relationship, asked about a named account rather than the current one |
+| `common/security/StaffAccountState.java` | New shared interface: `isActive(staffId)` = account exists, not soft-deleted, enabled. Deliberately separate from `StaffLookup`, which is display-only — "the name resolved" is not an authorization answer |
+| `module/system/service/SysUserAccountState.java` | The system module's implementation, reading its own repository (`@SQLRestriction` supplies the deleted half, `EnabledStatus` the enabled half) |
+| `module/chat/service/ChatService.java` | `sendMessage(receiverId, receiverType, content)` derives the sender from the security context (401 when absent, both/neither identity domain → 403) and validates the pair before persisting: receiver type, self-send, patient existence, staff active state, doctor scope / emergency scope for staff→patient, care relationship or existing thread for patient→staff. `getConversations()` compares party type *and* id |
+| `module/chat/repository/MessageRepository.java` | `countBetween` + `hasConversation` default method, for "these two typed parties already have a thread" |
+| `module/chat/controller/ChatController.java`, `PatientChatController.java` | Stop passing sender id/type; validation stays in the service |
+| `src/test/java/com/example/medical/MessagingAuthorizationIntegrationTest.java` | New: 22 integration tests (below) |
+| `src/test/resources/cleanup-test-data.sql` | Removes the two probe staff accounts so a failed run cannot leak them into another class |
+| `docs/API-LAYOUT.md` | Chat recipient rules, error codes, typed conversation matching, fail-closed scope note |
+
+**Business rule chosen for patient → staff, and why (needs review):** the code had no rule at all, so the minimal one was derived from what it does define. A patient may message a staff account that (a) is active **and** (b) either has a care relationship with that patient through a module-owned provider (appointment or prescription — the same relationship `DoctorPatientScope` already uses) or already shares a message thread with them. The thread clause exists because the approved plan says to preserve established valid communication relationships, and because removing it would strand any existing thread whose counterpart has no appointment/prescription row left (an ADMIN who messaged the patient, for instance). This deliberately does **not** invent "appointments only" (a prescription relationship counts) and does **not** allow a patient to address an arbitrary account. Two consequences are intentional and open to a product decision: a patient cannot *start* a thread with an `ADMIN` (no care relationship, no thread yet), and staff-to-staff is left as it was — any active staff account, since the practice has one role hierarchy and no org-unit data to scope by.
+
+**Verification (actually run this round):**
+
+- `mvn test -Dtest=MessagingAuthorizationIntegrationTest` before the fix → `Tests run: 22, Failures: 14` (lines above).
+- `mvn test -Dtest=MessagingAuthorizationIntegrationTest` after the fix → `Tests run: 22, Failures: 0, Errors: 0`.
+- `mvn clean verify` (backend gate) → **267 tests, 0 failures, 0 errors, BUILD SUCCESS**; `LayeringGuardTest` reports 0 repository references, 0 entity references, 0 import cycles (no allowlist added; the two new shared types live in `common/security` and the system module implements one of them, which is the direction the guard requires).
+- No frontend change was needed: both chat views already treat a rejected send as a failed optimistic message, and no request/response field changed shape.
+
+**Coverage of the acceptance list:** no valid identity cannot obtain unbounded scope (3 tests, plus 401/403 codes asserted); ADMIN/DOCTOR/emergency behaviour preserved (3 tests, HTTP and direct); missing/deleted/disabled receivers rejected (4 tests) with the message row count asserted unchanged; permitted sends still work (staff→in-scope patient, patient→related doctor, staff→staff); patient and staff sharing numeric id keep correct counterpart and message ownership in both directions (3 tests); a rejected send persists nothing (asserted in every rejection test).
+
+**Limits of this slice (not claimed):** the conversation list still reads the newest 20 messages and groups in memory — real conversation pagination, tie ordering and the `chat_conversation` table are 54.2. `clientMessageId` idempotency is 54.3, after-commit notification and the fixed safety notice are 54.4. `getConversation` (the read path) still has no scope check of its own: it can only return messages the caller is a party to, and tightening it is not part of 54.1 — recorded here so it is not mistaken for done. Notification-on-rejection was verified by "no row is persisted and the event is published only after `save`", not by inspecting SSE delivery, which 54.4 owns.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

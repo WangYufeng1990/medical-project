@@ -37,6 +37,22 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     int countUnread(@Param("userId") Long userId, @Param("type") String type,
                     @Param("partnerId") Long partnerId, @Param("partnerType") String partnerType);
 
+    @Query("SELECT COUNT(m) FROM Message m WHERE ((m.senderId = :userId1 AND m.senderType = :type1 " +
+            "AND m.receiverId = :userId2 AND m.receiverType = :type2) " +
+            "OR (m.senderId = :userId2 AND m.senderType = :type2 " +
+            "AND m.receiverId = :userId1 AND m.receiverType = :type1))")
+    long countBetween(@Param("userId1") Long userId1, @Param("type1") String type1,
+                      @Param("userId2") Long userId2, @Param("type2") String type2);
+
+    /**
+     * Whether these two typed parties have ever exchanged a message. A recipient
+     * who is already in a thread stays reachable even when no appointment or
+     * prescription ties them to the patient any more (Round 54.1).
+     */
+    default boolean hasConversation(Long userId1, String type1, Long userId2, String type2) {
+        return countBetween(userId1, type1, userId2, type2) > 0;
+    }
+
     @Query("SELECT COUNT(m) FROM Message m WHERE m.receiverId = :userId AND m.receiverType = :type AND m.isRead = 0")
     int countUnreadByUser(@Param("userId") Long userId, @Param("type") String type);
 
