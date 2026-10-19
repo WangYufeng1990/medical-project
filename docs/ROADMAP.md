@@ -2,7 +2,7 @@
 
 > From the HIPAA + FHIR + US-Model foundation, through CDS, ePrescribing, compliance audit, frontend migration, multi-agent workflow, clinical data immutability, and full patient portal.
 >
-> **Backend-focused review (2026-10-15), baseline `4f629f4`: 11 OPEN findings (5 P1, 6 P2), including 9 reproduced backend defects and 2 frontend findings. No fixes applied. See [Round 53](#round-53--backend-focused-review-follow-up-2026-10-15--planned) for evidence, suggested solutions and test-first acceptance criteria.**
+> **Backend-focused review (2026-10-15), baseline `4f629f4`: 11 findings (5 P1, 6 P2) — **all 11 fixed**. Each one records the red state it was observed in before the change and the regression test that now holds it; see [Round 53](#round-53--backend-focused-review-follow-up-2026-10-15--complete).**
 >
 > **Status: Round 36 complete (21/22 gaps). Round 37: 49 findings → 49 resolved (8 CRITICAL, 12 HIGH, 18 MEDIUM, 11 LOW). 1 CRITICAL backend-dependent deferred (C4). L1 (any types) resolved in Round 43 — all Round 37 findings closed.**
 >
@@ -2787,7 +2787,7 @@ No M2M consumer exists today (Mirth uses the JSON API; no client-credentials flo
 
 ---
 
-# Round 50: Maintainability Pass ⬜ Planned (2026-09-11)
+# Round 50: Maintainability Pass ✅ Complete (2026-09-11)
 
 > Independent code-quality review (backend 212 main + 7 test Java files / 13,916 LOC main + 2,782 LOC test; frontend 81 TS/TSX / 6,360 LOC + 6 CSS / 175 LOC; schema, pom and all config). **Ranked for code quality and long-term maintainability, not compliance.**
 >
@@ -3807,7 +3807,7 @@ Both are fixed in the smallest way that makes the vocabulary reachable:
 
 **Left outside F4, deliberately:** the presentational vocabularies (consent, care plan, problem, referral, prior auth, refill request, `patient_auth.status`) and the frontend's inline status literals listed in 51.13. `sys_role.status` and `sys_menu.status` are now named but still enforced nowhere — nothing filters a disabled role or menu out of a login or a menu tree, which is a functional gap rather than a vocabulary one.
 
-## Round 52 — module boundaries (in progress)
+## Round 52 — module boundaries (complete)
 
 > **Status: complete.** 52.1–52.8 landed (with 52.3a, 52.3b and 52.5a found by measurement along the way). Every metric is at zero and the allowlist mechanism is deleted. Written before the first slice, following the M8.4 precedent. Every number below is a measurement, not an impression; the tables in the plan half were corrected by 52.1's own findings, and 52.3 added two slices — one when its measurement found the guard blind to fully-qualified references, one for the write that blindness had hidden. The cycle target in the table below is met: the module graph is acyclic as of 52.4.
 
@@ -4102,9 +4102,9 @@ Each slice is one commit, leaves `mvn clean verify` green, and carries its own e
 
 ---
 
-## Round 53 — Backend-focused review follow-up (2026-10-15) — Planned
+## Round 53 — Backend-focused review follow-up (2026-10-15) — complete
 
-**Status: review complete; all 11 findings OPEN. No implementation fixes are included in this documentation update.**
+**Status: all 11 findings fixed.** Every finding below carries a `Fix record` naming the red state observed before the change and the test that now holds it; the schema version, `docs/API-LAYOUT.md` and `README.md` moved with the slices that touched them. Nothing in this round is deferred — the two things it deliberately does not do are unchanged from the review: it does not deploy against Okta/Surescripts, and it does not add a commercial CDS subscription.
 
 Reviewed baseline: [`4f629f4fb1584a266dc79e9e97a55828f9d41e00`](https://github.com/WangYufeng1990/medical-project/commit/4f629f4fb1584a266dc79e9e97a55828f9d41e00). Scope: backend authentication/authorization, appointment-to-billing flow, key rotation, audit integrity and FHIR serialization, with a smaller frontend review of appointment input and chat request handling. Source locations below refer to that baseline, not future line numbers.
 
@@ -4115,7 +4115,7 @@ This is a new follow-up to the earlier completed rounds. Their historical comple
 - Existing backend suite: **213 tests, 0 failures, 0 errors**, `mvn clean test` passed on Java 17 with isolated in-memory H2. The first attempt hit the environment's Mockito dynamic-agent attachment restriction; rerunning with Byte Buddy loaded at JVM startup (`-DargLine=-javaagent:<byte-buddy-agent.jar>`) passed. The attachment failure is not a project defect.
 - Separate temporary review probes reproduced R53-01, 02, 03, 05, 06, 07, 08 and 09 against isolated H2 / the actual application code. R53-04 was reproduced by signing and decoding a token with the actual production configuration classes, without an external Okta service.
 - Frontend: `npm run check` passed with **0 ESLint errors, 4 warnings** and a passing TypeScript check; `npm run build` passed. R53-10 was checked with a fixed America/Los_Angeles timestamp. R53-11 is a static asynchronous-flow finding, not a browser reproduction.
-- The review probes used synthetic data and did not modify application source. They were temporary review tooling, **not committed regression tests**. The tests proposed below must still be written and shown to fail before each fix.
+- The review probes used synthetic data and did not modify application source. They were temporary review tooling, **not committed regression tests** — so every fix below began by writing the test it needed and recording the state it failed in. That red record, not the probe, is what each `Fix record` cites.
 - This was not a full production/Okta/Redis/MySQL integration run. Passing the existing suite does not cover the missing scenarios listed below.
 
 ### Finding index
