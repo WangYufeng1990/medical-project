@@ -335,6 +335,57 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
         assertEquals(precise.truncatedTo(ChronoUnit.SECONDS), threadFor(patientId).getLastMessageTime());
     }
 
+    @Test
+    void messageAndThread_shouldShareOneClock() throws Exception {
+        long messageId = send(doctorToken, 100L, "PATIENT", "clock fixture");
+
+        LocalDateTime messageTime = jdbcTemplate.queryForObject(
+                        "SELECT create_time FROM message WHERE id = ?", java.sql.Timestamp.class, messageId)
+                .toLocalDateTime();
+        LocalDateTime threadTime = jdbcTemplate.queryForObject(
+                        "SELECT last_message_time FROM chat_conversation WHERE "
+                                + "(party_a_type = 'PATIENT' AND party_a_id = 100) "
+                                + "OR (party_b_type = 'PATIENT' AND party_b_id = 100)",
+                        java.sql.Timestamp.class)
+                .toLocalDateTime();
+
+        assertEquals(0, messageTime.getNano(),
+                "the message is written at the precision the thread is compared at, so a database "
+                        + "rounding fractional seconds cannot move it into the next second");
+        assertEquals(messageTime, threadTime,
+                "the message row and its thread must record the same moment");
+    }
+
+    @Test
+    void backfillAndLiveRecording_shouldChooseTheSameLastMessage() throws Exception {
+        // One stored second, but the raw fractions put the lower id later: the live
+        // rule (stored second, then id) and a backfill that ordered by the raw
+        // timestamp would disagree about which message is last.
+        LocalDateTime second = LocalDateTime.now().minusMinutes(30).truncatedTo(ChronoUnit.SECONDS);
+        long patientId = createPatient();
+        long lowerId = saveHistoryMessage(patientId, "same second, later fraction",
+                second.plusNanos(900_000_000L));
+        long higherId = saveHistoryMessage(patientId, "same second, earlier fraction",
+                second.plusNanos(100_000_000L));
+        assertTrue(higherId > lowerId);
+        deleteConversationFor(patientId);
+
+        backfill.backfillMissing();
+        long viaBackfill = threadFor(patientId).getLastMessageId();
+
+        long livePatient = createPatient();
+        conversationService.recordMessage(Party.patient(livePatient), Party.staff(2L), lowerId,
+                second.plusNanos(900_000_000L));
+        conversationService.recordMessage(Party.patient(livePatient), Party.staff(2L), higherId,
+                second.plusNanos(100_000_000L));
+        long viaLive = threadFor(livePatient).getLastMessageId();
+
+        assertEquals(higherId, viaLive,
+                "live: inside one stored second the higher message id is the last message");
+        assertEquals(viaLive, viaBackfill,
+                "the backfill must pick the same last message the live path picks");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     private long send(String token, long receiverId, String receiverType, String content) throws Exception {

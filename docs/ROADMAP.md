@@ -4576,7 +4576,7 @@ Database evolution is part of Round 54.2: introduce a versioned baseline and upg
 | Slice | Priority / status | Work and files | Tests first / acceptance |
 |---|---|---|---|
 | 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks (staff and patient account state, symmetric conversation rule); fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; existing conversation authorizes both directions; portal account state gates delivery; authenticated existing flows preserved — 31/31 pass, 19 were red before the two fix passes (see 54.1 record below) |
-| 54.2 Conversations and migration | P0 / **Done** (2026-10-19, after review) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision; a v3→v4 upgrade the application performs itself | ChatConversationIntegrationTest + SchemaUpgradeIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean install and a real startup on a previous-release database; concurrent first messages all persist; a late older message never rewinds a thread — 9 red→green across the two passes (see the 54.2 record) |
+| 54.2 Conversations and migration | P0 / **Done** (2026-10-19, after two review rounds) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision; a v3→v4 upgrade the application performs itself; one normalised clock for messages and threads | ChatConversationIntegrationTest + SchemaUpgradeIntegrationTest + DevSchemaGuardTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership and agrees with live recording; clean install and a real startup on a previous-release database with its own history; a real restart; concurrent first messages all persist; a late older message never rewinds a thread — 12 red→green across the passes (see the 54.2 records) |
 | 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
 | 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
 
@@ -4741,6 +4741,31 @@ lateOlderMessage_shouldNotRewindTheThread:308 — a late-arriving older message 
 **Verification (actually run):** `mvn clean verify` → **287 tests, 0 failures, 0 errors, BUILD SUCCESS** (281 before this pass + 6 new); `LayeringGuardTest` 4/4 with no allowlist. The two changed classes pass under JUnit's random orderer with seeds 2 and 9 (`Tests run: 9, Failures: 0` each).
 
 **Still not claimed:** the upgrade path is proven on H2 in MySQL mode only — no MySQL instance exists here, and MySQL never runs `sql/schema.sql`, so it still needs the DDL applied by hand (documented in `README.md`). The guard upgrades one additive step (v3→v4); an older database, or a step that would alter an existing table, still requires the reset. Thread ordering is second-precision, so two threads active within the same second are ordered by conversation id. Thread writes now go through SQL (create-or-update, then the guarded pointer), so the row's `version` column is not used for optimistic locking — reads still honour the entity's soft-delete restriction, and nothing updates a thread through the entity.
+
+### Round 54.2 review fixes (third pass, 2026-10-19)
+
+Three findings from the review of `08c15d11` were re-checked; all three held.
+
+**1. P2 — messages and threads still kept two clocks.** The thread time was truncated to whole seconds, but `Message.createTime` still came from `BaseEntity`'s nanosecond `LocalDateTime.now()`, and MySQL *rounds* fractional seconds into the column's second while the thread was floored — so one message could be stored a second later than the thread that points at it. The backfill made it worse by ordering the scan with the database's own fractional reading and only then truncating, while the live path compared truncated values. Fixed by normalising the clock **before the message is inserted** (one `storedPrecision(now)` value written to the message row and handed to the thread) and by ranking history in the backfill with the same `(stored second, message id)` rule the live pointer uses. `BaseEntity` is untouched, so audit timestamps keep their precision.
+
+**2. P2 — the upgrade check could be satisfied by another schema's table.** `INFORMATION_SCHEMA.TABLES` lists every schema the login can see, so on MySQL a `chat_conversation` in another catalog would let the guard record v4 while the application's own schema still lacked it. The check now goes through JDBC metadata scoped to the connection's catalog/schema, which behaves the same on MySQL and H2.
+
+**3. P2 — the upgrade test did not prove "old data survives" or "restart".** Its eight messages were created by this build's own seed step during the boot under test, and its second test only re-ran the guard. The test now plants **its own history before the new build ever runs** (explicit ids 900/901, content, author and recipient on a pair the seed step does not touch) and asserts each row still exists with its id, content and ownership, that the planted pair became one thread with the right count, revision and last message, and that the seeded threads are unchanged. The second test now performs a **real restart** — a second application context on the same database, running the same SQL initialization, guard and backfill — and compares a snapshot (version, version rows, message count, planted rows, thread count, sum of counts and revisions) before and after.
+
+**Red evidence for the third pass** (`mvn test -Dtest='DevSchemaGuardTest,ChatConversationIntegrationTest'` before the code changes):
+
+```
+messageAndThread_shouldShareOneClock:352 — the message is written at the precision the thread is compared
+    at … ==> expected: <0> but was: <210564000>
+backfillAndLiveRecording_shouldChooseTheSameLastMessage:385 — the backfill must pick the same last message
+    the live path picks ==> expected: <660> but was: <659>
+failsFastWhenOnlyAnotherSchemaHasTheTable:102 — Expected java.lang.IllegalStateException to be thrown,
+    but nothing was thrown.
+```
+
+**Verification (actually run):** `mvn clean verify` → **290 tests, 0 failures, 0 errors, BUILD SUCCESS** (287 before this pass + 3 new); `LayeringGuardTest` 4/4 with no allowlist. The three changed classes pass under JUnit's random orderer with seeds 4 and 17 (`Tests run: 18, Failures: 0` each). Order within the class no longer matters for the restart test either: the restarted context re-runs the guard and backfill over the already-upgraded database.
+
+**Still not claimed:** MySQL is still unverified for the DDL itself (no instance here; MySQL does not run `sql/schema.sql`, so the table and the manual `DevSchemaGuard` step remain the deployment path). Whole-second thread ordering means threads active inside the same second are ordered by conversation id. The backfill still only inserts missing threads; a corrupt revision would need a separate repair.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

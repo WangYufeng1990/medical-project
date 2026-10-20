@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -64,22 +66,31 @@ public class ChatConversationBackfill {
         return created;
     }
 
+    /**
+     * Ranks the history by {@code (stored second, message id)} — the rule the live send
+     * path applies — rather than by the raw column value. Ordering the scan in SQL
+     * would use the database's own fractional-second reading, which is exactly the
+     * disagreement this normalisation removes (Round 54.2 review).
+     */
     private Map<PairKey, History> readHistory() {
-        Map<PairKey, History> pairs = new LinkedHashMap<>();
-        jdbcTemplate.query(
+        List<HistoryRow> rows = jdbcTemplate.query(
                 "SELECT id, sender_type, sender_id, receiver_type, receiver_id, create_time "
-                        + "FROM message WHERE is_deleted = 0 ORDER BY create_time ASC, id ASC",
-                rs -> {
-                    PairKey key = PairKey.of(
-                            new Party(rs.getString("sender_type"), rs.getLong("sender_id")),
-                            new Party(rs.getString("receiver_type"), rs.getLong("receiver_id")));
-                    LocalDateTime sentAt = ChatConversationService.storedPrecision(
-                            rs.getTimestamp("create_time").toLocalDateTime());
-                    long messageId = rs.getLong("id");
-                    pairs.compute(key, (k, seen) -> seen == null
-                            ? new History(1, messageId, sentAt)
-                            : new History(seen.messageCount() + 1, messageId, sentAt));
-                });
+                        + "FROM message WHERE is_deleted = 0",
+                (rs, rowNum) -> new HistoryRow(
+                        PairKey.of(
+                                new Party(rs.getString("sender_type"), rs.getLong("sender_id")),
+                                new Party(rs.getString("receiver_type"), rs.getLong("receiver_id"))),
+                        rs.getLong("id"),
+                        ChatConversationService.storedPrecision(
+                                rs.getTimestamp("create_time").toLocalDateTime())));
+        rows.sort(Comparator.comparing(HistoryRow::sentAt).thenComparing(HistoryRow::messageId));
+
+        Map<PairKey, History> pairs = new LinkedHashMap<>();
+        for (HistoryRow row : rows) {
+            pairs.compute(row.pair(), (k, seen) -> seen == null
+                    ? new History(1, row.messageId(), row.sentAt())
+                    : new History(seen.messageCount() + 1, row.messageId(), row.sentAt()));
+        }
         return pairs;
     }
 
@@ -100,6 +111,9 @@ public class ChatConversationBackfill {
             return new PairKey(first.type(), first.id(), second.type(), second.id());
         }
     }
+
+    /** One historical message, normalised to the precision threads are compared at. */
+    private record HistoryRow(PairKey pair, long messageId, LocalDateTime sentAt) {}
 
     /** What the history says about one thread: how many, and which message was last. */
     private record History(int messageCount, Long lastMessageId, LocalDateTime lastMessageTime) {}

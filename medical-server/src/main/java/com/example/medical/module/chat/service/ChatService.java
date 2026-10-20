@@ -76,8 +76,14 @@ public class ChatService {
         msg.setReceiverType(receiver.type());
         msg.setContent(content);
         msg.setIsRead(0);
+        // One clock for the message row and the thread (Round 54.2 review). Normalising
+        // before the insert is what makes the stored message time equal to the stored
+        // thread time: a database that rounds fractional seconds into the next second
+        // could otherwise order the two differently from the application.
+        LocalDateTime sentAt = ChatConversationService.storedPrecision(LocalDateTime.now());
+        msg.setCreateTime(sentAt);
+        msg.setUpdateTime(sentAt);
         messageRepository.save(msg);
-        LocalDateTime sentAt = msg.getCreateTime() != null ? msg.getCreateTime() : LocalDateTime.now();
         chatConversationService.recordMessage(sender, receiver, msg.getId(), sentAt);
         MessageVO vo = MessageVO.fromEntity(msg);
         eventPublisher.publishEvent(new NewMessageEvent(sender.id(), sender.type(),

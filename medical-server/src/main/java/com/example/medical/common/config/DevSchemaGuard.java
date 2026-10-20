@@ -9,6 +9,12 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
 /**
  * Fails fast when the local database was created by an older version of
  * {@code sql/schema.sql}.
@@ -117,10 +123,29 @@ public class DevSchemaGuard implements CommandLineRunner {
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)", version);
     }
 
+    /**
+     * Whether the table exists in the schema this connection writes to.
+     * <p>
+     * Asked per connection rather than through {@code INFORMATION_SCHEMA}: that view
+     * lists every schema the login can see, so on MySQL a same-named table in another
+     * catalog would satisfy the check while the application's own schema still lacked
+     * it — and the upgrade would record a version the database does not match. JDBC's
+     * metadata is scoped to the connection's catalog/schema on both MySQL and H2.
+     */
     private boolean tableExists(String table) {
-        Integer found = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE LOWER(TABLE_NAME) = LOWER(?)",
-                Integer.class, table);
-        return found != null && found > 0;
+        DataSource dataSource = jdbcTemplate.getDataSource();
+        if (dataSource == null) return false;
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            try (ResultSet tables = metaData.getTables(
+                    connection.getCatalog(), connection.getSchema(), null, null)) {
+                while (tables.next()) {
+                    if (table.equalsIgnoreCase(tables.getString("TABLE_NAME"))) return true;
+                }
+            }
+            return false;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not inspect the local schema to verify the upgrade step", e);
+        }
     }
 }

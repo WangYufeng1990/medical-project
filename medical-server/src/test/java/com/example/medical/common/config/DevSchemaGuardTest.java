@@ -89,6 +89,23 @@ class DevSchemaGuardTest {
     }
 
     @Test
+    void failsFastWhenOnlyAnotherSchemaHasTheTable() {
+        // The upgrade step must look at the schema this connection writes to. A
+        // same-named table elsewhere in the database (on MySQL: another catalog) is
+        // not the table the application is about to use.
+        jdbcTemplate.execute("DROP TABLE chat_conversation");
+        jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS elsewhere");
+        jdbcTemplate.execute("CREATE TABLE elsewhere.chat_conversation (id BIGINT PRIMARY KEY)");
+        jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
+                DevSchemaGuard.SCHEMA_VERSION - 1);
+
+        assertThrows(IllegalStateException.class,
+                () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/other-schema-db").run());
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_version", Integer.class),
+                "a table found in another schema must not let the upgrade record a version");
+    }
+
+    @Test
     void failsFastOnAnOlderSchemaThisBuildCannotComplete() {
         // No additive step is known from v2 to v3, so the guard cannot upgrade it.
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
