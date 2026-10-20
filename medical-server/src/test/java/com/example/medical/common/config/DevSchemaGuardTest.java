@@ -54,7 +54,26 @@ class DevSchemaGuardTest {
     }
 
     @Test
-    void failsFastOnOlderSchema() {
+    void upgradesAnAdditiveStepAndRecordsIt() {
+        // Round 54.2: one version behind with the new table already created by
+        // sql/schema.sql is an upgrade, not a reason to delete the database.
+        jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
+                DevSchemaGuard.SCHEMA_VERSION - 1);
+
+        new DevSchemaGuard(jdbcTemplate, "jdbc:h2:mem:upgradable").run();
+
+        assertEquals(DevSchemaGuard.SCHEMA_VERSION, recordedVersion(),
+                "the upgrade records the version this build expects");
+        assertEquals(2, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_version", Integer.class),
+                "the previous version stays in the history");
+    }
+
+    @Test
+    void failsFastWhenTheAdditiveStepIsMissing() {
+        // The step to v4 adds chat_conversation. Without it the upgrade cannot be
+        // completed (e.g. MySQL, which never runs sql/schema.sql), so the guard must
+        // still refuse rather than stamp a version the database does not match.
+        jdbcTemplate.execute("DROP TABLE chat_conversation");
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
                 DevSchemaGuard.SCHEMA_VERSION - 1);
 
@@ -67,6 +86,16 @@ class DevSchemaGuardTest {
                 "message must point at the fix: " + e.getMessage());
         assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_version", Integer.class),
                 "a rejected database must not be stamped with the new version");
+    }
+
+    @Test
+    void failsFastOnAnOlderSchemaThisBuildCannotComplete() {
+        // No additive step is known from v2 to v3, so the guard cannot upgrade it.
+        jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
+                DevSchemaGuard.SCHEMA_VERSION - 2);
+
+        assertThrows(IllegalStateException.class,
+                () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/ancient-db").run());
     }
 
     @Test

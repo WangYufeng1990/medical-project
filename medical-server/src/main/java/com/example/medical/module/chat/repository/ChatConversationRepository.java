@@ -36,16 +36,41 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
                                             Pageable pageable);
 
     /**
-     * Records a message on the thread in one statement. A bulk update keeps two
-     * senders on the same thread from overwriting each other's revision with a
-     * read-modify-write cycle; 0 rows updated means the thread does not exist yet.
+     * Creates the thread when it is missing and counts the message when it is not, in
+     * one statement.
+     * <p>
+     * A find-then-insert let two concurrent first messages both see "no thread" and
+     * both insert; the pair's unique key then rejected one of them and its transaction
+     * took the already-written message down with it (Round 54.2 review). The insert
+     * branch also un-deletes a thread that was previously removed, because a new
+     * message means the thread exists again.
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE ChatConversation c SET c.lastMessageId = :messageId, c.lastMessageTime = :time, "
-            + "c.messageCount = c.messageCount + 1, c.revision = c.revision + 1, c.updateTime = :time "
-            + "WHERE c.partyAType = :typeA AND c.partyAId = :idA "
-            + "AND c.partyBType = :typeB AND c.partyBId = :idB")
+    @Query(value = "INSERT INTO chat_conversation (party_a_type, party_a_id, party_b_type, party_b_id, "
+            + "last_message_id, last_message_time, message_count, revision, create_time, update_time, "
+            + "is_deleted, version) "
+            + "VALUES (:typeA, :idA, :typeB, :idB, :messageId, :time, 1, 1, CURRENT_TIMESTAMP, :time, 0, 0) "
+            + "ON DUPLICATE KEY UPDATE message_count = message_count + 1, revision = revision + 1, "
+            + "is_deleted = 0, update_time = CASE WHEN :time > update_time THEN :time ELSE update_time END",
+            nativeQuery = true)
     int recordMessage(@Param("typeA") String typeA, @Param("idA") Long idA,
                       @Param("typeB") String typeB, @Param("idB") Long idB,
                       @Param("messageId") Long messageId, @Param("time") LocalDateTime time);
+
+    /**
+     * Moves the last-message pointer forward only, ordered by {@code (time, messageId)}
+     * — the same rule the backfill applies to history. Counting a message and pointing
+     * at it are separate on purpose: a message created earlier may be recorded later,
+     * and it must never rewind the thread's preview or its place in the list.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE chat_conversation SET last_message_id = :messageId, last_message_time = :time "
+            + "WHERE party_a_type = :typeA AND party_a_id = :idA "
+            + "AND party_b_type = :typeB AND party_b_id = :idB AND is_deleted = 0 "
+            + "AND (last_message_time < :time "
+            + "OR (last_message_time = :time AND COALESCE(last_message_id, 0) < :messageId))",
+            nativeQuery = true)
+    int advanceLastMessage(@Param("typeA") String typeA, @Param("idA") Long idA,
+                           @Param("typeB") String typeB, @Param("idB") Long idB,
+                           @Param("messageId") Long messageId, @Param("time") LocalDateTime time);
 }

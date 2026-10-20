@@ -73,7 +73,8 @@ public class ChatConversationBackfill {
                     PairKey key = PairKey.of(
                             new Party(rs.getString("sender_type"), rs.getLong("sender_id")),
                             new Party(rs.getString("receiver_type"), rs.getLong("receiver_id")));
-                    LocalDateTime sentAt = rs.getTimestamp("create_time").toLocalDateTime();
+                    LocalDateTime sentAt = ChatConversationService.storedPrecision(
+                            rs.getTimestamp("create_time").toLocalDateTime());
                     long messageId = rs.getLong("id");
                     pairs.compute(key, (k, seen) -> seen == null
                             ? new History(1, messageId, sentAt)

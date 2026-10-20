@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Keeps the conversation row in step with the messages of a thread (Round 54.2).
@@ -25,37 +25,36 @@ public class ChatConversationService {
     private final ChatConversationRepository conversationRepository;
 
     /**
-     * Records one message on the thread, creating the row for a first message.
+     * Records one message on the thread (Round 54.2).
      * <p>
-     * The existing-thread path is a single incrementing UPDATE, so two senders on
-     * the same thread cannot lose each other's revision to a read-modify-write. The
-     * first-message path is a plain insert: a simultaneous first message from both
-     * sides collides on the unique key and fails loudly instead of storing the same
-     * thread twice.
+     * Two statements, each safe under concurrency and each doing one job: the first
+     * creates the thread or counts the message in a single create-or-update, so
+     * simultaneous first messages cannot collide on the pair's unique key; the second
+     * moves the last-message pointer only forward, ordered by {@code (time, id)}.
+     * A message created earlier can be recorded later, and it must not rewind the
+     * thread — the failure this pair of statements exists to prevent.
      */
     @Transactional
     public void recordMessage(Party sender, Party receiver, Long messageId, LocalDateTime time) {
         Party first = canonicalFirst(sender, receiver);
         Party second = first.equals(sender) ? receiver : sender;
+        LocalDateTime sentAt = storedPrecision(time);
 
-        Optional<ChatConversation> existing =
-                conversationRepository.findByPair(first.type(), first.id(), second.type(), second.id());
-        if (existing.isPresent()) {
-            conversationRepository.recordMessage(first.type(), first.id(), second.type(), second.id(),
-                    messageId, time);
-            return;
-        }
+        conversationRepository.recordMessage(first.type(), first.id(), second.type(), second.id(),
+                messageId, sentAt);
+        conversationRepository.advanceLastMessage(first.type(), first.id(), second.type(), second.id(),
+                messageId, sentAt);
+    }
 
-        ChatConversation conversation = new ChatConversation();
-        conversation.setPartyAType(first.type());
-        conversation.setPartyAId(first.id());
-        conversation.setPartyBType(second.type());
-        conversation.setPartyBId(second.id());
-        conversation.setLastMessageId(messageId);
-        conversation.setLastMessageTime(time);
-        conversation.setMessageCount(1);
-        conversation.setRevision(1L);
-        conversationRepository.save(conversation);
+    /**
+     * The precision the thread's timestamp is stored and compared at. MySQL's
+     * {@code TIMESTAMP} holds whole seconds, so the value the application compares
+     * must be the same one the database keeps — otherwise two writes of the same
+     * message can disagree about which is later. Messages within one second are
+     * ordered by their id, which is what the pointer rule already does.
+     */
+    static LocalDateTime storedPrecision(LocalDateTime time) {
+        return time.truncatedTo(ChronoUnit.SECONDS);
     }
 
     /** One page of the caller's threads, newest activity first with a stable tie-break. */

@@ -59,12 +59,19 @@ When you edit `schema.sql`, bump `SCHEMA_VERSION` in
 `common/config/DevSchemaGuard.java` in the same commit (currently `4`, which added
 `chat_conversation` in Round 54.2).
 
-`chat_conversation` (Round 54.2) is filled the same way a fresh database is: a
-startup backfill derives one row per existing message thread, and only inserts
-threads it cannot already find, so restarting is safe. A **MySQL** deployment does
-not run this file — apply the `chat_conversation` DDL from `sql/schema.sql` by hand
-and keep `SCHEMA_VERSION` in step; the project has no migration tool yet (Flyway is
-an open infrastructure item, see `docs/ROADMAP.md`).
+A database that is exactly one version behind is **upgraded on start**, not
+rejected: the version step to 4 only adds `chat_conversation`, `spring.sql.init`
+creates it, and `DevSchemaGuard` records v4 once it has verified the table is really
+there (`SchemaUpgradeIntegrationTest` boots the application against a database left
+in the previous release's shape). The upgrade keeps the data; `SCHEMA_VERSION` in the
+guard still moves with the file. Anything the guard cannot complete — an older
+version, a step that would alter an existing table, a database ahead of the build —
+is still a loud failure with the reset instructions, and MySQL, which does not run
+`sql/schema.sql`, needs the DDL applied by hand. The project has no migration tool
+yet (Flyway is an open infrastructure item, see `docs/ROADMAP.md`).
+
+`chat_conversation` is filled for existing history by a startup backfill: one row
+per message thread, inserted only where a thread is missing, so restarting is safe.
 
 The reset also discards `audit_log`, and that is the intended path rather than a
 loss to be migrated: each row's digest covers the exact timestamp the column

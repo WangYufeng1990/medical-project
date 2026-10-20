@@ -4576,7 +4576,7 @@ Database evolution is part of Round 54.2: introduce a versioned baseline and upg
 | Slice | Priority / status | Work and files | Tests first / acceptance |
 |---|---|---|---|
 | 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks (staff and patient account state, symmetric conversation rule); fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; existing conversation authorizes both directions; portal account state gates delivery; authenticated existing flows preserved — 31/31 pass, 19 were red before the two fix passes (see 54.1 record below) |
-| 54.2 Conversations and migration | P0 / **Done** (2026-10-19) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision | ChatConversationIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean and upgrade migrations pass — 5/5 pass, 2 red first (see 54.2 record below) |
+| 54.2 Conversations and migration | P0 / **Done** (2026-10-19, after review) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision; a v3→v4 upgrade the application performs itself | ChatConversationIntegrationTest + SchemaUpgradeIntegrationTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership; clean install and a real startup on a previous-release database; concurrent first messages all persist; a late older message never rewinds a thread — 9 red→green across the two passes (see the 54.2 record) |
 | 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
 | 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
 
@@ -4713,6 +4713,34 @@ pages_shouldCoverEveryThreadOnce_andStayStable:72  doctor1 has exactly three thr
 - Round 54.1's suite still passes unchanged in behaviour; its fixtures were updated to run the backfill after writing raw history, because the conversation list is now driven by conversation rows rather than by a message scan.
 
 **Limits of this slice (not claimed):** no migration tool (see the decision above) and no MySQL-executed DDL — the upgrade path is proven on H2 in MySQL mode only. Deleting a message does not re-point or shrink its conversation row (the product has no message deletion; only tests remove rows, and they remove the thread with them). A conversation row is not removed when both its parties disappear, beyond the test-data cleanup. The startup backfill inserts missing threads only; it never rewrites an existing row, so a corrupt revision would need a separate repair. `clientMessageId` idempotency (54.3) and after-commit notification (54.4) remain Pending, and the list still returns at most `Pages.MAX_SIZE` rows per page with no cursor.
+
+### Round 54.2 review fixes (second pass, 2026-10-19)
+
+Three findings from the review of `bc2afdd` were re-checked against the source; all three held, and each now has a regression that failed before the fix.
+
+**1. P1 — a v3 database could not start.** `DevSchemaGuard` rejected any version mismatch, so a database whose data was fine was told to delete itself, and the startup backfill (which runs on `ApplicationReadyEvent`) never got the chance to run. Fixed by making the guard an **upgrader**: a database one version behind is carried forward when the step between the versions is additive *and the table that step adds is really present* — the guard checks `INFORMATION_SCHEMA` before recording, so "upgraded" is never a blind stamp. Unknown older versions, a missing table, and a database newer than the build still fail loudly with the reset guidance. `SCHEMA_VERSION` is now public because the upgrade test asserts against it.
+
+**2. P2 — a simultaneous first message lost one side.** `ChatConversationService` looked the thread up and inserted when it was absent, so two concurrent first messages both inserted; the pair's unique key rejected one, and its already-written message went with the transaction. Fixed with a single create-or-update statement (`INSERT … ON DUPLICATE KEY UPDATE`, supported by MySQL and by H2 in MySQL mode) that also un-deletes a thread a new message revives; counting and pointing at the last message are separate statements, so a retry has nothing to poison.
+
+**3. P2 — an older message recorded later rewound the thread.** The counter update unconditionally overwrote `last_message_id`/`last_message_time`. The pointer is now a separate guarded `UPDATE` that moves forward only, ordered by `(time, messageId)` — the same rule the backfill applies to history. Time is **truncated to whole seconds**, the precision MySQL's `TIMESTAMP` keeps, so the value stored, the value compared and the backfill's reading of `message.create_time` cannot disagree; messages inside one second are ordered by id, which the tie-break already used for threads.
+
+**Red evidence for the second pass** (`mvn test -Dtest='SchemaUpgradeIntegrationTest,ChatConversationIntegrationTest'` before the code changes):
+
+```
+SchemaUpgradeIntegrationTest (both tests): ERROR — IllegalStateException: Local database schema is v3
+    but this build expects v4 … Delete the local database file (default: ~/.medical-dev/data/, or the
+    path in H2_DB_PATH) and restart to rebuild schema + seed data.
+concurrentFirstMessages_shouldAllPersistInOneConversation: ERROR —
+    DataIntegrityViolationException: Unique index or primary key violation: "…UK_CHAT_CONVERSATION_PAIR…"
+lateOlderMessage_shouldNotRewindTheThread:308 — a late-arriving older message must not move the thread's
+    last-message pointer back ==> expected: <632> but was: <631>
+```
+
+**Tests added for the second pass:** `SchemaUpgradeIntegrationTest` boots the **real application** against a database prepared as the previous release left it (every table except `chat_conversation`, `schema_version` row `3`) and asserts the startup path upgrades it: version 4 recorded with v3 kept in the history, both seeded threads backfilled with their counts and revisions, all eight seeded messages intact, and a following guard run a no-op. `ChatConversationIntegrationTest` gained `concurrentFirstMessages_shouldAllPersistInOneConversation` (eight simultaneous senders on a brand-new pair: all messages stored, one thread, count and revision 8) and `lateOlderMessage_shouldNotRewindTheThread` (an older message recorded after a newer one must not move the pointer; equal timestamps fall back to the higher id in both arrival orders; the stored thread time is the column's precision). `DevSchemaGuardTest` now covers the upgrade, the missing-table failure and an older version this build cannot complete.
+
+**Verification (actually run):** `mvn clean verify` → **287 tests, 0 failures, 0 errors, BUILD SUCCESS** (281 before this pass + 6 new); `LayeringGuardTest` 4/4 with no allowlist. The two changed classes pass under JUnit's random orderer with seeds 2 and 9 (`Tests run: 9, Failures: 0` each).
+
+**Still not claimed:** the upgrade path is proven on H2 in MySQL mode only — no MySQL instance exists here, and MySQL never runs `sql/schema.sql`, so it still needs the DDL applied by hand (documented in `README.md`). The guard upgrades one additive step (v3→v4); an older database, or a step that would alter an existing table, still requires the reset. Thread ordering is second-precision, so two threads active within the same second are ordered by conversation id. Thread writes now go through SQL (create-or-update, then the guarded pointer), so the row's `version` column is not used for optimistic locking — reads still honour the entity's soft-delete restriction, and nothing updates a thread through the entity.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

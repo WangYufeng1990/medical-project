@@ -5,6 +5,10 @@ import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.repository.ChatConversationRepository;
 import com.example.medical.module.chat.repository.MessageRepository;
 import com.example.medical.module.chat.service.ChatConversationBackfill;
+import com.example.medical.module.chat.service.ChatConversationService;
+import com.example.medical.module.chat.service.ChatService;
+import com.example.medical.module.chat.service.Party;
+import com.example.medical.security.LoginUser;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,10 +18,19 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.sql.Connection;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,6 +72,12 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private ChatConversationBackfill backfill;
+
+    @Autowired
+    private ChatConversationService conversationService;
+
+    @Autowired
+    private ChatService chatService;
 
     private final List<Long> createdPatientIds = new ArrayList<>();
 
@@ -104,9 +123,14 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
                 "patient 101's thread must still be listed after 22 newer messages in another thread");
         assertEquals(1, countPartner(records, "PATIENT", 100L),
                 "22 messages in one thread are one conversation, not 22");
-        assertEquals(100L, records.get(0).get("partnerId").asLong(),
-                "the most recently active thread is listed first");
-        assertEquals("busy thread message " + (BUSY_MESSAGES - 1), records.get(0).get("lastMessage").asText());
+        JsonNode busyThread = findPartner(records, "PATIENT", 100L);
+        assertEquals("busy thread message " + (BUSY_MESSAGES - 1), busyThread.get("lastMessage").asText(),
+                "the thread previews its newest message");
+        // Ordering is last_message_time (whole seconds) then conversation id: the rule is
+        // asserted against the database itself rather than a hand-picked pair order,
+        // because two threads active in the same second differ only by id.
+        assertEquals(orderingFromTheDatabase(), partners(records),
+                "the list must follow last_message_time DESC then conversation id DESC");
     }
 
     @Test
@@ -152,7 +176,8 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
         assertEquals(3, conversation.getMessageCount(), "all three historical messages count");
         assertEquals(3L, conversation.getRevision());
         assertEquals(third, conversation.getLastMessageId(), "the newest message is the thread's last");
-        assertFalse(conversation.getLastMessageTime().isBefore(base.plusMinutes(20)));
+        assertEquals(base.truncatedTo(ChronoUnit.SECONDS).plusMinutes(20), conversation.getLastMessageTime(),
+                "the thread's clock is the stored precision, not a value the database would round");
 
         // Ownership survives: the same three rows, still sent by the doctor.
         assertEquals(3, messageRepository.countBetween(2L, "STAFF", patientId, "PATIENT"));
@@ -236,6 +261,78 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
         assertEquals(List.of(all.get(firstIndex)),
                 partners(conversations(doctorToken, firstIndex + 1, 1)),
                 "a one-row page must take the row at that position, not repeat another");
+    }
+
+    @Test
+    void concurrentFirstMessages_shouldAllPersistInOneConversation() throws Exception {
+        // Two senders can both find no thread and both insert. The loser used to take
+        // a unique-key failure — rolling back its message with it — so the guarantee
+        // has to be an atomic create-or-update inside the send transaction.
+        long patientId = createPatient();
+        int senders = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(senders);
+        CyclicBarrier allReady = new CyclicBarrier(senders);
+        List<Future<String>> sent = new ArrayList<>();
+        try {
+            for (int i = 0; i < senders; i++) {
+                String content = "concurrent message " + i;
+                sent.add(pool.submit(() -> {
+                    authenticateAsDoctor();
+                    allReady.await(10, TimeUnit.SECONDS);
+                    return chatService.sendMessage(patientId, "PATIENT", content).getContent();
+                }));
+            }
+            for (Future<String> result : sent) {
+                assertNotNull(result.get(30, TimeUnit.SECONDS), "every concurrent send must succeed");
+            }
+        } finally {
+            pool.shutdownNow();
+            SecurityContextHolder.clearContext();
+        }
+
+        assertEquals(senders, storedMessagesFor(patientId), "every concurrent message must be stored");
+        ChatConversation thread = conversationRepository
+                .findByPair("PATIENT", patientId, "STAFF", 2L)
+                .orElseThrow(() -> new AssertionError("the concurrent sends did not produce a thread"));
+        assertEquals(senders, thread.getMessageCount());
+        assertEquals((long) senders, thread.getRevision());
+    }
+
+    @Test
+    void lateOlderMessage_shouldNotRewindTheThread() throws Exception {
+        long patientId = createPatient();
+        LocalDateTime base = LocalDateTime.now().minusHours(1).withNano(0);
+        long older = saveHistoryMessage(patientId, "older message", base);
+        long newer = saveHistoryMessage(patientId, "newer message", base.plusMinutes(5));
+        Party patient = Party.patient(patientId);
+        Party doctor = Party.staff(2L);
+
+        conversationService.recordMessage(patient, doctor, newer, base.plusMinutes(5));
+        conversationService.recordMessage(patient, doctor, older, base);
+
+        ChatConversation thread = threadFor(patientId);
+        assertEquals(newer, thread.getLastMessageId(),
+                "a late-arriving older message must not move the thread's last-message pointer back");
+        assertEquals(2, thread.getMessageCount(), "both messages still count");
+        assertEquals(2L, thread.getRevision());
+
+        // Same timestamp: the message id decides, in both arrival orders.
+        long sameTimeHigherId = saveHistoryMessage(patientId, "same second, higher id", base.plusMinutes(5));
+        conversationService.recordMessage(patient, doctor, sameTimeHigherId, base.plusMinutes(5));
+        conversationService.recordMessage(patient, doctor, newer, base.plusMinutes(5));
+
+        thread = threadFor(patientId);
+        assertEquals(sameTimeHigherId, thread.getLastMessageId(),
+                "at equal timestamps the higher message id is the last message");
+        assertEquals(4, thread.getMessageCount());
+        assertEquals(4L, thread.getRevision());
+
+        // The thread's clock is the column's precision, so a value the database would
+        // round can never disagree with the ordering it is compared by.
+        LocalDateTime precise = base.plusMinutes(9).plusNanos(987_654_321L);
+        conversationService.recordMessage(patient, doctor,
+                saveHistoryMessage(patientId, "precise", precise), precise);
+        assertEquals(precise.truncatedTo(ChronoUnit.SECONDS), threadFor(patientId).getLastMessageTime());
     }
 
     // ── helpers ─────────────────────────────────────────────────────
@@ -381,5 +478,43 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
                         + "(party_a_type = 'PATIENT' AND party_a_id = ?) "
                         + "OR (party_b_type = 'PATIENT' AND party_b_id = ?)",
                 Long.class, patientId, patientId);
+    }
+
+    private void authenticateAsDoctor() {
+        LoginUser doctor = new LoginUser(2L, "doctor1", "", List.of());
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                doctor, null, List.of(new SimpleGrantedAuthority("ROLE_DOCTOR"))));
+    }
+
+    private int storedMessagesFor(long patientId) {
+        Integer found = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM message WHERE receiver_type = 'PATIENT' AND receiver_id = ?",
+                Integer.class, patientId);
+        return found == null ? 0 : found;
+    }
+
+    private ChatConversation threadFor(long patientId) {
+        return conversationRepository.findByPair("PATIENT", patientId, "STAFF", 2L)
+                .orElseThrow(() -> new AssertionError("no thread for patient " + patientId));
+    }
+
+    /** Partner keys ordered exactly as the endpoint must order them. */
+    private List<String> orderingFromTheDatabase() {
+        return jdbcTemplate.query(
+                "SELECT party_a_type, party_a_id, party_b_type, party_b_id FROM chat_conversation "
+                        + "WHERE (party_a_type = 'STAFF' AND party_a_id = 2) "
+                        + "OR (party_b_type = 'STAFF' AND party_b_id = 2) "
+                        + "ORDER BY last_message_time DESC, id DESC",
+                (rs, rowNum) -> "STAFF".equals(rs.getString("party_a_type"))
+                        && rs.getLong("party_a_id") == 2L
+                        ? rs.getString("party_b_type") + ":" + rs.getLong("party_b_id")
+                        : rs.getString("party_a_type") + ":" + rs.getLong("party_a_id"));
+    }
+
+    private JsonNode findPartner(JsonNode records, String type, long id) {
+        for (JsonNode r : records) {
+            if (type.equals(r.get("partnerType").asText()) && r.get("partnerId").asLong() == id) return r;
+        }
+        throw new AssertionError("no conversation with " + type + ":" + id + " in " + partners(records));
     }
 }
