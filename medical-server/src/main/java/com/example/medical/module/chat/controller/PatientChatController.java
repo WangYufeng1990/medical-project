@@ -5,7 +5,9 @@ import com.example.medical.common.result.Result;
 import com.example.medical.module.chat.dto.ConversationVO;
 import com.example.medical.module.chat.dto.MessageFormDTO;
 import com.example.medical.module.chat.dto.MessageVO;
+import com.example.medical.module.chat.dto.SafetyNoticeVO;
 import com.example.medical.module.chat.service.ChatService;
+import com.example.medical.module.chat.service.SafetyNoticeService;
 import com.example.medical.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class PatientChatController {
 
     private final ChatService chatService;
+    private final SafetyNoticeService safetyNoticeService;
 
     @GetMapping("/conversations")
     public Result<PageResult<ConversationVO>> conversations(
@@ -27,6 +30,12 @@ public class PatientChatController {
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long size) {
         return Result.ok(chatService.getConversations(loginUser.getUserId(), ChatService.PATIENT, page, size));
+    }
+
+    /** The same fixed notice the staff portal shows; nothing here depends on a model. */
+    @GetMapping("/safety-notice")
+    public Result<SafetyNoticeVO> safetyNotice() {
+        return Result.ok(safetyNoticeService.current());
     }
 
     @GetMapping("/unread-count")

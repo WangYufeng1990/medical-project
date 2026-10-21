@@ -27,6 +27,7 @@
 .senderName { font-size: 11px; color: #909399; margin-bottom: 2px; padding-left: 2px; }
 .messageTime { font-size: 10px; color: #c0c4cc; margin-top: 2px; }
 .messageTimeMe { text-align: right; }
+.safetyNotice { padding: 8px 20px; background: #fdf6ec; border-bottom: 1px solid #f5e3c8; color: #8a5a00; font-size: 11px; line-height: 1.5; display: flex; flex-direction: column; gap: 2px; }
 .messageFailed { border: 1px solid #F56C6C; }
 .retryButton { margin-top: 2px; padding: 2px 8px; background: none; border: 1px solid #F56C6C; color: #F56C6C; border-radius: 10px; font-size: 10px; cursor: pointer; }
 

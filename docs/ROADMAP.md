@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: 54.1 implemented and verified (2026-10-19); 54.2–59 remain Pending. No implementation or benchmark result is claimed beyond 54.1.**
+**Status: Round 54 (54.1–54.4) implemented and verified (2026-10-19 → 2026-10-21); Rounds 55–59 remain Pending. No implementation or benchmark result is claimed beyond Round 54.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -4569,7 +4569,7 @@ Schemas must be validated on both sides. Keep existing Result<T> conventions for
 
 Database evolution is part of Round 54.2: introduce a versioned baseline and upgrade path, recommended Flyway for Java/MySQL and independent versioned PostgreSQL migrations for Python-owned tables. Coordinate Spring SQL initialization and DevSchemaGuard rather than allowing two schema owners. Test fresh installation and upgrade from the reviewed schema. Do not enable blind baselining or make data deletion the normal upgrade path. Manage LangGraph checkpoint setup against locked dependency versions.
 
-## Round 54 — Messaging foundation (In progress: 54.1–54.3 Done, 54.4 Pending)
+## Round 54 — Messaging foundation (Done: 54.1–54.4)
 
 **Goal:** reliable human messaging before AI integration. **Estimate:** 28–44 hours. Depends on a fresh baseline test run and reviewed migration/contract design.
 
@@ -4578,7 +4578,7 @@ Database evolution is part of Round 54.2: introduce a versioned baseline and upg
 | 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks (staff and patient account state, symmetric conversation rule); fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; existing conversation authorizes both directions; portal account state gates delivery; authenticated existing flows preserved — 31/31 pass, 19 were red before the two fix passes (see 54.1 record below) |
 | 54.2 Conversations and migration | P0 / **Done** (2026-10-19, after two review rounds) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision; a v3→v4 upgrade the application performs itself; one normalised clock for messages and threads | ChatConversationIntegrationTest + SchemaUpgradeIntegrationTest + DevSchemaGuardTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership and agrees with live recording; clean install and a real startup on a previous-release database with its own history; a real restart; concurrent first messages all persist; a late older message never rewinds a thread — 12 red→green across the passes (see the 54.2 records) |
 | 54.3 Idempotent sending and UI recovery | P0 / **Done** (2026-10-21, after review) | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input; schema v5 with a guard step that adds the column to an existing database, resumable from a partial upgrade | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; concurrent repeats collapse to one and move the thread once; UI retry retains content, never stacks bubbles, and does not land in another selected conversation — chatState.test.ts holds the UI rules, 10/10 (see 54.3 records) |
-| 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
+| 54.4 After-commit notification and safety notice | P0 / **Done** (2026-10-21) | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability — 5/5 pass, 3 red first (see 54.4 record below) |
 
 Preserve the completed stale-response guards. Keep new-conversation selection server-authorized. Specify how revision increments serialize messages and review publication; do not rely on browser timestamps.
 
@@ -4832,6 +4832,34 @@ Four findings from the review of `d0dca63` were re-checked; all four held, and t
 **Verification (actually run):** `mvn clean verify` → **299 tests, 0 failures, 0 errors, BUILD SUCCESS** (298 + the new guard test); `LayeringGuardTest` 4/4 with no allowlist. `npm test` → 10/10. `npm run check` → 0 errors (the same 4 pre-existing warnings, none in the new code). `npm run build` → built (433.87 kB JS / 8.75 kB CSS).
 
 **Still not claimed:** Vitest runs the state helpers, not the React components — rendering, SSE wiring and the composer remain covered by type check, lint, build and review. The `clientMessageId` is still optional, MySQL still receives the column by hand, and the failed bubble is still lost when its conversation is closed (a persisted outbox is a separate slice).
+
+### Round 54.4 — After-commit notification and safety notice (Done, 2026-10-21)
+
+**Source baseline:** `b0cb4955` (54.3 complete after review), clean tree. **Recorded test baseline (this round):** `mvn clean verify` → **299 tests, 0 failures**.
+
+**What the source had:** `ChatService` published `NewMessageEvent` *inside* the send transaction, so anything that failed after that point (a thread write, a constraint at commit) still ran the async listener and pushed `new_message` to the receiver for a message that no longer existed. Nothing asserted what a *failing* notification does to an already-committed message, because the event and the commit were the same step. And there was no safety notice anywhere: neither portal said what to do in an emergency or that the channel is not a real-time service.
+
+**Design.**
+- `notifyAfterCommit(event)` registers a `TransactionSynchronization` and publishes in `afterCommit`; `publishQuietly` logs a failing listener instead of propagating it, so a committed message is never reported as a failed send. The async SSE listener is unchanged: the ordering guarantee is about the transaction, not the thread.
+- `SafetyNoticeService` is the deterministic entry point: fixed, reviewed wording plus `NOTICE_VERSION`, served as `SafetyNoticeVO { version, emergencyNotice, responseNotice }` from both chat controllers. Nothing in that path consults a model, a retriever or any external service, and the notice deliberately states the boundary ("not monitored around the clock", "may take time") rather than implying triage.
+- Both chat views fetch the notice once and render it under the conversation header.
+
+**Red evidence (before the production change, `mvn test -Dtest=ChatCommitEventIntegrationTest`):**
+
+```
+Tests run: 5, Failures: 3
+theNotificationIsPublishedOnlyAfterTheCommit … expected: <1> but was: <0>   (the probe could not see the message from another connection: it was delivered inside the transaction)
+aFailingNotification_shouldNotUndoTheStoredMessage … expected:<200> but was:<500>
+theSafetyNoticeIsFixedVersionedAndServedToBothPortals … expected:<200> but was:<400>  (no endpoint)
+```
+
+A second, stronger probe was tried first: asserting `TransactionSynchronizationManager.isActualTransactionActive()` inside the listener. It stays true during `afterCommit`, so it measured the wrong thing; the visibility check from a second connection is what actually distinguishes "published inside" from "published after commit", and it is the check that is committed.
+
+**Tests (5):** a send whose thread write throws rolls back (no row) and publishes nothing; the event is only delivered once the message is visible on another connection; a listener that throws does not undo the message and still gets called; both portals receive the same versioned notice with the emergency and no-real-time wording; the notice requires an authenticated identity on both routes.
+
+**Verification (actually run):** `mvn clean verify` → **304 tests, 0 failures, 0 errors, BUILD SUCCESS** (299 + 5); `LayeringGuardTest` 4/4 with no allowlist. Frontend: `npm run check` → 0 errors (the same 4 pre-existing warnings), `npm test` → 10/10, `npm run build` → built (434.47 kB JS / 8.93 kB CSS).
+
+**Limits of this slice (not claimed):** the notification is still an in-process async listener on `auditExecutor` — durable outbox rows, leases, retries and database reconciliation are 55.2, and SSE remains a refresh hint rather than a delivery guarantee. The notice is English, synthetic-clinic wording that has not been clinically reviewed; it is not triage, and the absence of a safety rule hit is not evidence that a message is safe. "Independent of model availability" is currently true by construction (no AI component exists); rounds 55–57 must keep it true and the tests here are the baseline for that. MySQL parity for the notice (no schema change) is unaffected.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

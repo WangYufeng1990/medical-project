@@ -18,8 +18,11 @@ import com.example.medical.module.chat.event.NewMessageEvent;
 import com.example.medical.module.chat.repository.MessageRepository;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatService {
@@ -118,9 +122,41 @@ public class ChatService {
         messageRepository.saveAndFlush(msg);
         chatConversationService.recordMessage(sender, receiver, msg.getId(), sentAt);
         MessageVO vo = MessageVO.fromEntity(msg);
-        eventPublisher.publishEvent(new NewMessageEvent(sender.id(), sender.type(),
+        notifyAfterCommit(new NewMessageEvent(sender.id(), sender.type(),
                 receiver.id(), receiver.type(), vo));
         return vo;
+    }
+
+    /**
+     * Delivers the "a message was stored" event once the transaction that stored it has
+     * committed (Round 54.4). Publishing inside the transaction let a send that rolled
+     * back afterwards still push {@code new_message} to the receiver — a notification
+     * for a message nobody could load.
+     */
+    private void notifyAfterCommit(NewMessageEvent event) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishQuietly(event);
+                }
+            });
+        } else {
+            publishQuietly(event);
+        }
+    }
+
+    /**
+     * A notification that fails is logged, not propagated: the message is already
+     * committed and the caller must not be told the send failed. The receiver's client
+     * reconciles from the database, which is the record of truth.
+     */
+    private void publishQuietly(NewMessageEvent event) {
+        try {
+            eventPublisher.publishEvent(event);
+        } catch (RuntimeException e) {
+            log.warn("Chat notification failed after commit; the message is stored", e);
+        }
     }
 
     /**

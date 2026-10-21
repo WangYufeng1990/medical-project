@@ -316,11 +316,14 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`). Ordering is `lastMessageTime` DESC then conversation id DESC, and `total` is the number of threads (Round 54.2) |
+| GET | `/safety-notice` | — | The fixed, versioned emergency/help notice shown in the chat (Round 54.4): `{version, emergencyNotice, responseNotice}`. Deterministic — no model, retriever or external service is consulted |
 | GET | `/unread-count` | — | Total unread message count (sidebar badge) |
 | GET | `/{partnerId}` | `?partnerType=STAFF\|PATIENT&page=1&size=50` | Paginated messages with partner (auto-read). `partnerType` required, invalid value → 400 |
 | POST | `/` | body: {receiverId, receiverType, content, clientMessageId?} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400. `clientMessageId` (≤100 chars) makes the send idempotent for that sender (Round 54.3) |
 
 `MessageVO` carries `senderType`/`receiverType` and the `clientMessageId` it was stored under (null when the client sent none); `ConversationVO` carries `partnerType`.
+
+**Notifications are after-commit hints (Round 54.4).** A stored message publishes `new_message` to the receiver's SSE stream only once its transaction has committed, so a rolled-back send never notifies; a notification that fails is logged and does not undo (or report as failed) the message that is already stored. Reconnecting clients reconcile from the database — the stream is a refresh hint, not the delivery record. Durable dispatch and reconciliation arrive with Round 55.2.
 
 **Idempotent sends (Round 54.3).** A `clientMessageId` is scoped to the sender's typed identity — a staff account and a patient may reuse the same string, and two staff accounts never collide. Repeating a send with the same key **and the same payload** (receiver type, receiver id, content) returns the message that already exists with `200`, without a second row, thread increment or `new_message` event; the same key with a **different payload** is `409`. Without a key every send is stored, which is the pre-54.3 behaviour. Concurrent repeats of one key resolve to a single message.
 
@@ -354,7 +357,7 @@ Server-Sent Events endpoint for real-time message push. `permitAll` in the secur
 
 ### Chat (Patient) — `/api/v1/patient/me/messages`
 
-Requires `PATIENT`. Same endpoints as staff chat (including `GET /unread-count`), except: `GET /{partnerId}` and `POST /` need no `partnerType`/`receiverType` — partners are always `STAFF` (patients only chat with staff).
+Requires `PATIENT`. Same endpoints as staff chat (including `GET /unread-count` and `GET /safety-notice` — the same fixed, versioned notice, served without any model involvement), except: `GET /{partnerId}` and `POST /` need no `partnerType`/`receiverType` — partners are always `STAFF` (patients only chat with staff).
 
 ### Dashboard — `/api/v1/dashboard`
 

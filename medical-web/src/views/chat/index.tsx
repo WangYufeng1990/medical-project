@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getConversations, getMessages, sendMessage, getSseTicket, PartyType } from '../../api/chat'
+import { getConversations, getMessages, getSafetyNotice, sendMessage, getSseTicket, PartyType } from '../../api/chat'
 import { useChatSse } from '../../hooks/useChatSse'
 import { parseJwt } from '../../utils/auth'
 import { tokenStore } from '../../utils/auth'
-import { ChatMessage, MessageVO, ConversationVO } from '../../types/entities'
+import { ChatMessage, MessageVO, ConversationVO, SafetyNoticeVO } from '../../types/entities'
 import { newClientMessageId } from '../../utils/chat'
 import { applySent, Attempt, attemptKey, markFailed, mergeHistory, withAttempt } from '../../utils/chatState'
 import styles from './style.module.css'
@@ -18,6 +18,7 @@ export default function Chat() {
   const [msgTotal, setMsgTotal] = useState(0)
   const [input, setInput] = useState('')
   const [sendError, setSendError] = useState('')
+  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO | null>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
   // Only the latest message load may write into the panel: switching
   // conversations while a page is still in flight used to let the abandoned
@@ -46,6 +47,9 @@ export default function Chat() {
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
+
+  // Fixed and versioned server-side: it must be there whether or not anything else is.
+  useEffect(() => { getSafetyNotice().then(setSafetyNotice).catch(() => setSafetyNotice(null)) }, [])
 
   // Auto-select partner from URL query params (e.g., /chat?partnerId=100&partnerName=James+Anderson&partnerType=PATIENT)
   useEffect(() => {
@@ -182,6 +186,12 @@ export default function Chat() {
         ) : (
           <>
             <div className={styles.chatHeader}>{selectedPartner.name}</div>
+            {safetyNotice && (
+              <div className={styles.safetyNotice} role="note">
+                <strong>{safetyNotice.emergencyNotice}</strong>
+                <span>{safetyNotice.responseNotice}</span>
+              </div>
+            )}
             <div className={styles.messageList} ref={messageListRef}>
               {hasMore && (
                 <div className={styles.loadMore}>

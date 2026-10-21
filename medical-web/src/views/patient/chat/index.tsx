@@ -4,7 +4,7 @@ import { useChatSse } from '../../../hooks/useChatSse'
 import { parseJwt } from '../../../utils/auth'
 import { tokenStore } from '../../../utils/auth'
 import { PageResult } from '../../../types/common'
-import { ChatMessage, MessageVO, ConversationVO, SseTicketVO } from '../../../types/entities'
+import { ChatMessage, MessageVO, ConversationVO, SafetyNoticeVO, SseTicketVO } from '../../../types/entities'
 import { newClientMessageId } from '../../../utils/chat'
 import { applySent, Attempt, attemptKey, markFailed, mergeHistory, withAttempt } from '../../../utils/chatState'
 import chatStyles from '../../chat/style.module.css'
@@ -34,6 +34,7 @@ export default function PatientChat() {
   const confirmedRef = useRef(new Set<number>())
   const self = { type: 'PATIENT' as const, id: currentUserId }
   const [sendError, setSendError] = useState('')
+  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO | null>(null)
 
   const loadConversations = useCallback(() => {
     http.get<PageResult<ConversationVO>>('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
@@ -41,6 +42,13 @@ export default function PatientChat() {
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
+
+  // The same fixed notice the staff portal shows; independent of any model.
+  useEffect(() => {
+    http.get<SafetyNoticeVO>('/patient/me/messages/safety-notice')
+      .then(setSafetyNotice)
+      .catch(() => setSafetyNotice(null))
+  }, [])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
     const seq = ++loadSeqRef.current
@@ -166,6 +174,12 @@ export default function PatientChat() {
         ) : (
           <>
             <div className={chatStyles.chatHeader}>{selectedPartner.name}</div>
+            {safetyNotice && (
+              <div className={chatStyles.safetyNotice} role="note">
+                <strong>{safetyNotice.emergencyNotice}</strong>
+                <span>{safetyNotice.responseNotice}</span>
+              </div>
+            )}
             <div className={chatStyles.messageList} ref={messageListRef}>
               {hasMore && (
                 <div className={chatStyles.loadMore}>

@@ -893,6 +893,13 @@ export interface MessageVO {
 /** A message as the chat views hold it: the optimistic copy also carries its send state. */
 export type ChatMessage = MessageVO & { status?: 'sending' | 'failed' }
 
+/** The fixed emergency/help notice (Round 54.4); `version` changes only with the wording. */
+export interface SafetyNoticeVO {
+  version: number
+  emergencyNotice: string
+  responseNotice: string
+}
+
 export interface ConversationVO {
   partnerId: number
   partnerType: 'STAFF' | 'PATIENT'

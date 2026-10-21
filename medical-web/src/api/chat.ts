@@ -1,6 +1,6 @@
 import { http } from './request'
 import { PageResult } from '../types/common'
-import { ConversationVO, MessageVO, SseTicketVO } from '../types/entities'
+import { ConversationVO, MessageVO, SafetyNoticeVO, SseTicketVO } from '../types/entities'
 
 export type PartyType = 'STAFF' | 'PATIENT'
 
@@ -9,4 +9,5 @@ export const getMessages = (partnerId: number, partnerType: PartyType, page = 1,
 export const sendMessage = (receiverId: number, receiverType: PartyType, content: string, clientMessageId: string) =>
   http.post<MessageVO>('/messages', { receiverId, receiverType, content, clientMessageId })
 export const getUnreadCount = () => http.get<number>('/messages/unread-count')
+export const getSafetyNotice = () => http.get<SafetyNoticeVO>('/messages/safety-notice')
 export const getSseTicket = () => http.post<SseTicketVO>('/chat/sse-ticket', null, { silent: true })
