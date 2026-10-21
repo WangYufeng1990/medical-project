@@ -316,7 +316,7 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 | Method | Path | Params | Description |
 |--------|------|--------|-------------|
 | GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`). Ordering is `lastMessageTime` DESC then conversation id DESC, and `total` is the number of threads (Round 54.2) |
-| GET | `/safety-notice` | — | The fixed, versioned emergency/help notice shown in the chat (Round 54.4): `{version, emergencyNotice, responseNotice}`. Deterministic — no model, retriever or external service is consulted |
+| GET | `/safety-notice` | — | The fixed, versioned emergency/help notice shown in the chat (Round 54.4): `{version, emergencyNotice, responseNotice}`. Deterministic — no model, retriever or external service is consulted. A client must keep showing a fixed emergency notice if this call fails, so the notice is never absent while the composer works |
 | GET | `/unread-count` | — | Total unread message count (sidebar badge) |
 | GET | `/{partnerId}` | `?partnerType=STAFF\|PATIENT&page=1&size=50` | Paginated messages with partner (auto-read). `partnerType` required, invalid value → 400 |
 | POST | `/` | body: {receiverId, receiverType, content, clientMessageId?} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400. `clientMessageId` (≤100 chars) makes the send idempotent for that sender (Round 54.3) |

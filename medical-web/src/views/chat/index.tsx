@@ -6,19 +6,19 @@ import { parseJwt } from '../../utils/auth'
 import { tokenStore } from '../../utils/auth'
 import { ChatMessage, MessageVO, ConversationVO, SafetyNoticeVO } from '../../types/entities'
 import { newClientMessageId } from '../../utils/chat'
-import { applySent, Attempt, attemptKey, markFailed, mergeHistory, withAttempt } from '../../utils/chatState'
+import { applySent, Attempt, attemptKey, emptyPanel, markFailed, nextPage, panelAfterPage, ThreadPanel, withAttempt } from '../../utils/chatState'
+import { displayedSafetyNotice, FALLBACK_SAFETY_NOTICE } from '../../utils/safetyNotice'
 import styles from './style.module.css'
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
   const [conversations, setConversations] = useState<ConversationVO[]>([])
   const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string; type: PartyType } | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [msgPage, setMsgPage] = useState(1)
-  const [msgTotal, setMsgTotal] = useState(0)
+  const [panel, setPanel] = useState<ThreadPanel>(emptyPanel())
+  const messages = panel.messages
   const [input, setInput] = useState('')
   const [sendError, setSendError] = useState('')
-  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO | null>(null)
+  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO>(FALLBACK_SAFETY_NOTICE)
   const messageListRef = useRef<HTMLDivElement>(null)
   // Only the latest message load may write into the panel: switching
   // conversations while a page is still in flight used to let the abandoned
@@ -49,7 +49,7 @@ export default function Chat() {
   useEffect(() => { loadConversations() }, [loadConversations])
 
   // Fixed and versioned server-side: it must be there whether or not anything else is.
-  useEffect(() => { getSafetyNotice().then(setSafetyNotice).catch(() => setSafetyNotice(null)) }, [])
+  useEffect(() => { getSafetyNotice().then(n => setSafetyNotice(displayedSafetyNotice(n))).catch(() => {}) }, [])
 
   // Auto-select partner from URL query params (e.g., /chat?partnerId=100&partnerName=James+Anderson&partnerType=PATIENT)
   useEffect(() => {
@@ -67,17 +67,16 @@ export default function Chat() {
     return getMessages(partnerId, partnerType, page, 50).then(r => {
       if (seq !== loadSeqRef.current) return // a newer load owns the panel now
       const batch = (r.records ?? []).reverse() // API returns DESC, reverse to ASC for display
-      setMessages(prev => page === 1
-        ? mergeHistory(batch, prev, confirmedRef.current) // keep local attempts the snapshot cannot have
-        : [...batch, ...prev])
-      setMsgTotal(r.total ?? 0)
+      // The page the panel reports follows what it now holds, so a page-one refresh
+      // after a send cannot leave "load earlier" asking for the page after the one
+      // it replaced.
+      setPanel(prev => panelAfterPage(prev, batch, page, r.total ?? 0, confirmedRef.current))
     })
   }, [])
 
   const selectPartner = (p: ConversationVO) => {
     setSelectedPartner({ id: p.partnerId, name: p.partnerName, type: p.partnerType })
-    setMsgPage(1)
-    setMessages([])
+    setPanel(emptyPanel())
     loadMessages(p.partnerId, p.partnerType, 1).then(() => loadConversations())
   }
 
@@ -92,7 +91,7 @@ export default function Chat() {
     confirmedRef.current.add(sent.id)
     const selected = selectionRef.current
     const belongsHere = selected != null && selected.id === sent.receiverId && selected.type === sent.receiverType
-    setMessages(prev => applySent(prev, self, sent0.clientMessageId, sent, belongsHere))
+    setPanel(prev => ({ ...prev, messages: applySent(prev.messages, self, sent0.clientMessageId, sent, belongsHere) }))
     setSendError('')
     loadConversations()
     // The server copy is the truth for this thread; the in-flight snapshot guard
@@ -101,13 +100,13 @@ export default function Chat() {
   }
 
   const deliver = async (attempt: Attempt) => {
-    setMessages(prev => withAttempt(prev, self, attempt))
+    setPanel(prev => ({ ...prev, messages: withAttempt(prev.messages, self, attempt) }))
     scrollToBottom()
     try {
       settle(attempt, await sendMessage(attempt.partnerId, attempt.partnerType, attempt.content,
         attempt.clientMessageId))
     } catch {
-      setMessages(prev => markFailed(prev, self, attempt.clientMessageId))
+      setPanel(prev => ({ ...prev, messages: markFailed(prev.messages, self, attempt.clientMessageId) }))
       setSendError('Message could not be sent. Retry from the message, or copy the text and try again.')
     }
   }
@@ -136,7 +135,9 @@ export default function Chat() {
     if (selectedPartner && (
       (msg.senderType === selectedPartner.type && msg.senderId === selectedPartner.id) ||
       (msg.receiverType === selectedPartner.type && msg.receiverId === selectedPartner.id))) {
-      setMessages(prev => { if (prev.find(m => m.id === msg.id)) return prev; return [...prev, msg] })
+      setPanel(prev => prev.messages.find(m => m.id === msg.id)
+        ? prev
+        : { ...prev, messages: [...prev.messages, msg] })
       setTimeout(() => {
         messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
       }, 50)
@@ -150,7 +151,7 @@ export default function Chat() {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight
   }, [messages.length])
 
-  const hasMore = messages.length < msgTotal
+  const hasMore = panel.messages.length < panel.total
 
   const formatTime = (t: string) => {
     if (!t) return ''
@@ -186,16 +187,14 @@ export default function Chat() {
         ) : (
           <>
             <div className={styles.chatHeader}>{selectedPartner.name}</div>
-            {safetyNotice && (
-              <div className={styles.safetyNotice} role="note">
-                <strong>{safetyNotice.emergencyNotice}</strong>
-                <span>{safetyNotice.responseNotice}</span>
-              </div>
-            )}
+            <div className={styles.safetyNotice} role="note">
+              <strong>{safetyNotice.emergencyNotice}</strong>
+              <span>{safetyNotice.responseNotice}</span>
+            </div>
             <div className={styles.messageList} ref={messageListRef}>
               {hasMore && (
                 <div className={styles.loadMore}>
-                  <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, selectedPartner.type, np) }}>Load earlier</button>
+                  <button onClick={() => loadMessages(selectedPartner.id, selectedPartner.type, nextPage(panel))}>Load earlier</button>
                 </div>
               )}
               {messages.map(m => {

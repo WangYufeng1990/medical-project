@@ -12,6 +12,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -148,6 +150,34 @@ class ChatCommitEventIntegrationTest extends IntegrationTestSupport {
 
         assertEquals(1, visibleElsewhere.get(),
                 "the new-message event was delivered before the message was committed");
+    }
+
+    @Test
+    void aSendRolledBackAfterTheNotificationWasRegistered_shouldNotNotify() throws Exception {
+        // The notification is registered before the transaction ends, so the property
+        // that matters is what happens when the commit itself does not happen: the
+        // callback must not run. The stub marks the transaction rollback-only *after*
+        // the real thread write, i.e. once the synchronization is already registered.
+        doAnswer(invocation -> {
+            Object result = invocation.callRealMethod();
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return result;
+        }).when(conversationService).recordMessage(any(), any(), any(), any());
+        long before = messagesBetween(2L, "STAFF", 100L, "PATIENT");
+
+        mockMvc.perform(post("/api/v1/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "receiverId", 100, "receiverType", "PATIENT",
+                                "content", "54.4 rollback after registration",
+                                "clientMessageId", "rollback-2")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().is5xxServerError());
+
+        assertEquals(before, messagesBetween(2L, "STAFF", 100L, "PATIENT"),
+                "a rollback-only transaction stores nothing");
+        assertTrue(publishedMessages.isEmpty(),
+                "the registered after-commit callback must not run on rollback: " + publishedMessages);
     }
 
     @Test

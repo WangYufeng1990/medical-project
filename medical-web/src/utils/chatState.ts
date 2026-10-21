@@ -87,6 +87,32 @@ export function applySent(messages: ChatMessage[], self: Self, clientMessageId: 
  * snapshot does have is dropped (and forgotten), an id it lacks is kept, so an older
  * snapshot arriving late cannot wipe a message the user already saw go through.
  */
+/** What the open thread currently holds: its messages, the page they represent, and the total. */
+export interface ThreadPanel {
+  messages: ChatMessage[]
+  page: number
+  total: number
+}
+
+export const emptyPanel = (): ThreadPanel => ({ messages: [], page: 0, total: 0 })
+
+/**
+ * The panel after a history page arrives. The page the panel reports is the page it
+ * actually holds: when a send refreshes page one, that refresh *replaces* the older
+ * pages, so the page counter must go back to one — otherwise "load earlier" asks for
+ * page three next and page two is never loaded (Round 54.3 review).
+ */
+export function panelAfterPage(panel: ThreadPanel, batch: MessageVO[], requestedPage: number,
+                               total: number, confirmedIds: Set<number>): ThreadPanel {
+  const messages = requestedPage === 1
+    ? mergeHistory(batch, panel.messages, confirmedIds)
+    : [...batch, ...panel.messages]
+  return { messages, page: requestedPage, total }
+}
+
+/** The page "load earlier" asks for next: always one after what the panel holds. */
+export const nextPage = (panel: ThreadPanel) => panel.page + 1
+
 export function mergeHistory(batch: MessageVO[], previous: ChatMessage[],
                              confirmedIds: Set<number>): ChatMessage[] {
   const snapshotIds = new Set(batch.map(m => m.id))

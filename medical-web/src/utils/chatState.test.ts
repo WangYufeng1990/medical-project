@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { MessageVO } from '../types/entities'
-import { applySent, attemptKey, markFailed, mergeHistory, withAttempt } from './chatState'
+import {
+  applySent, attemptKey, emptyPanel, markFailed, mergeHistory, nextPage, panelAfterPage, withAttempt,
+} from './chatState'
 
 const STAFF_SELF = { type: 'STAFF' as const, id: 2 }
 
@@ -139,5 +141,38 @@ describe('history pages and local state', () => {
 
     expect(merged.map(m => m.id)).toEqual([900])
     expect(confirmed.has(900)).toBe(false)
+  })
+})
+
+describe('paging after a send', () => {
+  it('resets the panel to page one, so load earlier asks for page two again', () => {
+    // Open a thread, load page two, then send: the refresh replaces page one and with
+    // it the older page, so the counter must follow the content.
+    let panel = panelAfterPage(emptyPanel(), [stored(800), stored(801)], 1, 120, new Set())
+    panel = panelAfterPage(panel, [stored(700), stored(701)], 2, 120, new Set())
+    expect(panel.page).toBe(2)
+    expect(panel.messages.map(m => m.id)).toEqual([700, 701, 800, 801])
+
+    panel = panelAfterPage(panel, [stored(802), stored(803)], 1, 122, new Set())
+
+    expect(panel.page).toBe(1)
+    expect(panel.messages.map(m => m.id)).toEqual([802, 803])
+    expect(nextPage(panel)).toBe(2)
+  })
+
+  it('keeps the page it was given when an older page is prepended', () => {
+    const panel = panelAfterPage(emptyPanel(), [stored(700)], 2, 60, new Set())
+    expect(panel.page).toBe(2)
+    expect(nextPage(panel)).toBe(3)
+  })
+
+  it('still merges a failed attempt into a page-one refresh', () => {
+    let panel = { ...emptyPanel(), messages: withAttempt([], STAFF_SELF, attempt('a')) }
+    panel = { ...panel, messages: markFailed(panel.messages, STAFF_SELF, 'a') }
+
+    panel = panelAfterPage(panel, [stored(800)], 1, 1, new Set())
+
+    expect(panel.messages).toHaveLength(2)
+    expect(panel.messages[1].status).toBe('failed')
   })
 })

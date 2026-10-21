@@ -6,15 +6,15 @@ import { tokenStore } from '../../../utils/auth'
 import { PageResult } from '../../../types/common'
 import { ChatMessage, MessageVO, ConversationVO, SafetyNoticeVO, SseTicketVO } from '../../../types/entities'
 import { newClientMessageId } from '../../../utils/chat'
-import { applySent, Attempt, attemptKey, markFailed, mergeHistory, withAttempt } from '../../../utils/chatState'
+import { applySent, Attempt, attemptKey, emptyPanel, markFailed, nextPage, panelAfterPage, ThreadPanel, withAttempt } from '../../../utils/chatState'
+import { displayedSafetyNotice, FALLBACK_SAFETY_NOTICE } from '../../../utils/safetyNotice'
 import chatStyles from '../../chat/style.module.css'
 
 export default function PatientChat() {
   const [conversations, setConversations] = useState<ConversationVO[]>([])
   const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string } | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [msgPage, setMsgPage] = useState(1)
-  const [msgTotal, setMsgTotal] = useState(0)
+  const [panel, setPanel] = useState<ThreadPanel>(emptyPanel())
+  const messages = panel.messages
   const [input, setInput] = useState('')
   const messageListRef = useRef<HTMLDivElement>(null)
   // Same guard as the staff chat: only the newest load may write into the panel,
@@ -34,7 +34,7 @@ export default function PatientChat() {
   const confirmedRef = useRef(new Set<number>())
   const self = { type: 'PATIENT' as const, id: currentUserId }
   const [sendError, setSendError] = useState('')
-  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO | null>(null)
+  const [safetyNotice, setSafetyNotice] = useState<SafetyNoticeVO>(FALLBACK_SAFETY_NOTICE)
 
   const loadConversations = useCallback(() => {
     http.get<PageResult<ConversationVO>>('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
@@ -46,8 +46,8 @@ export default function PatientChat() {
   // The same fixed notice the staff portal shows; independent of any model.
   useEffect(() => {
     http.get<SafetyNoticeVO>('/patient/me/messages/safety-notice')
-      .then(setSafetyNotice)
-      .catch(() => setSafetyNotice(null))
+      .then(n => setSafetyNotice(displayedSafetyNotice(n)))
+      .catch(() => {})
   }, [])
 
   const loadMessages = useCallback((partnerId: number, page: number) => {
@@ -56,17 +56,13 @@ export default function PatientChat() {
       .then(r => {
         if (seq !== loadSeqRef.current) return // a newer load owns the panel now
         const batch = (r.records ?? []).reverse()
-        setMessages(prev => page === 1
-          ? mergeHistory(batch, prev, confirmedRef.current)
-          : [...batch, ...prev])
-        setMsgTotal(r.total ?? 0)
+        setPanel(prev => panelAfterPage(prev, batch, page, r.total ?? 0, confirmedRef.current))
       })
   }, [])
 
   const selectPartner = (p: { partnerId: number; partnerName: string }) => {
     setSelectedPartner({ id: p.partnerId, name: p.partnerName })
-    setMsgPage(1)
-    setMessages([])
+    setPanel(emptyPanel())
     loadMessages(p.partnerId, 1).then(() => loadConversations())
   }
 
@@ -81,21 +77,21 @@ export default function PatientChat() {
     confirmedRef.current.add(sent.id)
     const selected = selectionRef.current
     const belongsHere = selected != null && selected.id === sent.receiverId && sent.receiverType === 'STAFF'
-    setMessages(prev => applySent(prev, self, attempt.clientMessageId, sent, belongsHere))
+    setPanel(prev => ({ ...prev, messages: applySent(prev.messages, self, attempt.clientMessageId, sent, belongsHere) }))
     setSendError('')
     loadConversations()
     if (belongsHere) void loadMessages(attempt.partnerId, 1)
   }
 
   const deliver = async (attempt: Attempt) => {
-    setMessages(prev => withAttempt(prev, self, attempt))
+    setPanel(prev => ({ ...prev, messages: withAttempt(prev.messages, self, attempt) }))
     scrollToBottom()
     try {
       const sent = await http.post<MessageVO>('/patient/me/messages',
         { receiverId: attempt.partnerId, content: attempt.content, clientMessageId: attempt.clientMessageId })
       settle(attempt, sent)
     } catch {
-      setMessages(prev => markFailed(prev, self, attempt.clientMessageId))
+      setPanel(prev => ({ ...prev, messages: markFailed(prev.messages, self, attempt.clientMessageId) }))
       setSendError('Message could not be sent. Retry from the message, or copy the text and try again.')
     }
   }
@@ -124,7 +120,9 @@ export default function PatientChat() {
     if (selectedPartner && (
       (msg.senderType === 'STAFF' && msg.senderId === selectedPartner.id) ||
       (msg.receiverType === 'STAFF' && msg.receiverId === selectedPartner.id))) {
-      setMessages(prev => { if (prev.find(m => m.id === msg.id)) return prev; return [...prev, msg] })
+      setPanel(prev => prev.messages.find(m => m.id === msg.id)
+        ? prev
+        : { ...prev, messages: [...prev.messages, msg] })
       setTimeout(() => {
         messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
       }, 50)
@@ -138,7 +136,7 @@ export default function PatientChat() {
     if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight
   }, [messages.length])
 
-  const hasMore = messages.length < msgTotal
+  const hasMore = panel.messages.length < panel.total
 
   const formatTime = (t: string) => {
     if (!t) return ''
@@ -174,16 +172,14 @@ export default function PatientChat() {
         ) : (
           <>
             <div className={chatStyles.chatHeader}>{selectedPartner.name}</div>
-            {safetyNotice && (
-              <div className={chatStyles.safetyNotice} role="note">
-                <strong>{safetyNotice.emergencyNotice}</strong>
-                <span>{safetyNotice.responseNotice}</span>
-              </div>
-            )}
+            <div className={chatStyles.safetyNotice} role="note">
+              <strong>{safetyNotice.emergencyNotice}</strong>
+              <span>{safetyNotice.responseNotice}</span>
+            </div>
             <div className={chatStyles.messageList} ref={messageListRef}>
               {hasMore && (
                 <div className={chatStyles.loadMore}>
-                  <button onClick={() => { const np = msgPage + 1; setMsgPage(np); loadMessages(selectedPartner.id, np) }}>Load earlier</button>
+                  <button onClick={() => loadMessages(selectedPartner.id, nextPage(panel))}>Load earlier</button>
                 </div>
               )}
               {messages.map(m => {
