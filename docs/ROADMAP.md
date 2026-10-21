@@ -4881,7 +4881,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after two review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (20 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 54 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
+| 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / Pending | agent_run atomic intake; claim/lease/attempt/deadline; bounded backoff; separate executor; reconcile expired claims | AgentDispatchIntegrationTest: Python down does not break message send; restart replays pending work; duplicate dispatch produces one logical result |
 | 55.3 Service/task authorization | P0 / Pending | Directional credentials, opaque capability digests, generations, current account check and internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked access and stale workers rejected; capability not persisted in graph state |
 | 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
@@ -4938,6 +4938,20 @@ Two remaining cross-language divergences were re-checked; both held, and both no
 **On the reviewer's caveat.** The keyword guard only notices a schema using a keyword the validator does not implement; it cannot notice a semantic difference such as the length counting above. That is why the second and third review rounds both produced fixtures rather than only guards, and why this record does not claim a JSON Schema implementation: the validator covers the keywords and the semantics the contract uses **today**, the fixtures are the evidence that both sides agree on them, and a mature validator remains the right long-term replacement once the build environment can fetch one.
 
 **Verification (actually run).** Before: the Python timestamp probe accepted `0`, `"2026-10-21"` and `"2026-10-21T12:00:00"`; the Java side failed the new emoji fixture with `$.content: longer than 4000 characters`. After: `pytest` → **54 passed** (20 fixtures, 0 mismatches in a direct model-vs-fixture sweep); `ruff check .` → clean; `mypy` (strict) → no issues in 12 source files; `mvn clean verify` → **313 tests, 0 failures, BUILD SUCCESS**; `LayeringGuardTest` 4/4. The generated schemas did not change (`datetime` still renders as `string`/`date-time`), so the committed files and their drift test are untouched.
+
+### Round 55.1 review fixes (fourth pass, 2026-10-21)
+
+**P2 — the timestamp parser did not validate the offset range.** The pattern accepted any two digits for the offset hours and minutes, and `datetime.fromisoformat()` then *normalised* an impossible one rather than refusing it: `+02:99` became `+03:39`. Java's `OffsetDateTime.parse` refuses `+02:99`, `+19:00`, `+18:01` and `-19:00`, and also refuses the colon-less `+0200`, so Python accepted values that meant something different on each side.
+
+Fixed by validating the offset the way Java does: minutes must be 00–59, hours at most 18, and 18 only as `18:00`; the colon in `±HH:MM` is now required, because Java rejects `+0200`. The groups are captured while matching so the check happens before any parsing.
+
+**Red evidence (probed before the fix):** Python accepted `+02:99` (as `+03:39`), `+19:00`, `+18:01`, `-19:00` and `+0200`; Java refused all five, accepted `±18:00` and refused `+18:01`. After the fix the two runtimes agree on that whole matrix, including `±18:00` as the boundary.
+
+**Fixtures added (24 total):** `valid.offset-boundary-timestamp` (`+18:00`), `invalid-offset-minutes-timestamp` (`+02:99`), `invalid-offset-too-large-timestamp` (`+19:00`), `invalid-offset-no-colon-timestamp` (`+0200`). The Python contract test now walks the accepted/rejected matrix explicitly, and a direct sweep of all 24 fixtures against the models reports **0 mismatches**.
+
+**Verification (actually run):** `pytest` → **58 passed**; `ruff check .` → clean; `mypy` (strict) → no issues in 12 source files; `mvn clean verify` → **313 tests, 0 failures, BUILD SUCCESS**; the generated schemas are unchanged.
+
+**Still not claimed:** the offset range is now checked, but the contract remains "the spellings both runtimes parse" rather than a full ISO-8601 profile — forms neither side produces (`+02`, `+02:00:30`) are not accepted and not claimed. The validator is still fixture-backed, not a JSON Schema implementation.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

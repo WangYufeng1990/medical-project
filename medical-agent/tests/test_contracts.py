@@ -130,8 +130,13 @@ def test_a_timestamp_must_carry_a_timezone_and_be_iso_8601() -> None:
     # same inputs (Round 55.1 review).
     payload = json.loads((FIXTURES / "run-status.valid.json").read_text(encoding="utf-8"))
     valid = ["2026-10-21T12:00:00Z", "2026-10-21T12:00:00z",
-             "2026-10-21T12:00:00+02:00", "2026-10-21T12:00:00.123456Z"]
-    refused = [0, "2026-10-21", "2026-10-21T12:00:00", "2026-10-21 12:00:00Z"]
+             "2026-10-21T12:00:00+02:00", "2026-10-21T12:00:00.123456Z",
+             "2026-10-21T12:00:00+18:00", "2026-10-21T12:00:00-18:00"]
+    refused = [0, "2026-10-21", "2026-10-21T12:00:00", "2026-10-21 12:00:00Z",
+               # the offset Java can parse: minutes 00-59, at most 18:00, colon required
+               "2026-10-21T12:00:00+02:99", "2026-10-21T12:00:00+19:00",
+               "2026-10-21T12:00:00+18:01", "2026-10-21T12:00:00-19:00",
+               "2026-10-21T12:00:00+0200"]
 
     for value in valid:
         parsed = RunStatusResponse.model_validate_json(

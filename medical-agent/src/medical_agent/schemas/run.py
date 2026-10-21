@@ -28,8 +28,13 @@ StrictRevision = Annotated[int, Field(strict=True, ge=1)]
 StrictCounter = Annotated[int, Field(strict=True, ge=0)]
 
 
+# The offset needs its colon: Java's OffsetDateTime refuses "+0200", so accepting it here
+# would be another input Python takes and Java rejects. The groups are used to range-check
+# the offset, because datetime.fromisoformat() silently normalises an out-of-range one
+# (+02:99 becomes +03:39).
 _WIRE_TIMESTAMP = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:[Zz]|[+-]\d{2}:?\d{2})$"
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?"
+    r"(?:[Zz]|(?P<sign>[+-])(?P<hours>\d{2}):(?P<minutes>\d{2}))$"
 )
 
 
@@ -48,10 +53,18 @@ def _wire_timestamp(value: Any) -> Any:
         return value
     if not isinstance(value, str):
         raise ValueError("a timestamp must be an ISO-8601 string with a timezone")
-    if not _WIRE_TIMESTAMP.match(value):
+    match = _WIRE_TIMESTAMP.match(value)
+    if match is None:
         raise ValueError(
             "a timestamp must be an ISO-8601 date-time with an offset, e.g. 2026-10-21T12:00:00Z"
         )
+    if match.group("hours") is not None:
+        hours, minutes = int(match.group("hours")), int(match.group("minutes"))
+        # The range Java enforces: minutes 00-59, and at most 18:00 (18 only as 18:00).
+        if minutes > 59:
+            raise ValueError("a timestamp offset cannot have minutes above 59")
+        if hours > 18 or (hours == 18 and minutes != 0):
+            raise ValueError("a timestamp offset must be within +/-18:00")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00").replace("z", "+00:00"))
     except ValueError as exc:  # pragma: no cover - the pattern already bounds the shape
