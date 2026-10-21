@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "description": "A start or continue request from the Java dispatcher.\n\nThe patient identity comes from Java's own run context; the service never takes\nit from anything a model produced (the authorization contract keeps that true in\n55.3).",
+  "properties": {
+    "content": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Content",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "conversation_revision": {
+      "minimum": 1,
+      "title": "Conversation Revision",
+      "type": "integer"
+    },
+    "locale": {
+      "default": "en",
+      "maxLength": 16,
+      "minLength": 2,
+      "title": "Locale",
+      "type": "string"
+    },
+    "message_id": {
+      "exclusiveMinimum": 0,
+      "title": "Message Id",
+      "type": "integer"
+    },
+    "patient_id": {
+      "exclusiveMinimum": 0,
+      "title": "Patient Id",
+      "type": "integer"
+    },
+    "request_id": {
+      "maxLength": 64,
+      "minLength": 8,
+      "title": "Request Id",
+      "type": "string"
+    },
+    "run_id": {
+      "exclusiveMinimum": 0,
+      "title": "Run Id",
+      "type": "integer"
+    },
+    "sender_type": {
+      "const": "PATIENT",
+      "default": "PATIENT",
+      "title": "Sender Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "message_id",
+    "patient_id",
+    "conversation_revision",
+    "content",
+    "request_id"
+  ],
+  "title": "RunStartRequest",
+  "type": "object"
+}

@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "RunError": {
+      "additionalProperties": false,
+      "description": "A machine-readable reason a run did not produce a draft.",
+      "properties": {
+        "code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "RunError",
+      "type": "object"
+    },
+    "RunState": {
+      "description": "The run path and its exceptional terminals.\n\n``WAITING_REVIEW`` and ``COMPLETED`` are distinct on purpose: a review decision\nand the run that produced the draft finish separately (Round 57).",
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "WAITING_REVIEW",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "SUPERSEDED"
+      ],
+      "title": "RunState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What Java may learn about a run without asking for model output.",
+  "properties": {
+    "contract_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "run_id": {
+      "exclusiveMinimum": 0,
+      "title": "Run Id",
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/RunState"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "state",
+    "revision",
+    "updated_at"
+  ],
+  "title": "RunStatusResponse",
+  "type": "object"
+}

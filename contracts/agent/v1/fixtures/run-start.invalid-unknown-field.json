@@ -1,0 +1,11 @@
+{
+  "contract_version": "v1",
+  "run_id": 42,
+  "message_id": 9002,
+  "patient_id": 100,
+  "conversation_revision": 12,
+  "sender_type": "PATIENT",
+  "content": "A field the contract does not define must be refused, not ignored.",
+  "request_id": "6f2b1c9e-run-43",
+  "model_tools": ["write_prescription"]
+}

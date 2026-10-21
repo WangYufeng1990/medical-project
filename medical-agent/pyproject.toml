@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medical-agent"
+version = "0.1.0"
+description = "AI-assisted patient messaging agent for the medical practice management system"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.159,<1",
+    "uvicorn>=0.54,<1",
+    "pydantic>=2.14,<3",
+    "pydantic-settings>=2.16,<3",
+    "httpx>=0.28,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.17,<1",
+    "mypy>=2.4,<3",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+mypy_path = "src"

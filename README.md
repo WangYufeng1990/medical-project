@@ -306,7 +306,7 @@ app:
 ## Checks before committing
 
 ```bash
-# Backend — 204 tests plus the build-environment guardrails (enforcer).
+# Backend — the full suite plus the build-environment guardrails (enforcer).
 # Use `clean`: Surefire never deletes old reports, so `target/surefire-reports`
 # keeps counting test classes that no longer exist.
 cd medical-server && mvn clean verify
@@ -319,6 +319,9 @@ cd medical-web && npm test
 
 # Production bundle
 cd medical-web && npm run build
+
+# AI agent service (Python 3.12; the default `python3` on some machines is older)
+cd medical-agent && .venv/bin/python -m pytest && .venv/bin/ruff check . && .venv/bin/mypy
 ```
 
 `npm run check` is the pair of `lint` + `typecheck`; both run standalone too.
@@ -328,6 +331,46 @@ pure functions so they can be tested without a DOM. The
 backend guardrails (`maven-enforcer-plugin`) check the Maven/Java version,
 duplicate POM dependency versions and dependency convergence — the last one is
 why `hapi-fhir-base` is pinned in `dependencyManagement`.
+
+## AI agent service (`medical-agent/`)
+
+Rounds 55–59 add an AI-assisted patient messaging agent beside the Spring Boot
+application: FastAPI + Pydantic now, LangGraph and DeepSeek from Round 56. Spring
+Boot stays the authority for authentication, authorization, business data, message
+persistence and publication; the agent service receives no database credentials.
+
+Round 55.1 ships the skeleton only — configuration, the versioned wire contract, a
+deterministic mock provider and health endpoints. There are **no run endpoints yet**;
+they arrive with the durable dispatcher (55.2), and nothing in the service answers a
+patient.
+
+```bash
+cd medical-agent
+python3.12 -m venv .venv                       # 3.12 is required
+.venv/bin/pip install -r requirements.lock     # the pinned environment
+
+# Checks
+.venv/bin/python -m pytest                     # 32 tests
+.venv/bin/ruff check .                         # lint
+.venv/bin/mypy                                 # strict types over src/
+
+# Run it locally (the inbound token is required; nothing starts without it)
+MEDICAL_AGENT_INBOUND_TOKEN=dev-token PYTHONPATH=src \
+  .venv/bin/uvicorn medical_agent.api.main:app --port 8090
+curl -s localhost:8090/health/live             # {"status":"ok",...}
+curl -s localhost:8090/health/ready            # provider + contract version
+
+# Or through Compose (single service for now)
+MEDICAL_AGENT_INBOUND_TOKEN=dev-token docker compose up --build medical-agent
+```
+
+The contract lives in `contracts/agent/v1/`: JSON Schemas generated from the Pydantic
+models plus fixtures both languages read. After changing a model, regenerate and let
+the drift tests run:
+
+```bash
+cd medical-agent && .venv/bin/python scripts/export_contracts.py
+```
 
 ## Documentation
 

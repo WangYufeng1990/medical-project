@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: Round 54 (54.1–54.4) implemented and verified (2026-10-19 → 2026-10-21); Rounds 55–59 remain Pending. No implementation or benchmark result is claimed beyond Round 54.**
+**Status: Round 54 complete (2026-10-19 → 2026-10-21) and Round 55.1 done (2026-10-21); 55.2–55.4 and Rounds 56–59 remain Pending. No implementation or benchmark result is claimed beyond 55.1.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -4869,24 +4869,47 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 **2. P2 — a failed notice request removed the notice entirely (54.4).** Both views started at `null`, set `null` again on failure and requested once, so a timeout took the emergency text off screen while the composer kept working. `FALLBACK_SAFETY_NOTICE` (version `0`, fixed in the client) is now the initial state and what remains if the request fails; `displayedSafetyNotice` picks the server's reviewed wording once it arrives, and the banner renders unconditionally when a conversation is open. Tests in `safetyNotice.test.ts` cover the three display states — in flight, rejected, resolved.
 
-**3. Reviewer's non-blocking suggestion, implemented.** `aSendRolledBackAfterTheNotificationWasRegistered_shouldNotNotify` marks the transaction rollback-only *after* the real thread write, i.e. once the after-commit callback is already registered, and asserts that nothing is stored and nothing is published — the "registered but never committed" case the earlier rollback test stopped short of.
+**3. Reviewer's non-blocking suggestion, implemented.** `aRollbackOnlySend_shouldNotRunTheRegisteredCallback` runs the real thread write, then marks the transaction rollback-only, after which the send registers its after-commit callback; the commit then finds a rollback-only transaction, and the test asserts that nothing is stored and nothing is published — the "callback registered, commit never happened" case the earlier rollback test stopped short of. (The order is thread write → rollback-only → registration → rollback; an earlier wording of this record said the marking came after the registration, which was wrong. Round 54 review.)
 
 **Verification (actually run):** `mvn clean verify` → **305 tests, 0 failures, 0 errors, BUILD SUCCESS** (304 + 1); `LayeringGuardTest` 4/4 with no allowlist. Frontend: `npm test` → **16/16** (13 chat-state + 3 notice), `npm run check` → 0 errors (the same 4 pre-existing warnings), `npm run build` → built (435.19 kB JS / 8.93 kB CSS).
 
 **Still not claimed:** the paging and notice tests exercise the state helpers, not the rendered components — that boundary is unchanged. Round 54 is complete on this evidence, but acceptance remains the reviewer's call.
 
-## Round 55 — Python service and reliable execution (Pending)
+## Round 55 — Python service and reliable execution (In progress: 55.1 Done, 55.2–55.4 Pending)
 
 **Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 55.1 Service and contract skeleton | P0 / Pending | FastAPI, configuration, Pydantic, Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied; missing required credentials fail; Java/Python agree on fixtures |
+| 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21) | FastAPI, configuration, Pydantic, Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied; missing required credentials fail; Java/Python agree on fixtures — 32 pytest + 4 Java contract tests, ruff and mypy --strict clean (see 55.1 record below) |
 | 55.2 Durable dispatcher | P0 / Pending | agent_run atomic intake; claim/lease/attempt/deadline; bounded backoff; separate executor; reconcile expired claims | AgentDispatchIntegrationTest: Python down does not break message send; restart replays pending work; duplicate dispatch produces one logical result |
 | 55.3 Service/task authorization | P0 / Pending | Directional credentials, opaque capability digests, generations, current account check and internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked access and stale workers rejected; capability not persisted in graph state |
 | 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
+
+### Round 55.1 — Service and contract skeleton (Done, 2026-10-21)
+
+**Baseline:** `fea06c68` (Round 54 accepted), clean tree, backend **305 tests**. Toolchain verified first: `python3` on this machine is 3.9, `python3.12` is 3.12.7, no `uv`/`poetry`, PyPI reachable, Docker CLI present but **no daemon running**.
+
+**What was built** (`medical-agent/`, Python 3.12):
+
+| Piece | What it does |
+|---|---|
+| `pyproject.toml` + `requirements.lock` | Project metadata, dependency ranges, tool config (pytest/ruff/mypy) and the pinned environment (31 packages) the tests and the image share |
+| `src/medical_agent/config.py` | `Settings` from `MEDICAL_AGENT_*` env: inbound token **required**, DeepSeek key required when `provider=deepseek`, positive timeout; secrets are `SecretStr`, so a token cannot leak through a log line |
+| `src/medical_agent/schemas/run.py` | The versioned wire contract: `RunStartRequest`, `RunStatusResponse`, `RunError`, `ErrorResponse`, `RunState` (7 states) — `extra="forbid"` and `contract_version` pinned to `v1` |
+| `src/medical_agent/contracts.py` + `scripts/export_contracts.py` | The committed JSON Schemas under `contracts/agent/v1/` are **generated from the models**; a test fails when they drift |
+| `contracts/agent/v1/fixtures/` | Six cross-language fixtures: three valid, three deliberately invalid (missing required, unknown field, bad enum) |
+| `src/medical_agent/providers/` | `Provider` protocol, `ProviderRequest/Response`, deterministic `MockProvider`, and a factory that **refuses** `deepseek` with a clear message until 56.1 instead of silently falling back to the mock |
+| `src/medical_agent/api/app.py` | `GET /health/live` (process only) and `GET /health/ready` (provider + contract version, `503` when the configured provider cannot be built) |
+| `Dockerfile`, `compose.yaml` | A single-service Compose definition with a required inbound token and a liveness healthcheck; MySQL/PostgreSQL join in the rounds that use them |
+
+**Tests (32 pytest + 4 Java).** `test_config.py` (10): missing token fails, DeepSeek without a key fails, DeepSeek with a key is valid, unknown provider fails, non-positive timeout fails, the token is not echoed. `test_contracts.py` (8 functions / 12 cases): committed schemas equal the generated ones, every schema forbids unknown fields, valid fixtures parse, invalid fixtures are refused, the status fixture uses a contract state, the start fixture carries no model-supplied identity. `test_health.py` (3): liveness ignores the provider, readiness reports provider + contract, readiness is `503` for a provider this round cannot build. `test_provider.py` (7): the mock is deterministic and free, request bounds, factory selection and the DeepSeek refusal. Java `AgentContractFixtureTest` (4): reads the same schemas and fixtures, requires `additionalProperties: false` and a `required` set, accepts the valid ones, rejects the invalid ones.
+
+**Verification (actually run):** `.venv/bin/python -m pytest` → **32 passed**; `ruff check .` → clean; `mypy` (strict, `files = ["src"]`) → "no issues found in 12 source files"; `mvn clean verify` → **309 tests, 0 failures, BUILD SUCCESS** (305 + 4), `LayeringGuardTest` 4/4; `MEDICAL_AGENT_INBOUND_TOKEN=… uvicorn … :8099` → `/health/live` **200** and `/health/ready` **200 `{provider: mock, contract_version: v1}`**; `docker compose config --quiet` → valid. The Java fixture check was proved non-vacuous by removing `run_id` from a valid fixture (failure: `missing required field 'run_id'`) and restoring it.
+
+**Limits of this slice (not claimed):** no run endpoints yet — the durable dispatcher is 55.2, and shipping a stub that accepts work it cannot do was rejected; no DeepSeek adapter (56.1) and no LangGraph/PostgreSQL (55.4+); **the Docker image was not built** because this machine has no Docker daemon, so only the Compose file's syntax is verified; the Java side has no agent DTOs yet — only the fixture-agreement test, and the dispatcher's DTOs arrive with 55.2; no CI workflow yet (Round 55's closing instruction); the Python tests run against a venv created with `python3.12` explicitly, because the default `python3` here is 3.9.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

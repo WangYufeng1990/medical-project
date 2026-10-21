@@ -153,11 +153,12 @@ class ChatCommitEventIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void aSendRolledBackAfterTheNotificationWasRegistered_shouldNotNotify() throws Exception {
-        // The notification is registered before the transaction ends, so the property
-        // that matters is what happens when the commit itself does not happen: the
-        // callback must not run. The stub marks the transaction rollback-only *after*
-        // the real thread write, i.e. once the synchronization is already registered.
+    void aRollbackOnlySend_shouldNotRunTheRegisteredCallback() throws Exception {
+        // The property is "a callback that was registered does not run when the
+        // transaction rolls back". The order here: the real thread write completes, the
+        // stub marks the transaction rollback-only, the send then registers its
+        // after-commit callback, and the commit finds a rollback-only transaction — so
+        // the callback is registered but must never fire.
         doAnswer(invocation -> {
             Object result = invocation.callRealMethod();
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();

@@ -1,0 +1,17 @@
+# Round 55.1: the agent service only. MySQL/PostgreSQL/Redis for the AI workflow join in
+# the rounds that actually use them (PostgreSQL for knowledge + checkpoints, 55.4+);
+# adding them here first would be an unverified service definition nobody exercises.
+services:
+  medical-agent:
+    build: ./medical-agent
+    environment:
+      # Required: internal calls are authenticated. Use an env file, never a default.
+      MEDICAL_AGENT_INBOUND_TOKEN: ${MEDICAL_AGENT_INBOUND_TOKEN:?set MEDICAL_AGENT_INBOUND_TOKEN}
+      MEDICAL_AGENT_PROVIDER: ${MEDICAL_AGENT_PROVIDER:-mock}
+    ports:
+      - "${MEDICAL_AGENT_PORT:-8090}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

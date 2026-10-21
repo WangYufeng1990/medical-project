@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "description": "The error envelope every internal endpoint returns.",
+  "properties": {
+    "code": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Code",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "message": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "ErrorResponse",
+  "type": "object"
+}
