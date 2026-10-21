@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+
 import pytest
 from pydantic import ValidationError
 
-from medical_agent.config import ProviderName, Settings, load_settings
+from medical_agent.config import ConfigurationError, ProviderName, Settings, load_settings
 
 
 def test_inbound_token_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,7 +78,7 @@ def test_a_non_positive_timeout_is_refused(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "internal-token")
     monkeypatch.setenv("MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS", "0")
 
-    with pytest.raises(ValidationError, match="timeout"):
+    with pytest.raises(ValidationError, match="must be positive"):
         Settings()
 
 
@@ -88,5 +91,65 @@ def test_load_settings_reads_the_environment(monkeypatch: pytest.MonkeyPatch) ->
 def test_load_settings_fails_when_the_environment_is_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    with pytest.raises(ValidationError):
+    # The startup path reports a ConfigurationError, not Pydantic's structure: its message
+    # names the setting and carries no input.
+    with pytest.raises(ConfigurationError, match="MEDICAL_AGENT_INBOUND_TOKEN"):
         load_settings()
+
+
+def test_a_validation_error_does_not_echo_configured_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A model-level failure renders the input by default; hide_input_in_errors keeps the
+    # token and the API key out of the exception text.
+    monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "synthetic-inbound-token")
+    monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", "deepseek")
+    monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "synthetic-api-key")
+    monkeypatch.setenv("MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ValidationError) as caught:
+        Settings()
+
+    text = str(caught.value)
+    assert "synthetic-inbound-token" not in text
+    assert "synthetic-api-key" not in text
+
+
+def test_the_startup_error_names_the_problem_without_the_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "synthetic-inbound-token")
+    monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", "deepseek")
+    monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "synthetic-api-key")
+    monkeypatch.setenv("MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ConfigurationError) as caught:
+        load_settings()
+
+    text = str(caught.value)
+    assert "synthetic-inbound-token" not in text
+    assert "synthetic-api-key" not in text
+    assert "MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS" in text, (
+        "the error must still say which setting is wrong: " + text
+    )
+    assert caught.value.problems
+
+
+def test_the_startup_entry_itself_refuses_and_stays_quiet_about_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The module the ASGI server imports: load_settings() runs at import time, so a bad
+    # environment must fail here — with text safe to print in a startup log.
+    monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "synthetic-inbound-token")
+    monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "synthetic-api-key")
+    monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", "deepseek")
+    monkeypatch.setenv("MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS", "0")
+    sys.modules.pop("medical_agent.api.main", None)
+
+    with pytest.raises(ConfigurationError) as caught:
+        importlib.import_module("medical_agent.api.main")
+    sys.modules.pop("medical_agent.api.main", None)
+
+    text = str(caught.value)
+    assert "synthetic-inbound-token" not in text
+    assert "synthetic-api-key" not in text

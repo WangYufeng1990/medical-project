@@ -13,11 +13,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 CONTRACT_VERSION: Final[Literal["v1"]] = "v1"
+
+# Identity and revision fields are strict (Round 55.1 review): Pydantic's default mode
+# coerces "123" to 123 and true to 1, so a payload the Java side refuses would be
+# accepted here. The wire types are what the schema says they are.
+StrictPositiveInt = Annotated[int, Field(strict=True, gt=0)]
+StrictRevision = Annotated[int, Field(strict=True, ge=1)]
+StrictCounter = Annotated[int, Field(strict=True, ge=0)]
 
 
 class RunState(StrEnum):
@@ -56,10 +63,10 @@ class RunStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     contract_version: Literal["v1"] = CONTRACT_VERSION
-    run_id: int = Field(gt=0)
-    message_id: int = Field(gt=0)
-    patient_id: int = Field(gt=0)
-    conversation_revision: int = Field(ge=1)
+    run_id: StrictPositiveInt
+    message_id: StrictPositiveInt
+    patient_id: StrictPositiveInt
+    conversation_revision: StrictRevision
     sender_type: Literal["PATIENT"] = "PATIENT"
     content: str = Field(min_length=1, max_length=4000)
     locale: str = Field(default="en", min_length=2, max_length=16)
@@ -72,9 +79,9 @@ class RunStatusResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     contract_version: Literal["v1"] = CONTRACT_VERSION
-    run_id: int = Field(gt=0)
+    run_id: StrictPositiveInt
     state: RunState
-    revision: int = Field(ge=0)
+    revision: StrictCounter
     updated_at: datetime
     error: RunError | None = None
 

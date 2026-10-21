@@ -101,3 +101,24 @@ def test_the_start_fixture_carries_server_owned_identity_only() -> None:
 
 def test_schema_files_are_listed_in_the_contract_module() -> None:
     assert set(SCHEMA_MODELS) == {p.name for p in CONTRACTS.glob("*.schema.json")}
+
+
+def test_identity_fields_are_not_coerced_from_other_json_types() -> None:
+    # Pydantic's default mode turns "123" into 123 and true into 1; the wire contract
+    # says integer, and Java refuses both. Strict fields keep the two sides aligned.
+    payload = json.loads((FIXTURES / "run-start.valid.json").read_text(encoding="utf-8"))
+    for coerced, value in (("run_id", "123"), ("run_id", True), ("run_id", None)):
+        with pytest.raises(ValidationError):
+            RunStartRequest.model_validate_json(json.dumps({**payload, coerced: value}))
+
+    # The strict model still accepts the contract's own JSON representation.
+    assert RunStartRequest.model_validate_json(json.dumps(payload)).run_id == payload["run_id"]
+
+
+def test_a_status_timestamp_must_be_a_real_date() -> None:
+    payload = json.loads((FIXTURES / "run-status.valid.json").read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        RunStatusResponse.model_validate_json(
+            json.dumps({**payload, "updated_at": "not-a-date"})
+        )

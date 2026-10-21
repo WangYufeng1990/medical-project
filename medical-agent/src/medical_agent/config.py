@@ -8,9 +8,10 @@ would answer calls it must refuse.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +25,12 @@ class ProviderName(StrEnum):
 class Settings(BaseSettings):
     """Environment-backed settings; the prefix keeps the service's namespace separate."""
 
-    model_config = SettingsConfigDict(env_prefix="MEDICAL_AGENT_", extra="forbid")
+    # hide_input_in_errors keeps configured values out of the exception text: a
+    # model-level failure otherwise renders the whole input, and a short token would
+    # appear verbatim (Round 55.1 review).
+    model_config = SettingsConfigDict(
+        env_prefix="MEDICAL_AGENT_", extra="forbid", hide_input_in_errors=True
+    )
 
     service_name: str = "medical-agent"
 
@@ -53,6 +59,32 @@ class Settings(BaseSettings):
         return self
 
 
+class ConfigurationError(RuntimeError):
+    """A startup failure whose text names the problem and never echoes a credential.
+
+    Pydantic keeps the raw input in ``ValidationError.errors()`` even when its message
+    hides it, so the startup path does not hand that structure to a logger: only the
+    field path and the message survive.
+    """
+
+    def __init__(self, problems: Sequence[str]) -> None:
+        self.problems = tuple(problems)
+        super().__init__("Invalid agent configuration: " + "; ".join(self.problems))
+
+
+def _problems(exc: ValidationError) -> list[str]:
+    problems: list[str] = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", ())) or "settings"
+        problems.append(f"{location}: {error.get('msg', 'invalid')}")
+    return problems
+
+
 def load_settings() -> Settings:
-    """Read the environment once, at startup; raises when the configuration is unusable."""
-    return Settings()
+    """Read the environment once, at startup; raises a sanitized error when unusable."""
+    try:
+        return Settings()
+    except ValidationError as exc:
+        # `from None`: the original error keeps the raw input in its own structure and
+        # there is no reason to attach it to what a logger will print.
+        raise ConfigurationError(_problems(exc)) from None
