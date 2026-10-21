@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
@@ -35,6 +36,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             + "WHERE m.receiverId = :userId AND m.receiverType = :type AND m.isRead = 0 "
             + "GROUP BY m.senderType, m.senderId")
     List<Object[]> countUnreadGroupedBySender(@Param("userId") Long userId, @Param("type") String type);
+
+    /** The message a sender already stored under this idempotency key (Round 54.3). */
+    Optional<Message> findBySenderTypeAndSenderIdAndClientMessageId(
+            String senderType, Long senderId, String clientMessageId);
 
     @Query("SELECT COUNT(m) FROM Message m WHERE ((m.senderId = :userId1 AND m.senderType = :type1 " +
             "AND m.receiverId = :userId2 AND m.receiverType = :type2) " +

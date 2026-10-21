@@ -266,11 +266,17 @@ CREATE TABLE IF NOT EXISTS message (
     receiver_type VARCHAR(10) NOT NULL,
     content TEXT NOT NULL,
     is_read TINYINT DEFAULT 0,
+    -- Round 54.3: the sender's idempotency key for this send. NULL for clients that
+    -- do not send one, and a unique index scoped to the sender's typed identity, so
+    -- a retry returns the message instead of storing it twice while two different
+    -- senders may legitimately reuse the same key.
+    client_message_id VARCHAR(100) DEFAULT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted TINYINT NOT NULL DEFAULT 0,
     version INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_message_sender_client_id (sender_type, sender_id, client_message_id)
 );
 
 -- Round 54.2: a conversation is a first-class row, so listing one is a query

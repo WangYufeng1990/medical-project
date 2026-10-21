@@ -55,7 +55,8 @@ public class ChatController {
         }
         validateType(dto.getReceiverType());
         // The sender is the security context's identity, not a request field.
-        return Result.ok(chatService.sendMessage(dto.getReceiverId(), dto.getReceiverType(), dto.getContent()));
+        return Result.ok(chatService.sendMessage(dto.getReceiverId(), dto.getReceiverType(),
+                dto.getContent(), dto.getClientMessageId()));
     }
 
     private void validateType(String type) {

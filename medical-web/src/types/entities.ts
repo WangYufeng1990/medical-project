@@ -887,7 +887,11 @@ export interface MessageVO {
   content: string
   isRead?: boolean
   createTime: string
+  clientMessageId?: string
 }
+
+/** A message as the chat views hold it: the optimistic copy also carries its send state. */
+export type ChatMessage = MessageVO & { status?: 'sending' | 'failed' }
 
 export interface ConversationVO {
   partnerId: number

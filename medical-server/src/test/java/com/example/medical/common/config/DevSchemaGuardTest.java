@@ -69,18 +69,51 @@ class DevSchemaGuardTest {
     }
 
     @Test
+    void appliesTheColumnStepItself() {
+        // Round 54.3: the step adds a column to an existing table, which
+        // CREATE TABLE IF NOT EXISTS cannot do, so the guard runs the step's DDL.
+        // A minimal v4 database: the tables the step needs, without the new column.
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:column-upgrade-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate probe = new JdbcTemplate(dataSource);
+        probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, version INT NOT NULL, "
+                + "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
+        probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
+                + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
+                + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                + "update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted TINYINT NOT NULL DEFAULT 0, "
+                + "version INT NOT NULL DEFAULT 0, PRIMARY KEY (id))");
+        probe.update("INSERT INTO schema_version (version) VALUES (?)", DevSchemaGuard.SCHEMA_VERSION - 1);
+
+        new DevSchemaGuard(probe, "jdbc:h2:mem:column-upgrade").run();
+
+        assertEquals(DevSchemaGuard.SCHEMA_VERSION, probe.queryForObject(
+                "SELECT MAX(version) FROM schema_version", Integer.class));
+        assertEquals(1, probe.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_NAME = 'MESSAGE' AND COLUMN_NAME = 'CLIENT_MESSAGE_ID'", Integer.class),
+                "the guard must add the column it records a version for");
+        probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, content, "
+                + "client_message_id) VALUES (1,'STAFF',100,'PATIENT','first','probe-key')");
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, "
+                        + "content, client_message_id) VALUES (1,'STAFF',100,'PATIENT','second','probe-key')"),
+                "the added index must enforce the sender-scoped key");
+    }
+
+    @Test
     void failsFastWhenTheAdditiveStepIsMissing() {
         // The step to v4 adds chat_conversation. Without it the upgrade cannot be
         // completed (e.g. MySQL, which never runs sql/schema.sql), so the guard must
         // still refuse rather than stamp a version the database does not match.
         jdbcTemplate.execute("DROP TABLE chat_conversation");
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 1);
+                DevSchemaGuard.SCHEMA_VERSION - 2);
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/stale-db").run());
 
-        assertTrue(e.getMessage().contains("v" + (DevSchemaGuard.SCHEMA_VERSION - 1)),
+        assertTrue(e.getMessage().contains("v" + (DevSchemaGuard.SCHEMA_VERSION - 2)),
                 "message must name the version found: " + e.getMessage());
         assertTrue(e.getMessage().contains("H2_DB_PATH"),
                 "message must point at the fix: " + e.getMessage());
@@ -97,7 +130,7 @@ class DevSchemaGuardTest {
         jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS elsewhere");
         jdbcTemplate.execute("CREATE TABLE elsewhere.chat_conversation (id BIGINT PRIMARY KEY)");
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 1);
+                DevSchemaGuard.SCHEMA_VERSION - 2);
 
         assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/other-schema-db").run());
@@ -109,7 +142,7 @@ class DevSchemaGuardTest {
     void failsFastOnAnOlderSchemaThisBuildCannotComplete() {
         // No additive step is known from v2 to v3, so the guard cannot upgrade it.
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 2);
+                DevSchemaGuard.SCHEMA_VERSION - 3);
 
         assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/ancient-db").run());

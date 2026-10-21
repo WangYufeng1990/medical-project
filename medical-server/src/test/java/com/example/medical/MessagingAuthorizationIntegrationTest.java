@@ -411,7 +411,7 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
         long before = countForPair(100L, ChatService.PATIENT, 101L, ChatService.PATIENT);
 
         BusinessException failure = assertThrows(BusinessException.class,
-                () -> chatService.sendMessage(101L, "PATIENT", "54.1 patient to patient"));
+                () -> chatService.sendMessage(101L, "PATIENT", "54.1 patient to patient", null));
         assertEquals(403, failure.getCode());
         assertEquals(before, countForPair(100L, ChatService.PATIENT, 101L, ChatService.PATIENT));
         assertTrue(publishedMessages.isEmpty());
@@ -423,7 +423,7 @@ class MessagingAuthorizationIntegrationTest extends IntegrationTestSupport {
         long before = messageRepository.count();
 
         BusinessException failure = assertThrows(BusinessException.class,
-                () -> chatService.sendMessage(100L, "PATIENT", "54.1 unauthenticated"));
+                () -> chatService.sendMessage(100L, "PATIENT", "54.1 unauthenticated", null));
         assertEquals(401, failure.getCode());
         assertEquals(before, messageRepository.count());
         assertTrue(publishedMessages.isEmpty());

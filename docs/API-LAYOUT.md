@@ -318,9 +318,11 @@ Requires `ADMIN` or `DOCTOR`. Message parties are typed (`STAFF` = sys_user id, 
 | GET | `/conversations` | `?page=1&size=20` | Paginated conversation list — each record carries `partnerType` (`STAFF`/`PATIENT`). Ordering is `lastMessageTime` DESC then conversation id DESC, and `total` is the number of threads (Round 54.2) |
 | GET | `/unread-count` | — | Total unread message count (sidebar badge) |
 | GET | `/{partnerId}` | `?partnerType=STAFF\|PATIENT&page=1&size=50` | Paginated messages with partner (auto-read). `partnerType` required, invalid value → 400 |
-| POST | `/` | body: {receiverId, receiverType, content} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400 |
+| POST | `/` | body: {receiverId, receiverType, content, clientMessageId?} | Send a message. `receiverType` required (`STAFF`/`PATIENT`), missing/invalid → 400. `clientMessageId` (≤100 chars) makes the send idempotent for that sender (Round 54.3) |
 
-`MessageVO` carries `senderType`/`receiverType`; `ConversationVO` carries `partnerType`.
+`MessageVO` carries `senderType`/`receiverType` and the `clientMessageId` it was stored under (null when the client sent none); `ConversationVO` carries `partnerType`.
+
+**Idempotent sends (Round 54.3).** A `clientMessageId` is scoped to the sender's typed identity — a staff account and a patient may reuse the same string, and two staff accounts never collide. Repeating a send with the same key **and the same payload** (receiver type, receiver id, content) returns the message that already exists with `200`, without a second row, thread increment or `new_message` event; the same key with a **different payload** is `409`. Without a key every send is stored, which is the pre-54.3 behaviour. Concurrent repeats of one key resolve to a single message.
 
 **Sender and recipient rules (Round 54.1).** The sender is the Bearer token's identity — no request field can name it, so a staff token cannot send as a patient or as another staff member. `ChatService` validates the pair before anything is persisted; a rejected send writes no `message` row and publishes no `new_message` event.
 

@@ -19,6 +19,8 @@ import com.example.medical.module.chat.repository.MessageRepository;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -48,6 +50,7 @@ public class ChatService {
     private final PatientPortalAccountState patientPortalAccountState;
     private final DoctorPatientScope doctorPatientScope;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
     public int unreadCount(Long userId, String userType) {
         return messageRepository.countUnreadByUser(userId, userType);
@@ -56,18 +59,44 @@ public class ChatService {
     /**
      * Sends a message from the identity in the security context — the sender is
      * never an argument, so a caller cannot name someone else (Round 54.1).
+     * <p>
+     * With a {@code clientMessageId} the send is idempotent (Round 54.3): the same key
+     * from the same sender returns the message that already exists, and the same key
+     * with a different payload is a conflict. The transaction lives in a
+     * {@link TransactionTemplate} rather than an annotation because a concurrent
+     * duplicate is rejected by the unique index at flush time: that leaves the first
+     * transaction rolled back and unusable, so resolving the duplicate has to happen
+     * in a fresh one instead of being swallowed inside a poisoned transaction.
      *
      * @throws BusinessException 400 for an unusable receiver, 401 without a
      *                           verified sender, 403 for a receiver the sender is
      *                           not entitled to reach, 404 for one that does not
-     *                           exist or is not active
+     *                           exist or is not active, 409 for a reused key with a
+     *                           different payload
      */
-    @Transactional
     @Auditable(module = "chat", action = "SEND_MESSAGE", phiAccess = true)
-    public MessageVO sendMessage(Long receiverId, String receiverType, String content) {
+    public MessageVO sendMessage(Long receiverId, String receiverType, String content,
+                                 String clientMessageId) {
+        String key = normalizeKey(clientMessageId);
+        try {
+            return transactionTemplate.execute(status ->
+                    deliver(receiverId, receiverType, content, key));
+        } catch (DataIntegrityViolationException concurrentDuplicate) {
+            return transactionTemplate.execute(status ->
+                    alreadyStored(receiverId, receiverType, content, key));
+        }
+    }
+
+    private MessageVO deliver(Long receiverId, String receiverType, String content, String clientMessageId) {
         Party sender = currentParty();
         Party receiver = new Party(receiverType, receiverId);
         requirePermittedConversation(sender, receiver);
+
+        if (clientMessageId != null) {
+            Optional<Message> stored = messageRepository
+                    .findBySenderTypeAndSenderIdAndClientMessageId(sender.type(), sender.id(), clientMessageId);
+            if (stored.isPresent()) return sameMessageOrConflict(stored.get(), receiver, content);
+        }
 
         Message msg = new Message();
         msg.setSenderId(sender.id());
@@ -76,6 +105,7 @@ public class ChatService {
         msg.setReceiverType(receiver.type());
         msg.setContent(content);
         msg.setIsRead(0);
+        msg.setClientMessageId(clientMessageId);
         // One clock for the message row and the thread (Round 54.2 review). Normalising
         // before the insert is what makes the stored message time equal to the stored
         // thread time: a database that rounds fractional seconds into the next second
@@ -83,12 +113,43 @@ public class ChatService {
         LocalDateTime sentAt = ChatConversationService.storedPrecision(LocalDateTime.now());
         msg.setCreateTime(sentAt);
         msg.setUpdateTime(sentAt);
-        messageRepository.save(msg);
+        // Flushed here, not at commit, so a duplicate key surfaces inside this
+        // transaction (and is translated) instead of as an opaque rollback.
+        messageRepository.saveAndFlush(msg);
         chatConversationService.recordMessage(sender, receiver, msg.getId(), sentAt);
         MessageVO vo = MessageVO.fromEntity(msg);
         eventPublisher.publishEvent(new NewMessageEvent(sender.id(), sender.type(),
                 receiver.id(), receiver.type(), vo));
         return vo;
+    }
+
+    /**
+     * The winner of a concurrent duplicate left its message behind while this attempt
+     * rolled back; answer with it or report the conflict. The row is read in its own
+     * transaction because the failed one is gone.
+     */
+    private MessageVO alreadyStored(Long receiverId, String receiverType, String content, String clientMessageId) {
+        Party sender = currentParty();
+        Message stored = messageRepository
+                .findBySenderTypeAndSenderIdAndClientMessageId(sender.type(), sender.id(), clientMessageId)
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "The message could not be stored; retry the send"));
+        return sameMessageOrConflict(stored, new Party(receiverType, receiverId), content);
+    }
+
+    private MessageVO sameMessageOrConflict(Message stored, Party receiver, String content) {
+        boolean samePayload = Objects.equals(stored.getReceiverType(), receiver.type())
+                && Objects.equals(stored.getReceiverId(), receiver.id())
+                && Objects.equals(stored.getContent(), content);
+        if (!samePayload) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "clientMessageId was already used for a different message");
+        }
+        return MessageVO.fromEntity(stored);
+    }
+
+    private String normalizeKey(String clientMessageId) {
+        return clientMessageId == null || clientMessageId.isBlank() ? null : clientMessageId;
     }
 
     @Transactional

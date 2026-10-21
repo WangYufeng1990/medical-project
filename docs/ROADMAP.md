@@ -4569,7 +4569,7 @@ Schemas must be validated on both sides. Keep existing Result<T> conventions for
 
 Database evolution is part of Round 54.2: introduce a versioned baseline and upgrade path, recommended Flyway for Java/MySQL and independent versioned PostgreSQL migrations for Python-owned tables. Coordinate Spring SQL initialization and DevSchemaGuard rather than allowing two schema owners. Test fresh installation and upgrade from the reviewed schema. Do not enable blind baselining or make data deletion the normal upgrade path. Manage LangGraph checkpoint setup against locked dependency versions.
 
-## Round 54 — Messaging foundation (In progress: 54.1–54.2 Done, 54.3–54.4 Pending)
+## Round 54 — Messaging foundation (In progress: 54.1–54.3 Done, 54.4 Pending)
 
 **Goal:** reliable human messaging before AI integration. **Estimate:** 28–44 hours. Depends on a fresh baseline test run and reviewed migration/contract design.
 
@@ -4577,7 +4577,7 @@ Database evolution is part of Round 54.2: introduce a versioned baseline and upg
 |---|---|---|---|
 | 54.1 Identity and recipients | P0 / **Done** (2026-10-19) | DoctorPatientScope fail-closed; ChatService receiver checks (staff and patient account state, symmetric conversation rule); fix typed-party grouping; module-owned account/relationship checks | MessagingAuthorizationIntegrationTest: no identity rejected; invalid/disabled receiver rejected; patient/staff sharing a numeric ID remain distinct; existing conversation authorizes both directions; portal account state gates delivery; authenticated existing flows preserved — 31/31 pass, 19 were red before the two fix passes (see 54.1 record below) |
 | 54.2 Conversations and migration | P0 / **Done** (2026-10-19, after two review rounds) | chat_conversation entity/repository/service; canonical typed pair; historical backfill; real database conversation pagination and revision; a v3→v4 upgrade the application performs itself; one normalised clock for messages and threads | ChatConversationIntegrationTest + SchemaUpgradeIntegrationTest + DevSchemaGuardTest: >20 active messages do not hide older conversations; stable tie ordering; backfill preserves message count/ownership and agrees with live recording; clean install and a real startup on a previous-release database with its own history; a real restart; concurrent first messages all persist; a late older message never rewinds a thread — 12 red→green across the passes (see the 54.2 records) |
-| 54.3 Idempotent sending and UI recovery | P0 / Pending | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; UI retry retains content, does not duplicate or land in another selected conversation |
+| 54.3 Idempotent sending and UI recovery | P0 / **Done** (2026-10-21) | Message DTO/entity/repository and both chat views: clientMessageId, server ID replacement, failed state and preserved input; schema v5 with a guard step that adds the column to an existing database | MessageIdempotencyIntegrationTest: duplicate returns same message; changed payload conflicts; concurrent repeats collapse to one; UI retry retains content, does not duplicate or land in another selected conversation — 6/6 pass, 5 were red first (see 54.3 record below) |
 | 54.4 After-commit notification and safety notice | P0 / Pending | ChatEventListener after-commit behavior; fixed help notice and versioned deterministic safety entry point | ChatCommitEventIntegrationTest: rollback produces no push; notification failure does not roll back message; safety notice is independent of model availability |
 
 Preserve the completed stale-response guards. Keep new-conversation selection server-authorized. Specify how revision increments serialize messages and review publication; do not rely on browser timestamps.
@@ -4766,6 +4766,52 @@ failsFastWhenOnlyAnotherSchemaHasTheTable:102 — Expected java.lang.IllegalStat
 **Verification (actually run):** `mvn clean verify` → **290 tests, 0 failures, 0 errors, BUILD SUCCESS** (287 before this pass + 3 new); `LayeringGuardTest` 4/4 with no allowlist. The three changed classes pass under JUnit's random orderer with seeds 4 and 17 (`Tests run: 18, Failures: 0` each). Order within the class no longer matters for the restart test either: the restarted context re-runs the guard and backfill over the already-upgraded database.
 
 **Still not claimed:** MySQL is still unverified for the DDL itself (no instance here; MySQL does not run `sql/schema.sql`, so the table and the manual `DevSchemaGuard` step remain the deployment path). Whole-second thread ordering means threads active inside the same second are ordered by conversation id. The backfill still only inserts missing threads; a corrupt revision would need a separate repair.
+
+### Round 54.3 — Idempotent sending and UI recovery (Done, 2026-10-21)
+
+**Source baseline:** `b62aae15` (54.2 complete after three review passes), clean tree. **Recorded test baseline (this round):** `mvn clean verify` → **290 tests, 0 failures**. No instance was running against `target/classes`.
+
+**What the source had:** no send carried an idempotency key. A retry after a timeout stored a second message and bumped the thread's count and revision twice; a double click did the same. Both chat views cleared the composer before the request and, on failure, **removed the optimistic message**, so the typed text was gone and there was nothing to retry. The patient view had no error state at all.
+
+**Design.**
+- `message.client_message_id` (nullable, ≤100 chars) with a unique index `(sender_type, sender_id, client_message_id)`: the key is scoped to the sender's **typed** identity, so staff 2 and patient 100 may reuse the same string, and nulls are distinct in both MySQL and H2, so clients without a key keep the old behaviour.
+- `ChatService.sendMessage` is idempotent when the key is present: an existing message with the same key is returned after a **payload check** (same receiver type, receiver id and content) and a mismatch is a `409`; no second row, no second thread increment, no second `NewMessageEvent`.
+- The transaction moved from `@Transactional` to a `TransactionTemplate`, because a concurrent duplicate is rejected by the unique index at flush time: that kills the first transaction, so the duplicate is resolved by re-reading in a **fresh** transaction rather than swallowing the violation inside a poisoned one.
+- Schema v5: adding a column is exactly what `CREATE TABLE IF NOT EXISTS` cannot do, so the guard's upgrade step now carries its own DDL (`ALTER TABLE … ADD COLUMN`, `CREATE UNIQUE INDEX`) and runs it against the connection's own schema; the chain must be contiguous from the recorded version (no silent jumps), and the version is recorded only after the column and index are verified — including a generated H2 index name, matched by prefix.
+- UI (both views): one `clientMessageId` per send attempt (`crypto.randomUUID()` with a fallback), the optimistic bubble carries `sending`/`failed` status, a failed bubble keeps the text with a **retry** action that re-sends the same key, and a response is applied to the panel **only if it belongs to the partner it was addressed to** — a late answer cannot land in the thread the user switched to.
+
+**Red evidence (actually run).**
+
+First run, before any production change (`mvn test -Dtest=MessageIdempotencyIntegrationTest`) — the key has no column yet:
+
+```
+Tests run: 6, Failures: 0, Errors: 5
+Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Column "CLIENT_MESSAGE_ID" not found
+```
+
+Second run, after the schema and plumbing but **before** the deduplication logic — this is the behavioural red:
+
+```
+repeatedSendWithTheSameKey_shouldReturnTheSameMessageStoredOnce:103  Status expected:<200> but was:<500>
+sameKeyWithDifferentContent_shouldConflict:124                       Status expected:<409> but was:<500>
+sameKeyWithDifferentReceiver_shouldConflict:140                      Status expected:<409> but was:<500>
+concurrentRepeatsOfOneKey_shouldEndUpAsOneMessage:208                » Execution … expected:<200> but was:<500>
+```
+
+The 500s are the unique index rejecting the second insert with nothing handling it — exactly the failure the round exists to remove.
+
+**Tests:** `MessageIdempotencyIntegrationTest` (6): a repeat returns the same id and stores one row, one thread entry and one event; the same key with different content and with a different receiver are both `409` and store nothing; the same key from a patient and a doctor are two messages; keyless sends are never deduplicated; eight concurrent repeats of one key all return the same id and end as one row. `DevSchemaGuardTest` gained `appliesTheColumnStepItself` (a minimal v4 database is upgraded by the step's DDL, version recorded, and the new index really rejects a duplicate key); `SchemaUpgradeIntegrationTest` gained an assertion block proving a v3 database booted by this build ends with the column, keeps the planted messages on a null key, and enforces the key.
+
+**Verification (actually run):** `mvn clean verify` → **298 tests, 0 failures, 0 errors, BUILD SUCCESS** (290 before this round + 8); `LayeringGuardTest` 4/4 with no allowlist. The three changed classes pass under JUnit's random orderer with seeds 6 and 13 (`Tests run: 17, Failures: 0` each). Frontend: `npm run check` → 0 errors (4 pre-existing warnings, none in the code added here; the one in `views/chat/index.tsx` is the untouched URL-partner effect) and `npm run build` → built (433 kB JS / 8.75 kB CSS).
+
+**Limits of this slice (not claimed):**
+- There is no frontend test runner in this repository, so the UI behaviour (retry keeps the text, no duplication, no cross-thread landing) is verified by type check, lint, build and review, not by an automated UI test. The server-side guarantees it relies on are integration-tested.
+- A failed message survives only while its conversation stays open: switching threads reloads the panel and the failed bubble is gone. The text is preserved in the bubble, not in a durable outbox — a per-conversation pending store would be a separate slice.
+- `clientMessageId` is optional: an API client that omits it keeps the pre-54.3 non-idempotent behaviour, by design.
+- The upgrade DDL is proven on H2 (MySQL mode) only; MySQL still applies the column by hand (`README.md`).
+- The audit of a duplicated send still records the call (it happened); the duplicate itself creates no message, thread revision or notification.
+
+**Files:** `sql/schema.sql`, `common/config/DevSchemaGuard.java`, `module/chat/entity/Message.java`, `dto/MessageFormDTO.java`, `dto/MessageVO.java`, `repository/MessageRepository.java`, `service/ChatService.java`, both chat controllers, `medical-web/src/{api/chat.ts,types/entities.ts,utils/chat.ts,views/chat/index.tsx,views/chat/style.module.css,views/patient/chat/index.tsx}`, the three test classes, `docs/API-LAYOUT.md`, `README.md`.
 
 ## Round 55 — Python service and reliable execution (Pending)
 

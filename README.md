@@ -56,15 +56,19 @@ Forgetting this is now a loud failure rather than a mysterious one:
 `DevSchemaGuard` records the schema version the file was built with and refuses
 to start on a mismatch, telling you which version the file is and how to reset.
 When you edit `schema.sql`, bump `SCHEMA_VERSION` in
-`common/config/DevSchemaGuard.java` in the same commit (currently `4`, which added
-`chat_conversation` in Round 54.2).
+`common/config/DevSchemaGuard.java` in the same commit (currently `5`: `4` added
+`chat_conversation` in Round 54.2, `5` added `message.client_message_id` and its
+sender-scoped unique index in Round 54.3).
 
-A database that is exactly one version behind is **upgraded on start**, not
-rejected: the version step to 4 only adds `chat_conversation`, `spring.sql.init`
-creates it, and `DevSchemaGuard` records v4 once it has verified the table is really
-there (`SchemaUpgradeIntegrationTest` boots the application against a database left
-in the previous release's shape). The upgrade keeps the data; `SCHEMA_VERSION` in the
-guard still moves with the file. Anything the guard cannot complete — an older
+A database that is behind is **upgraded on start**, not rejected. A step that only
+adds a table needs nothing from the guard — `spring.sql.init` creates it — while a
+step that changes an existing table (v5 adds `message.client_message_id` and its
+unique index to a table that already exists) carries its own DDL and the guard runs
+it. Either way the version is recorded only after the objects are verified, and the
+steps must form a contiguous chain from the recorded version
+(`SchemaUpgradeIntegrationTest` boots the application against a database left in the
+previous release's shape, with its own history). The upgrade keeps the data;
+`SCHEMA_VERSION` in the guard still moves with the file. Anything the guard cannot complete — an older
 version, a step that would alter an existing table, a database ahead of the build —
 is still a loud failure with the reset instructions, and MySQL, which does not run
 `sql/schema.sql`, needs the DDL applied by hand. The project has no migration tool

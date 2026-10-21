@@ -279,7 +279,7 @@ class ChatConversationIntegrationTest extends IntegrationTestSupport {
                 sent.add(pool.submit(() -> {
                     authenticateAsDoctor();
                     allReady.await(10, TimeUnit.SECONDS);
-                    return chatService.sendMessage(patientId, "PATIENT", content).getContent();
+                    return chatService.sendMessage(patientId, "PATIENT", content, null).getContent();
                 }));
             }
             for (Future<String> result : sent) {

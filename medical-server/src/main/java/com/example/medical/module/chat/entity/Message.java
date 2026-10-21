@@ -36,4 +36,11 @@ public class Message extends BaseEntity {
 
     @Column(name = "is_read")
     private Integer isRead;
+
+    /**
+     * The sender's idempotency key for this send (Round 54.3). Scoped to the sender's
+     * typed identity by a unique index; null when the client did not supply one.
+     */
+    @Column(name = "client_message_id", length = 100)
+    private String clientMessageId;
 }

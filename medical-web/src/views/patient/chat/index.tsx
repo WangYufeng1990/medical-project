@@ -4,13 +4,14 @@ import { useChatSse } from '../../../hooks/useChatSse'
 import { parseJwt } from '../../../utils/auth'
 import { tokenStore } from '../../../utils/auth'
 import { PageResult } from '../../../types/common'
-import { MessageVO, ConversationVO, SseTicketVO } from '../../../types/entities'
+import { ChatMessage, MessageVO, ConversationVO, SseTicketVO } from '../../../types/entities'
+import { newClientMessageId } from '../../../utils/chat'
 import chatStyles from '../../chat/style.module.css'
 
 export default function PatientChat() {
   const [conversations, setConversations] = useState<ConversationVO[]>([])
   const [selectedPartner, setSelectedPartner] = useState<{ id: number; name: string } | null>(null)
-  const [messages, setMessages] = useState<MessageVO[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [msgPage, setMsgPage] = useState(1)
   const [msgTotal, setMsgTotal] = useState(0)
   const [input, setInput] = useState('')
@@ -23,6 +24,13 @@ export default function PatientChat() {
   const token = tokenStore.get('patientToken')
   const raw = token ? parseJwt(token) : {}
   const currentUserId = Number(raw.uid ?? raw.jti ?? 0)
+
+  // A response that lands after the patient switched threads must not be appended
+  // to the thread on screen (Round 54.3), and a retry must re-send the same attempt.
+  const selectionRef = useRef<{ id: number } | null>(null)
+  useEffect(() => { selectionRef.current = selectedPartner ? { id: selectedPartner.id } : null }, [selectedPartner])
+  const pendingRef = useRef(new Map<string, { partnerId: number; content: string }>())
+  const [sendError, setSendError] = useState('')
 
   const loadConversations = useCallback(() => {
     http.get<PageResult<ConversationVO>>('/patient/me/messages/conversations', { params: { page: 1, size: 20 } })
@@ -49,17 +57,62 @@ export default function PatientChat() {
     loadMessages(p.partnerId, 1).then(() => loadConversations())
   }
 
-  const handleSend = async () => {
-    if (!input.trim() || !selectedPartner) return
-    const content = input.trim()
-    setInput('')
-    const msg: MessageVO = { id: Date.now(), senderId: currentUserId, senderType: 'PATIENT', receiverId: selectedPartner.id, receiverType: 'STAFF', content, isRead: false, createTime: new Date().toISOString() }
-    setMessages(prev => [...prev, msg])
-    await http.post<MessageVO>('/patient/me/messages', { receiverId: selectedPartner.id, content })
-      .catch(() => setMessages(prev => prev.filter(m => m.id !== msg.id)))
+  const keyOf = (m: ChatMessage) => m.clientMessageId ?? ''
+
+  const scrollToBottom = () => {
     setTimeout(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' })
     }, 50)
+  }
+
+  const settle = (clientMessageId: string, sent: MessageVO) => {
+    pendingRef.current.delete(clientMessageId)
+    const selected = selectionRef.current
+    const belongsHere = selected != null && selected.id === sent.receiverId && sent.receiverType === 'STAFF'
+    setMessages(prev => {
+      const withoutPlaceholder = prev.filter(m => keyOf(m) !== clientMessageId)
+      return belongsHere ? [...withoutPlaceholder, sent] : withoutPlaceholder
+    })
+    setSendError('')
+    loadConversations()
+  }
+
+  const fail = () => {
+    setSendError('Message could not be sent. Retry from the message, or copy the text and try again.')
+  }
+
+  const sendAttempt = async (clientMessageId: string, partnerId: number, content: string) => {
+    setMessages(prev => [...prev, {
+      id: -Date.now(), clientMessageId, status: 'sending',
+      senderId: currentUserId, senderType: 'PATIENT',
+      receiverId: partnerId, receiverType: 'STAFF',
+      content, isRead: false, createTime: new Date().toISOString(),
+    }])
+    scrollToBottom()
+    try {
+      const sent = await http.post<MessageVO>('/patient/me/messages', { receiverId: partnerId, content, clientMessageId })
+      settle(clientMessageId, sent)
+    } catch {
+      setMessages(prev => prev.map(m => keyOf(m) === clientMessageId ? { ...m, status: 'failed' } : m))
+      fail()
+    }
+  }
+
+  const handleSend = () => {
+    if (!input.trim() || !selectedPartner) return
+    const content = input.trim()
+    const clientMessageId = newClientMessageId()
+    pendingRef.current.set(clientMessageId, { partnerId: selectedPartner.id, content })
+    setInput('')
+    setSendError('')
+    void sendAttempt(clientMessageId, selectedPartner.id, content)
+  }
+
+  const handleRetry = (m: ChatMessage) => {
+    const pending = m.clientMessageId ? pendingRef.current.get(m.clientMessageId) : undefined
+    if (!pending || !m.clientMessageId) return
+    setMessages(prev => prev.map(x => keyOf(x) === m.clientMessageId ? { ...x, status: 'sending' } : x))
+    void sendAttempt(m.clientMessageId, pending.partnerId, pending.content)
   }
 
   const handleSseMessage = useCallback((msg: MessageVO) => {
@@ -125,16 +178,21 @@ export default function PatientChat() {
               {messages.map(m => {
                 const isMe = m.senderType === 'PATIENT' && m.senderId === currentUserId
                 return (
-                <div key={m.id} className={`${chatStyles.messageRow} ${isMe ? chatStyles.messageRowMe : chatStyles.messageRowOther}`}>
+                <div key={`${m.id}-${m.clientMessageId ?? ''}`} className={`${chatStyles.messageRow} ${isMe ? chatStyles.messageRowMe : chatStyles.messageRowOther}`}>
                   <div>
                     {!isMe && <div className={chatStyles.senderName}>{selectedPartner!.name}</div>}
-                    <div className={`${chatStyles.messageBubble} ${isMe ? chatStyles.messageBubbleMe : chatStyles.messageBubbleOther}`}>{m.content}</div>
-                    <div className={`${chatStyles.messageTime} ${isMe ? chatStyles.messageTimeMe : ''}`}>{formatTime(m.createTime)}</div>
+                    <div className={`${chatStyles.messageBubble} ${isMe ? chatStyles.messageBubbleMe : chatStyles.messageBubbleOther} ${m.status === 'failed' ? chatStyles.messageFailed : ''}`}>{m.content}</div>
+                    <div className={`${chatStyles.messageTime} ${isMe ? chatStyles.messageTimeMe : ''}`}>
+                      {m.status === 'failed' ? (
+                        <button className={chatStyles.retryButton} onClick={() => handleRetry(m)}>Not sent — retry</button>
+                      ) : m.status === 'sending' ? 'Sending…' : formatTime(m.createTime)}
+                    </div>
                   </div>
                 </div>
                 )})}
             </div>
             <div className={chatStyles.inputArea}>
+              {sendError && <span style={{ color: '#F56C6C', fontSize: 12, marginBottom: 4 }}>{sendError}</span>}
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend() }} placeholder="Type a message..." />
               <button onClick={handleSend}>Send</button>
             </div>

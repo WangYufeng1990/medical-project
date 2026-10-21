@@ -19,11 +19,12 @@ public class MessageVO {
     private String content;
     private boolean isRead;
     private LocalDateTime createTime;
+    private String clientMessageId;
 
     public static MessageVO fromEntity(Message m) {
         return new MessageVO(m.getId(), m.getSenderId(), m.getSenderType(),
                 m.getReceiverId(), m.getReceiverType(),
                 m.getContent(), m.getIsRead() != null && m.getIsRead() == 1,
-                m.getCreateTime());
+                m.getCreateTime(), m.getClientMessageId());
     }
 }

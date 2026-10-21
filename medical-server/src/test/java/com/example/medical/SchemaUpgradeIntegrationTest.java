@@ -139,6 +139,33 @@ class SchemaUpgradeIntegrationTest {
         assertEquals(before, snapshot(), "and the guard alone must stay a no-op");
     }
 
+    @Test
+    void upgradingToTheIdempotencyColumn_shouldKeepOldMessagesAndEnforceTheKey() {
+        // Round 54.3 adds a column to an existing table, which sql/schema.sql cannot do
+        // (CREATE TABLE IF NOT EXISTS never alters). The guard's step carries the DDL,
+        // and it must leave the rows that were already there untouched.
+        assertEquals(1, count("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_NAME = 'MESSAGE' AND COLUMN_NAME = 'CLIENT_MESSAGE_ID'"),
+                "the upgraded database must have the idempotency column");
+        assertEquals(null, jdbcTemplate.queryForObject(
+                        "SELECT client_message_id FROM message WHERE id = ?", String.class, LEGACY_MESSAGE_OLD_ID),
+                "a message written before the column existed keeps a null key");
+
+        // The index is scoped to the sender's typed identity and really enforces it.
+        jdbcTemplate.update("INSERT INTO message (id, sender_id, sender_type, receiver_id, receiver_type, "
+                        + "content, is_read, client_message_id, create_time, update_time, is_deleted, version) "
+                        + "VALUES (?,?,?,?,?,?,0,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,0)",
+                950L, LEGACY_STAFF_ID, "STAFF", LEGACY_PATIENT_ID, "PATIENT", "keyed", "upgrade-key");
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbcTemplate.update("INSERT INTO message (id, sender_id, sender_type, receiver_id, "
+                                + "receiver_type, content, is_read, client_message_id, create_time, update_time, "
+                                + "is_deleted, version) VALUES (?,?,?,?,?,?,0,?,CURRENT_TIMESTAMP,"
+                                + "CURRENT_TIMESTAMP,0,0)",
+                        951L, LEGACY_STAFF_ID, "STAFF", LEGACY_PATIENT_ID, "PATIENT", "keyed again",
+                        "upgrade-key"));
+        jdbcTemplate.update("DELETE FROM message WHERE id = ?", 950L);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     /** What must survive a restart unchanged. */
