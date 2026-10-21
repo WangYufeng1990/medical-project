@@ -102,6 +102,40 @@ class DevSchemaGuardTest {
     }
 
     @Test
+    void finishesAPartiallyAppliedStep() {
+        // An upgrade interrupted after the column was added leaves the version at 4
+        // with no index. The next start must create the index, not re-add the column.
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:partial-upgrade-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate probe = new JdbcTemplate(dataSource);
+        probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, version INT NOT NULL, "
+                + "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
+        probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
+                + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
+                + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, client_message_id VARCHAR(100) DEFAULT NULL, "
+                + "create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                + "update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted TINYINT NOT NULL DEFAULT 0, "
+                + "version INT NOT NULL DEFAULT 0, PRIMARY KEY (id))");
+        probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, content) "
+                + "VALUES (1,'STAFF',100,'PATIENT','a message from before the upgrade')");
+        probe.update("INSERT INTO schema_version (version) VALUES (?)", DevSchemaGuard.SCHEMA_VERSION - 1);
+
+        new DevSchemaGuard(probe, "jdbc:h2:mem:partial-upgrade").run();
+
+        assertEquals(DevSchemaGuard.SCHEMA_VERSION, probe.queryForObject(
+                "SELECT MAX(version) FROM schema_version", Integer.class));
+        assertEquals(1, probe.queryForObject("SELECT COUNT(*) FROM message WHERE content = ?", Integer.class,
+                "a message from before the upgrade"), "the interrupted upgrade must keep the messages");
+        probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, content, "
+                + "client_message_id) VALUES (1,'STAFF',100,'PATIENT','after','partial-key')");
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, "
+                        + "content, client_message_id) VALUES (1,'STAFF',100,'PATIENT','again','partial-key')"),
+                "the index must exist after the finished upgrade");
+    }
+
+    @Test
     void failsFastWhenTheAdditiveStepIsMissing() {
         // The step to v4 adds chat_conversation. Without it the upgrade cannot be
         // completed (e.g. MySQL, which never runs sql/schema.sql), so the guard must

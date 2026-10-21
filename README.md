@@ -314,11 +314,17 @@ cd medical-server && mvn clean verify
 # Frontend — ESLint (the recurring-bug rules from CLAUDE.md) + tsc --noEmit
 cd medical-web && npm run check
 
+# Frontend unit tests (Vitest; pure state helpers, no browser needed)
+cd medical-web && npm test
+
 # Production bundle
 cd medical-web && npm run build
 ```
 
-`npm run check` is the pair of `lint` + `typecheck`; both run standalone too. The
+`npm run check` is the pair of `lint` + `typecheck`; both run standalone too.
+`npm test` runs Vitest over `src/utils/*.test.ts` — the chat send-state rules
+(one bubble per attempt, what a history page may replace, whose key is whose) are
+pure functions so they can be tested without a DOM. The
 backend guardrails (`maven-enforcer-plugin`) check the Maven/Java version,
 duplicate POM dependency versions and dependency convergence — the last one is
 why `hapi-fhir-base` is pinned in `dependencyManagement`.

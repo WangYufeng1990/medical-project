@@ -46,7 +46,6 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
     private ConfigurableApplicationContext applicationContext;
 
     private final List<NewMessageEvent> publishedMessages = new CopyOnWriteArrayList<>();
-    private final List<Long> createdMessageIds = new CopyOnWriteArrayList<>();
     private ApplicationListener<ApplicationEvent> messageListener;
 
     private String doctorToken;
@@ -73,31 +72,25 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         if (messageListener != null) applicationContext.removeApplicationListener(messageListener);
     }
 
+    // The messages this class sends are left in place: deleting them would leave the
+    // seeded thread pointing at rows that no longer exist, and the counters are
+    // asserted as deltas, so the history is harmless. The unique keys are per test.
     @BeforeEach
     void resetRecorder() {
         publishedMessages.clear();
-        createdMessageIds.clear();
-    }
-
-    @AfterEach
-    void cleanUpFixtures() {
-        for (Long messageId : createdMessageIds) {
-            jdbcTemplate.update("DELETE FROM chat_conversation WHERE last_message_id = ?", messageId);
-            jdbcTemplate.update("DELETE FROM message WHERE id = ?", messageId);
-        }
-        createdMessageIds.clear();
     }
 
     @Test
     void repeatedSendWithTheSameKey_shouldReturnTheSameMessageStoredOnce() throws Exception {
         long pairBefore = pairCount();
+        long countBefore = threadMessageCount();
+        long revisionBefore = threadRevision();
         long before = messagesWithKey("retry-1");
 
         MvcResult first = sendAsStaff(doctorToken, "retry-1", 100L, "idempotent content")
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode firstMessage = data(first);
-        createdMessageIds.add(firstMessage.get("id").asLong());
 
         MvcResult second = sendAsStaff(doctorToken, "retry-1", 100L, "idempotent content")
                 .andExpect(status().isOk())
@@ -109,6 +102,10 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         assertEquals("retry-1", secondMessage.get("clientMessageId").asText());
         assertEquals(before + 1, messagesWithKey("retry-1"), "the retry must not store a second row");
         assertEquals(pairBefore + 1, pairCount(), "the retry must not add a message to the thread either");
+        assertEquals(countBefore + 1, threadMessageCount(),
+                "the thread counts the message once, not twice");
+        assertEquals(revisionBefore + 1, threadRevision(),
+                "the thread's revision moves once, not twice");
         assertEquals(1, publishedMessages.size(), "the retry must not publish a second event");
     }
 
@@ -117,7 +114,6 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         MvcResult first = sendAsStaff(doctorToken, "conflict-content", 100L, "the original message")
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(first).get("id").asLong());
         long before = messagesWithKey("conflict-content");
 
         sendAsStaff(doctorToken, "conflict-content", 100L, "a different message")
@@ -133,7 +129,6 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         MvcResult first = sendAsStaff(doctorToken, "conflict-receiver", 101L, "same content")
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(first).get("id").asLong());
         long before = messagesWithKey("conflict-receiver");
 
         sendAsStaff(doctorToken, "conflict-receiver", 100L, "same content")
@@ -151,7 +146,6 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         MvcResult fromStaff = sendAsStaff(doctorToken, "shared-key", 100L, "staff side")
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(fromStaff).get("id").asLong());
 
         MvcResult fromPatient = mockMvc.perform(post("/api/v1/patient/me/messages")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -160,7 +154,6 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(fromPatient).get("id").asLong());
 
         assertEquals(before + 2, messagesWithKey("shared-key"),
                 "two senders using one key are two messages");
@@ -176,11 +169,9 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         MvcResult first = sendAsStaff(doctorToken, null, 100L, "no key at all")
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(first).get("id").asLong());
         MvcResult second = sendAsStaff(doctorToken, null, 100L, "no key at all")
                 .andExpect(status().isOk())
                 .andReturn();
-        createdMessageIds.add(data(second).get("id").asLong());
 
         assertEquals(before + 2, messageRepository.count());
         assertNotEquals(data(first).get("id").asLong(), data(second).get("id").asLong());
@@ -193,6 +184,8 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         CyclicBarrier allReady = new CyclicBarrier(attempts);
         List<Future<Long>> results = new ArrayList<>();
         long before = messagesWithKey("racy-key");
+        long countBefore = threadMessageCount();
+        long revisionBefore = threadRevision();
         try {
             for (int i = 0; i < attempts; i++) {
                 results.add(pool.submit(() -> {
@@ -209,12 +202,15 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
             }
             assertEquals(1, new java.util.LinkedHashSet<>(ids).size(),
                     "every concurrent attempt must resolve to the one stored message: " + ids);
-            createdMessageIds.add(ids.get(0));
         } finally {
             pool.shutdownNow();
         }
 
         assertEquals(before + 1, messagesWithKey("racy-key"));
+        assertEquals(countBefore + 1, threadMessageCount(),
+                "eight concurrent attempts count as one message");
+        assertEquals(revisionBefore + 1, threadRevision(),
+                "and the thread's revision moves once");
         assertEquals(1, publishedMessages.size(), "one message means one event");
     }
 
@@ -241,6 +237,22 @@ class MessageIdempotencyIntegrationTest extends IntegrationTestSupport {
         Integer found = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM message WHERE sender_type = 'STAFF' AND sender_id = 2 "
                         + "AND receiver_type = 'PATIENT' AND receiver_id = 100", Integer.class);
+        return found == null ? 0 : found;
+    }
+
+    private long threadMessageCount() {
+        Integer found = jdbcTemplate.queryForObject(
+                "SELECT message_count FROM chat_conversation WHERE "
+                        + "(party_a_type = 'PATIENT' AND party_a_id = 100) "
+                        + "OR (party_b_type = 'PATIENT' AND party_b_id = 100)", Integer.class);
+        return found == null ? 0 : found;
+    }
+
+    private long threadRevision() {
+        Long found = jdbcTemplate.queryForObject(
+                "SELECT revision FROM chat_conversation WHERE "
+                        + "(party_a_type = 'PATIENT' AND party_a_id = 100) "
+                        + "OR (party_b_type = 'PATIENT' AND party_b_id = 100)", Long.class);
         return found == null ? 0 : found;
     }
 

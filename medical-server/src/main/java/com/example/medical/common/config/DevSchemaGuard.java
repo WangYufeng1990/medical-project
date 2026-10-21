@@ -57,16 +57,18 @@ public class DevSchemaGuard implements CommandLineRunner {
      */
     private static final java.util.List<UpgradeStep> UPGRADE_STEPS = java.util.List.of(
             // v4: sql/schema.sql creates the table on the next start.
-            new UpgradeStep(4, "chat_conversation", null, null, java.util.List.of()),
+            new UpgradeStep(4, "chat_conversation", null, null, null, null),
             // v5: a column on an existing table — CREATE TABLE IF NOT EXISTS cannot do
             // this, so the step carries the DDL. The unique index is scoped to the
             // sender's typed identity, and nulls are distinct in both MySQL and H2, so
-            // keyless messages never collide.
-            new UpgradeStep(5, "message", "client_message_id", "uk_message_sender_client_id",
-                    java.util.List.of(
-                            "ALTER TABLE message ADD COLUMN client_message_id VARCHAR(100) DEFAULT NULL",
-                            "CREATE UNIQUE INDEX uk_message_sender_client_id "
-                                    + "ON message (sender_type, sender_id, client_message_id)")));
+            // keyless messages never collide. Column and index are checked and added
+            // separately: an interrupted upgrade may have completed one of them, and
+            // re-running the whole group would then fail on the part that exists.
+            new UpgradeStep(5, "message", "client_message_id",
+                    "ALTER TABLE message ADD COLUMN client_message_id VARCHAR(100) DEFAULT NULL",
+                    "uk_message_sender_client_id",
+                    "CREATE UNIQUE INDEX uk_message_sender_client_id "
+                            + "ON message (sender_type, sender_id, client_message_id)"));
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;
@@ -122,9 +124,7 @@ public class DevSchemaGuard implements CommandLineRunner {
             throw new IllegalStateException(unknownChainMessage(recorded));
         }
         for (UpgradeStep step : steps) {
-            if (!stepApplied(step)) {
-                step.ddl().forEach(jdbcTemplate::execute);
-            }
+            applyMissingParts(step);
             if (!stepApplied(step)) {
                 throw new IllegalStateException(failureMessage(recorded, step));
             }
@@ -152,6 +152,20 @@ public class DevSchemaGuard implements CommandLineRunner {
                 + "local database file (default: ~/.medical-dev/data/, or the path in H2_DB_PATH) and "
                 + "restarting.",
                 recorded, SCHEMA_VERSION, datasourceUrl, step.version(), step.describe());
+    }
+
+    /**
+     * Adds only the parts of a step that are missing. A step that was interrupted
+     * between its column and its index must be finishable on the next start, so the
+     * two are never applied as one all-or-nothing group.
+     */
+    private void applyMissingParts(UpgradeStep step) {
+        if (step.column() != null && step.columnDdl() != null && !columnExists(step.table(), step.column())) {
+            jdbcTemplate.execute(step.columnDdl());
+        }
+        if (step.index() != null && step.indexDdl() != null && !indexExists(step.table(), step.index())) {
+            jdbcTemplate.execute(step.indexDdl());
+        }
     }
 
     private boolean stepApplied(UpgradeStep step) {
@@ -239,9 +253,9 @@ public class DevSchemaGuard implements CommandLineRunner {
         }
     }
 
-    /** One upgrade: the version it produces, what it needs, and the DDL that adds it. */
-    private record UpgradeStep(int version, String table, String column, String index,
-                               java.util.List<String> ddl) {
+    /** One upgrade: the version it produces, what it needs, and the DDL for each part. */
+    private record UpgradeStep(int version, String table, String column, String columnDdl,
+                               String index, String indexDdl) {
 
         String describe() {
             StringBuilder what = new StringBuilder("table '" + table + "'");
