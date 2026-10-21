@@ -11,11 +11,12 @@ would hide that.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
 
 CONTRACT_VERSION: Final[Literal["v1"]] = "v1"
 
@@ -25,6 +26,41 @@ CONTRACT_VERSION: Final[Literal["v1"]] = "v1"
 StrictPositiveInt = Annotated[int, Field(strict=True, gt=0)]
 StrictRevision = Annotated[int, Field(strict=True, ge=1)]
 StrictCounter = Annotated[int, Field(strict=True, ge=0)]
+
+
+_WIRE_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:[Zz]|[+-]\d{2}:?\d{2})$"
+)
+
+
+def _wire_timestamp(value: Any) -> Any:
+    """Parse a timestamp the way both runtimes must agree on (Round 55.1 review).
+
+    Java parses with ``OffsetDateTime.parse``, which needs an ISO-8601 ``T`` and an offset.
+    Pydantic on its own also accepts an epoch number, a date-only string, a naive
+    date-time and the space-separated spelling, so all of those are refused here. A
+    ``datetime`` instance passes through, because the service builds its own responses in
+    Python.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("a timestamp must have a timezone offset")
+        return value
+    if not isinstance(value, str):
+        raise ValueError("a timestamp must be an ISO-8601 string with a timezone")
+    if not _WIRE_TIMESTAMP.match(value):
+        raise ValueError(
+            "a timestamp must be an ISO-8601 date-time with an offset, e.g. 2026-10-21T12:00:00Z"
+        )
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00").replace("z", "+00:00"))
+    except ValueError as exc:  # pragma: no cover - the pattern already bounds the shape
+        raise ValueError("not a valid ISO-8601 date-time") from exc
+    return parsed
+
+
+# A wire timestamp: string, with a timezone, in the form both runtimes parse.
+WireTimestamp = Annotated[datetime, AwareDatetime, BeforeValidator(_wire_timestamp)]
 
 
 class RunState(StrEnum):
@@ -82,7 +118,7 @@ class RunStatusResponse(BaseModel):
     run_id: StrictPositiveInt
     state: RunState
     revision: StrictCounter
-    updated_at: datetime
+    updated_at: WireTimestamp
     error: RunError | None = None
 
 

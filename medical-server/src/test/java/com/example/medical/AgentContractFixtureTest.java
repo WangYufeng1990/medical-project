@@ -310,10 +310,14 @@ class AgentContractFixtureTest {
 
     private List<String> checkText(String text, JsonNode schema, String where) {
         List<String> violations = new ArrayList<>();
-        if (schema.has("minLength") && text.length() < schema.path("minLength").asInt()) {
+        // JSON Schema counts Unicode code points, and so does Python's len(). String.length()
+        // counts UTF-16 code units, so an emoji would count twice and a valid payload would
+        // be rejected here while Python accepts it (Round 55.1 review).
+        int length = text.codePointCount(0, text.length());
+        if (schema.has("minLength") && length < schema.path("minLength").asInt()) {
             violations.add(where + ": shorter than " + schema.path("minLength") + " characters");
         }
-        if (schema.has("maxLength") && text.length() > schema.path("maxLength").asInt()) {
+        if (schema.has("maxLength") && length > schema.path("maxLength").asInt()) {
             violations.add(where + ": longer than " + schema.path("maxLength") + " characters");
         }
         if ("date-time".equals(schema.path("format").asText()) && !isDateTime(text)) {

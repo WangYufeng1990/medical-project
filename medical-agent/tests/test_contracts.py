@@ -122,3 +122,44 @@ def test_a_status_timestamp_must_be_a_real_date() -> None:
         RunStatusResponse.model_validate_json(
             json.dumps({**payload, "updated_at": "not-a-date"})
         )
+
+
+def test_a_timestamp_must_carry_a_timezone_and_be_iso_8601() -> None:
+    # Java parses with OffsetDateTime.parse: it needs the "T" form and an offset, and it
+    # refuses an epoch number, a bare date and a naive date-time. Python must refuse the
+    # same inputs (Round 55.1 review).
+    payload = json.loads((FIXTURES / "run-status.valid.json").read_text(encoding="utf-8"))
+    valid = ["2026-10-21T12:00:00Z", "2026-10-21T12:00:00z",
+             "2026-10-21T12:00:00+02:00", "2026-10-21T12:00:00.123456Z"]
+    refused = [0, "2026-10-21", "2026-10-21T12:00:00", "2026-10-21 12:00:00Z"]
+
+    for value in valid:
+        parsed = RunStatusResponse.model_validate_json(
+            json.dumps({**payload, "updated_at": value})
+        )
+        assert parsed.updated_at.tzinfo is not None
+    for value in refused:
+        with pytest.raises(ValidationError):
+            RunStatusResponse.model_validate_json(json.dumps({**payload, "updated_at": value}))
+
+
+def test_a_content_length_is_counted_in_code_points() -> None:
+    # 2001 emoji are 2001 code points (and 4002 UTF-16 units): inside maxLength=4000 for
+    # both languages once Java counts code points too.
+    payload = json.loads(
+        (FIXTURES / "run-start.valid.supplementary-characters.json").read_text(encoding="utf-8")
+    )
+
+    parsed = RunStartRequest.model_validate_json(json.dumps(payload))
+
+    assert len(parsed.content) == 2001
+    assert len(parsed.content.encode("utf-16-le")) // 2 == 4002
+
+
+def test_content_beyond_the_limit_is_refused() -> None:
+    payload = json.loads(
+        (FIXTURES / "run-start.invalid-too-long-content.json").read_text(encoding="utf-8")
+    )
+
+    with pytest.raises(ValidationError):
+        RunStartRequest.model_validate_json(json.dumps(payload))
