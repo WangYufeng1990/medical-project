@@ -321,6 +321,10 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         jdbcTemplate.update("UPDATE agent_run SET deadline_at = ? WHERE id = ?",
                 Timestamp.valueOf(LocalDateTime.now().minusSeconds(1)), dispatched.runId());
 
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
@@ -328,6 +332,22 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
+        assertEquals("RUNNING", runState(dispatched.runId()));
+    }
+
+    @Test
+    void aResultThatExpiresBetweenTheCheckAndTheWriteIsRefused() throws Exception {
+        // The authorization check and the write are separate: this drives the write itself
+        // after the lease has gone, which is the window complete()'s own conditions close.
+        Dispatched dispatched = dispatchedRun("Message that expires between check and write");
+        jdbcTemplate.update("UPDATE agent_run SET lease_expires_at = ? WHERE id = ?",
+                Timestamp.valueOf(LocalDateTime.now().minusSeconds(1)), dispatched.runId());
+
+        boolean written = applicationContext
+                .getBean(com.example.medical.module.chat.service.AgentRunStateStore.class)
+                .complete(dispatched.runId(), dispatched.generation());
+
+        assertFalse(written, "the UPDATE must refuse a lease that expired after the check");
         assertEquals("RUNNING", runState(dispatched.runId()));
     }
 
