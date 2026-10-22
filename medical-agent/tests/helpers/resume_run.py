@@ -33,14 +33,20 @@ def submit(_state: dict[str, object]) -> None:
         handle.write("+")
 
 
+CREDENTIALS = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                             outbound_token="out")
+
+
 def main() -> int:
-    worker = AgentWorker(
-        CountingProvider(Path(args.calls)), open_checkpointer(f"sqlite://{args.db}"), submit
-    )
-    credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
-                                  outbound_token="out")
+    with open_checkpointer(f"sqlite://{args.db}") as checkpointer:
+        worker = AgentWorker(CountingProvider(Path(args.calls)), checkpointer, submit)
+        _run(worker)
+    return 0
+
+
+def _run(worker: AgentWorker) -> None:
     if args.resume:
-        worker.resume(args.run_id, credentials)
+        worker.resume(args.run_id, CREDENTIALS)
     else:
         worker.process(
             RunStartRequest(
@@ -52,9 +58,8 @@ def main() -> int:
                 content="Can I reschedule my appointment?",
                 request_id="req-0123456789",
             ),
-            credentials,
+            CREDENTIALS,
         )
-    return 0
 
 
 if __name__ == "__main__":

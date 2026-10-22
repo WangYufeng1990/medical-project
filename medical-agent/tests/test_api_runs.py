@@ -7,6 +7,7 @@ the business layer will: header names, credentials and body.
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,10 +18,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from medical_agent.api.app import create_app
-from medical_agent.checkpoints import open_checkpointer
 from medical_agent.config import Settings
 from medical_agent.providers.base import ProviderRequest, ProviderResponse
-from medical_agent.worker import AgentWorker
 
 INBOUND = "inbound-token-for-tests"
 OUTBOUND = "outbound-token-for-tests"
@@ -29,6 +28,9 @@ CAPABILITY = "capability-for-tests"
 
 class StubJava(BaseHTTPRequestHandler):
     received: ClassVar[list[dict[str, object]]] = []
+    # When set, the stub behaves like Java's generation check: a result for any other
+    # generation is refused with 409, exactly as AgentInternalController does.
+    expected_generation: ClassVar[int | None] = None
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -41,10 +43,17 @@ class StubJava(BaseHTTPRequestHandler):
                 "body": body,
             }
         )
-        self.send_response(200)
+        status = 200
+        if (
+            StubJava.expected_generation is not None
+            and body.get("generation") != StubJava.expected_generation
+        ):
+            status = 409
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"code":200,"message":"ok"}')
+        self.wfile.write(b'{"code":200,"message":"ok"}' if status == 200
+                         else b'{"code":409,"message":"stale generation"}')
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -58,6 +67,7 @@ class StubProvider:
 @pytest.fixture()
 def java_stub() -> Iterator[str]:
     StubJava.received = []
+    StubJava.expected_generation = None
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubJava)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -69,15 +79,19 @@ def java_stub() -> Iterator[str]:
         server.server_close()
 
 
-def build_client(tmp_path: Path, java_url: str) -> TestClient:
+@pytest.fixture()
+def client(tmp_path: Path, java_stub: str) -> Iterator[TestClient]:
+    # No worker is injected: the application builds it in its lifespan, which is what the
+    # checkpointer lifetime fix is about.
     settings = Settings(
         inbound_token=INBOUND,
         outbound_token=OUTBOUND,
-        java_base_url=java_url,
+        java_base_url=java_stub,
         checkpoint_url=f"sqlite://{tmp_path / 'api.sqlite'}",
     )
-    worker = AgentWorker(StubProvider(), open_checkpointer(settings.checkpoint_url))
-    return TestClient(create_app(settings, provider=StubProvider(), worker=worker))
+    app = create_app(settings, provider=StubProvider())
+    with TestClient(app) as started:
+        yield started
 
 
 def request_body(**overrides: object) -> dict[str, object]:
@@ -105,10 +119,8 @@ def headers(token: str = INBOUND, capability: str | None = CAPABILITY) -> dict[s
 
 
 def test_an_authenticated_dispatch_runs_the_graph_and_submits_the_result(
-    tmp_path, java_stub
+    client: TestClient,
 ) -> None:
-    client = build_client(tmp_path, java_stub)
-
     response = client.post("/internal/v1/runs", json=request_body(), headers=headers())
 
     assert response.status_code == 202
@@ -121,18 +133,14 @@ def test_an_authenticated_dispatch_runs_the_graph_and_submits_the_result(
     assert sent["body"] == {"generation": 1, "outcome": "APPOINTMENT:DRAFT_READY"}
 
 
-def test_a_wrong_inbound_token_is_refused(tmp_path, java_stub) -> None:
-    client = build_client(tmp_path, java_stub)
-
+def test_a_wrong_inbound_token_is_refused(client: TestClient) -> None:
     response = client.post("/internal/v1/runs", json=request_body(), headers=headers(token="nope"))
 
     assert response.status_code == 401
     assert StubJava.received == []
 
 
-def test_a_missing_capability_is_refused(tmp_path, java_stub) -> None:
-    client = build_client(tmp_path, java_stub)
-
+def test_a_missing_capability_is_refused(client: TestClient) -> None:
     response = client.post(
         "/internal/v1/runs", json=request_body(), headers=headers(capability=None)
     )
@@ -141,9 +149,7 @@ def test_a_missing_capability_is_refused(tmp_path, java_stub) -> None:
     assert StubJava.received == []
 
 
-def test_a_payload_without_a_generation_is_refused(tmp_path, java_stub) -> None:
-    client = build_client(tmp_path, java_stub)
-
+def test_a_payload_without_a_generation_is_refused(client: TestClient) -> None:
     response = client.post(
         "/internal/v1/runs", json=request_body(execution_generation=None), headers=headers()
     )
@@ -152,9 +158,59 @@ def test_a_payload_without_a_generation_is_refused(tmp_path, java_stub) -> None:
     assert StubJava.received == []
 
 
-def test_an_unknown_contract_field_is_refused(tmp_path, java_stub) -> None:
-    client = build_client(tmp_path, java_stub)
-
+def test_an_unknown_contract_field_is_refused(client: TestClient) -> None:
     response = client.post("/internal/v1/runs", json=request_body(extra="x"), headers=headers())
 
     assert response.status_code == 422
+
+
+def test_the_checkpointer_is_closed_when_the_application_stops(
+    tmp_path: Path, java_stub: str
+) -> None:
+    settings = Settings(
+        inbound_token=INBOUND,
+        outbound_token=OUTBOUND,
+        java_base_url=java_stub,
+        checkpoint_url=f"sqlite://{tmp_path / 'lifetime.sqlite'}",
+    )
+    app = create_app(settings, provider=StubProvider())
+
+    with TestClient(app) as started:
+        checkpointer = app.state.checkpointer
+        assert started.get("/health/live").status_code == 200
+        assert checkpointer.conn.execute("SELECT 1").fetchall() != []
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        checkpointer.conn.execute("SELECT 1")
+
+
+def test_a_java_retry_with_a_new_generation_takes_over_the_finished_work(
+    tmp_path: Path, java_stub: str
+) -> None:
+    # The real retry order: generation 1 is refused by Java (409), the dispatcher re-claims
+    # as generation 2 and sends the same run again. The worker must adopt generation 2 and
+    # submit it, without classifying or drafting a second time.
+    StubJava.expected_generation = 2
+    settings = Settings(
+        inbound_token=INBOUND,
+        outbound_token=OUTBOUND,
+        java_base_url=java_stub,
+        checkpoint_url=f"sqlite://{tmp_path / 'retry.sqlite'}",
+    )
+    app = create_app(settings, provider=StubProvider())
+
+    # A refused submission is a server-side failure; the client must see the 500 the Java
+    # dispatcher would see, not a re-raised exception.
+    with TestClient(app, raise_server_exceptions=False) as started:
+        first = started.post("/internal/v1/runs", json=request_body(), headers=headers())
+        assert first.status_code == 500, "a refused submission surfaces as a failed dispatch"
+        second = started.post(
+            "/internal/v1/runs",
+            json=request_body(execution_generation=2),
+            headers=headers(capability="capability-for-retry"),
+        )
+        assert second.status_code == 202
+
+    generations = [sent["body"]["generation"] for sent in StubJava.received]
+    assert generations == [1, 2], f"one attempt per generation: {generations}"
+    assert StubJava.received[-1]["capability"] == "capability-for-retry"

@@ -1,17 +1,23 @@
-"""Checkpointer selection (Round 55.4).
+"""Checkpointer selection and lifetime (Round 55.4, review).
 
 Postgres is the deployment target; SQLite is what a developer machine and the tests can run
-without a server. The URL decides, so the graph code does not know which one it has.
+without a server. The factory is a context manager because both savers own a connection:
+the Postgres one is opened by ``PostgresSaver.from_conn_string`` (its own context manager)
+and the SQLite one by the ``sqlite3`` connection. Returning the saver alone would let the
+connection close before ``setup()`` ever runs.
 """
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 
-def open_checkpointer(url: str) -> BaseCheckpointSaver[Any]:
+@contextmanager
+def open_checkpointer(url: str) -> Iterator[BaseCheckpointSaver[Any]]:
     if url.startswith(("postgres://", "postgresql://")):
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
@@ -20,15 +26,19 @@ def open_checkpointer(url: str) -> BaseCheckpointSaver[Any]:
                 "Postgres checkpoints need the 'langgraph-checkpoint-postgres' package "
                 "and a working psycopg driver"
             ) from exc
-        postgres = PostgresSaver.from_conn_string(url).__enter__()
-        postgres.setup()
-        return postgres
+        with PostgresSaver.from_conn_string(url) as postgres:
+            postgres.setup()
+            yield postgres
+        return
 
     path = Path(url.removeprefix("sqlite://"))
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, check_same_thread=False)
-    from langgraph.checkpoint.sqlite import SqliteSaver
+    try:
+        from langgraph.checkpoint.sqlite import SqliteSaver
 
-    sqlite = SqliteSaver(connection)
-    sqlite.setup()
-    return sqlite
+        sqlite = SqliteSaver(connection)
+        sqlite.setup()
+        yield sqlite
+    finally:
+        connection.close()

@@ -8,7 +8,9 @@ inside the graph, so an accepted call means the work really happened.
 
 from __future__ import annotations
 
+import contextlib
 import secrets
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -59,11 +61,34 @@ def create_app(
     provider: Provider | None = None,
     worker: AgentWorker | None = None,
 ) -> FastAPI:
-    """Build the application. Settings are validated by the caller (``load_settings``)."""
-    app = FastAPI(title="medical-agent", version="0.1.0")
+    """Build the application. Settings are validated by the caller (``load_settings``).
+
+    The checkpointer owns a connection, so it is entered on startup and closed on shutdown:
+    a saver obtained by dropping its context manager would already have lost the connection
+    before ``setup()`` ran (Round 55.4 review).
+    """
     selected = provider
     active_worker = worker
-    created_checkpointer = None
+    stack: contextlib.ExitStack | None = None
+
+    @contextlib.asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        nonlocal active_worker, stack
+        stack = contextlib.ExitStack()
+        try:
+            if active_worker is None:
+                active_provider = selected if selected is not None else build_provider(settings)
+                checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
+                active_worker = AgentWorker(active_provider, checkpointer)
+                application.state.checkpointer = checkpointer
+            application.state.worker = active_worker
+            yield
+        finally:
+            if stack is not None:
+                stack.close()
+                stack = None
+
+    app = FastAPI(title="medical-agent", version="0.1.0", lifespan=lifespan)
 
     @app.get("/health/live", response_model=LiveResponse)
     def live() -> LiveResponse:
@@ -81,11 +106,9 @@ def create_app(
         if not capability:
             raise HTTPException(status_code=400, detail="X-Agent-Capability is required")
 
-        nonlocal active_worker, created_checkpointer
-        if active_worker is None:
-            active_provider = selected if selected is not None else build_provider(settings)
-            created_checkpointer = open_checkpointer(settings.checkpoint_url)
-            active_worker = AgentWorker(active_provider, created_checkpointer)
+        worker_for_call = getattr(app.state, "worker", None)
+        if worker_for_call is None:
+            raise HTTPException(status_code=503, detail="the worker is not started")
         credentials = CallCredentials(
             capability=capability,
             java_base_url=settings.java_base_url,
@@ -93,7 +116,7 @@ def create_app(
             if settings.outbound_token
             else "",
         )
-        active_worker.process(request, credentials)
+        worker_for_call.process(request, credentials)
         return {"run_id": request.run_id, "status": "ACCEPTED"}
 
     @app.get("/health/ready", response_model=ReadyResponse, responses={503: {"model": dict}})
