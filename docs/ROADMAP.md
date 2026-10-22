@@ -4886,7 +4886,13 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 | 55.3 Service/task authorization | P0 / **Done** (2026-10-22, after review) | Directional outbound/inbound credentials, opaque capability digests bound to run + generation, generation- and state-fenced dispatch writes, live-lease/deadline checks inside verify **and** the result UPDATE, current account check, internal allowlist | AgentExecutionAuthorizationTest + AgentDispatchIntegrationTest: forged/expired/cross-run/revoked/stale access rejected, a result accepted mid-dispatch is never reopened or requeued, the outbound token is not an inbound one, expired leases and deadlines refuse GET and POST, and the result UPDATE itself refuses a write whose lease lapsed after the check — 35 agent tests (see the 55.3 records) |
 | 55.4 Minimal persistent graph | P0 / **Done** (2026-10-22, H2 + SQLite; Postgres deferred by the 2026-10-22 scope decision) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite in this environment); recovery by resume; run-level serialization | AgentEndToEndIntegrationTest (real Java + uvicorn processes): a refused callback requeues the run, the retry claims generation 2 and the second Python process resumes the checkpoint, submitting generation 2 → WAITING_REVIEW; messaging stays available while the agent fails — plus the 79 Python tests (see the 55.4 records) |
 
-Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
+Run the checks locally: backend regression (`mvn clean verify`), Python lint/type/Mock tests
+(`ruff`, `mypy`, `pytest`) and the frontend checks (`npm run check`, `npm test`, `npm run build`),
+plus the opt-in end-to-end test (`mvn -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true test`).
+There is **no CI workflow**: one was written during Round 55.4 and removed by the owner in
+`fb8b4134` ("use local validation"), so do not reintroduce it as part of these rounds (2026-10-22
+decision). Distinguish liveness from readiness and keep provider failure from making human
+messaging unavailable.
 
 ### Round 55.1 — Service and contract skeleton (Done, 2026-10-21)
 
@@ -4909,7 +4915,7 @@ Add initial CI now: backend regression, Python lint/type/Mock tests and frontend
 
 **Verification (actually run):** `.venv/bin/python -m pytest` → **32 passed**; `ruff check .` → clean; `mypy` (strict, `files = ["src"]`) → "no issues found in 12 source files"; `mvn clean verify` → **309 tests, 0 failures, BUILD SUCCESS** (305 + 4), `LayeringGuardTest` 4/4; `MEDICAL_AGENT_INBOUND_TOKEN=… uvicorn … :8099` → `/health/live` **200** and `/health/ready` **200 `{provider: mock, contract_version: v1}`**; `docker compose config --quiet` → valid. The Java fixture check was proved non-vacuous by removing `run_id` from a valid fixture (failure: `missing required field 'run_id'`) and restoring it.
 
-**Limits of this slice (not claimed):** no run endpoints yet — the durable dispatcher is 55.2, and shipping a stub that accepts work it cannot do was rejected; no DeepSeek adapter (56.1) and no LangGraph/PostgreSQL (55.4+); **the Docker image was not built** because this machine has no Docker daemon, so only the Compose file's syntax is verified; the Java side has no agent DTOs yet — only the fixture-agreement test, and the dispatcher's DTOs arrive with 55.2; no CI workflow yet (Round 55's closing instruction); the Python tests run against a venv created with `python3.12` explicitly, because the default `python3` here is 3.9.
+**Limits of this slice (not claimed):** no run endpoints yet — the durable dispatcher is 55.2, and shipping a stub that accepts work it cannot do was rejected; no DeepSeek adapter (56.1) and no LangGraph/PostgreSQL (55.4+); **the Docker image was not built** because this machine has no Docker daemon, so only the Compose file's syntax is verified; the Java side has no agent DTOs yet — only the fixture-agreement test, and the dispatcher's DTOs arrive with 55.2; no CI workflow (the round's closing instruction was later dropped; validation is local by the 2026-10-22 decision); the Python tests run against a venv created with `python3.12` explicitly, because the default `python3` here is 3.9.
 
 ### Round 55.1 review fixes (second pass, 2026-10-21)
 
@@ -4980,7 +4986,7 @@ Fixed by validating the offset the way Java does: minutes must be 00–59, hours
 - **The receiving endpoint does not exist yet.** Python implements no run endpoints, so against a real agent service the dispatcher gets a 404 and backs off — the stub proves the Java behaviour, not an end-to-end run. The intake/authorization endpoints belong to 55.3/55.4.
 - No result submission, review or publication (Rounds 55.3/57); a RUNNING run stays RUNNING until a result arrives, and after its lease expires the sweep puts it back — the generation exists but is not yet used to fence a stale worker (55.3).
 - The claim is a guarded UPDATE, which is correct for the single-instance deployment the plan specifies; multi-instance lease safety beyond that is not claimed.
-- No CI workflow yet (the round's closing instruction), and the Docker image is still unverified (no daemon here).
+- No CI workflow (that instruction was dropped on 2026-10-22; validation is local), and the Docker image is still unverified (no daemon here).
 - Intake runs only for `PATIENT` senders; it adds one revision lookup per such send and creates no rows while the feature is off.
 
 ### Round 55.2 review fixes (second pass, 2026-10-22)
@@ -5002,7 +5008,7 @@ Four findings were re-checked against the source; all four held.
 
 **Verification (actually run):** `mvn clean verify` → **329 tests, 0 failures, 0 errors, BUILD SUCCESS** (323 + 5 dispatcher tests + 1 restart test); `LayeringGuardTest` 4/4. The red state for the review items was observed before the fixes: the 422 body was stored verbatim, an expired job was sent, an exhausted job made one more call, and the second job of a slow batch was reclaimed immediately.
 
-**Still not claimed:** no Python run endpoint exists, so a real dispatch answers 404 and backs off; no result submission, review or publication (55.3/57); multi-instance lease safety beyond the guarded claim; no CI workflow; the Docker image is unverified here.
+**Still not claimed:** no Python run endpoint exists, so a real dispatch answers 404 and backs off; no result submission, review or publication (55.3/57); multi-instance lease safety beyond the guarded claim; no CI workflow (validation is local, 2026-10-22); the Docker image is unverified here.
 
 ### Round 55.3 — Service and task authorization (Done, 2026-10-22)
 
