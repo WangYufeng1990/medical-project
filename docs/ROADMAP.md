@@ -4875,14 +4875,14 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 **Still not claimed:** the paging and notice tests exercise the state helpers, not the rendered components — that boundary is unchanged. Round 54 is complete on this evidence, but acceptance remains the reviewer's call.
 
-## Round 55 — Python service and reliable execution (In progress: 55.1 Done, 55.2–55.4 Pending)
+## Round 55 — Python service and reliable execution (In progress: 55.1–55.2 Done, 55.3–55.4 Pending)
 
 **Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
-| 55.2 Durable dispatcher | P0 / Pending | agent_run atomic intake; claim/lease/attempt/deadline; bounded backoff; separate executor; reconcile expired claims | AgentDispatchIntegrationTest: Python down does not break message send; restart replays pending work; duplicate dispatch produces one logical result |
+| 55.2 Durable dispatcher | P0 / **Done** (2026-10-22) | agent_run atomic intake; claim/lease/attempt/deadline; bounded backoff; separate executor; reconcile expired claims | AgentDispatchIntegrationTest: Python down does not break message send; a second dispatch pass replays pending work; duplicate dispatch produces one logical result — 10/10 pass (see 55.2 record below) |
 | 55.3 Service/task authorization | P0 / Pending | Directional credentials, opaque capability digests, generations, current account check and internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked access and stale workers rejected; capability not persisted in graph state |
 | 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
 
@@ -4952,6 +4952,36 @@ Fixed by validating the offset the way Java does: minutes must be 00–59, hours
 **Verification (actually run):** `pytest` → **58 passed**; `ruff check .` → clean; `mypy` (strict) → no issues in 12 source files; `mvn clean verify` → **313 tests, 0 failures, BUILD SUCCESS**; the generated schemas are unchanged.
 
 **Still not claimed:** the offset range is now checked, but the contract remains "the spellings both runtimes parse" rather than a full ISO-8601 profile — forms neither side produces (`+02`, `+02:00:30`) are not accepted and not claimed. The validator is still fixture-backed, not a JSON Schema implementation.
+
+### Round 55.2 — Durable dispatcher (Done, 2026-10-22)
+
+**Baseline:** `ef975b6e`, clean tree, **313 tests**. Schema v6.
+
+**What was built** (all in `module/chat`, the module the plan assigns message jobs to):
+
+| Piece | What it does |
+|---|---|
+| `agent_run` table | One row per patient message, written **in the message's own transaction**, with a unique key on `message_id`; state, attempt, max attempts, `next_attempt_at`, `deadline_at`, lease owner/expiry and `execution_generation` |
+| `AgentRunService` | Intake (idempotent on the message id), a dispatch pass over due rows, the reconcile sweep, and the backoff/attempt policy |
+| `AgentRunStateStore` | Short transactions for every state change, so the claim is **committed before** the HTTP call and a slow model never holds a database transaction open |
+| `AgentRunRepository` | Guarded UPDATEs: `claim` (one winner, increments attempt and generation), `markState`, `retryLater`, `fail`, `reclaimExpired`, `expireDeadlines` |
+| `HttpAgentRunClient` | `POST /internal/v1/runs` with the v1 contract body and the configured service token, bounded connect/read timeouts |
+| `AgentRunStartRequest` | The Java side of the contract, field for field; the content is cut to the contract's 4000 code points and `request_id` is derived from run + generation so a retry is recognisable |
+| `AgentRunScheduler` + `AgentDispatchConfig` | A **dedicated** `ThreadPoolTaskScheduler` selected by name, so a slow model cannot delay the audit/quality schedulers |
+| `app.agent.*` config | Off by default; base URL, service token, poll interval, batch size, lease, deadline, attempts, backoff, request timeout |
+
+**Tests (`AgentDispatchIntegrationTest`, 10).** A local JDK `HttpServer` stub stands in for the agent service and records the bodies Java sends, so the test observes the real contract and can fail it on demand. Asserted: a stored patient message creates exactly one PENDING run with the conversation revision; staff messages create none; a dispatch posts the v1 contract (`contract_version`, `run_id`, `message_id`, `patient_id`, `sender_type`, `content`, `request_id`) and marks the run RUNNING with attempt 1 and generation 1; a 503 leaves the message stored, the run PENDING with attempt 1, an error and a retry in the future; two concurrent dispatch passes make **one** call; a failed run is replayed once the service recovers (same row, attempt 2); an expired lease is reclaimed and re-dispatched; a run past its deadline ends FAILED without calling out; exhausting attempts ends FAILED; and a refused connection surfaces as an exception the queue turns into a retry.
+
+**Red evidence.** The first run of the new class failed with `TransactionRequiredException: No EntityManager with actual transaction available` on every state change — the `@Modifying` queries had no transaction because the dispatch pass deliberately does not wrap the HTTP call. That produced the `AgentRunStateStore` split (claim/ack/retry/fail each in its own short transaction), which is the design that survived. The full gate then caught the guard tests still assuming v5 semantics (`SCHEMA_VERSION - 1`/`- 2` now point at different steps); they were rewritten to name the version they are about (3 → the v4 table step, 4 → the v5 column step) and their minimal probe databases now include the later tables the chain requires.
+
+**Verification (actually run):** `mvn clean verify` → **323 tests, 0 failures, 0 errors, BUILD SUCCESS** (313 + 10); `LayeringGuardTest` 4/4 with no allowlist. Dispatch configuration defaults to `enabled=false`, so the whole existing suite (and every deployment that has not opted in) sends no agent traffic.
+
+**Limits of this slice (not claimed):**
+- **The receiving endpoint does not exist yet.** Python implements no run endpoints, so against a real agent service the dispatcher gets a 404 and backs off — the stub proves the Java behaviour, not an end-to-end run. The intake/authorization endpoints belong to 55.3/55.4.
+- No result submission, review or publication (Rounds 55.3/57); a RUNNING run stays RUNNING until a result arrives, and after its lease expires the sweep puts it back — the generation exists but is not yet used to fence a stale worker (55.3).
+- The claim is a guarded UPDATE, which is correct for the single-instance deployment the plan specifies; multi-instance lease safety beyond that is not claimed.
+- No CI workflow yet (the round's closing instruction), and the Docker image is still unverified (no daemon here).
+- Intake runs only for `PATIENT` senders; it adds one revision lookup per such send and creates no rows while the feature is off.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

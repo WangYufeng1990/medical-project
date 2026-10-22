@@ -48,7 +48,7 @@ import java.util.Locale;
 public class DevSchemaGuard implements CommandLineRunner {
 
     /** Baseline for the current sql/schema.sql. Bump on every schema change. */
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 6;
 
     /**
      * The upgrades this build can apply to an older database, in order. A step names
@@ -68,7 +68,9 @@ public class DevSchemaGuard implements CommandLineRunner {
                     "ALTER TABLE message ADD COLUMN client_message_id VARCHAR(100) DEFAULT NULL",
                     "uk_message_sender_client_id",
                     "CREATE UNIQUE INDEX uk_message_sender_client_id "
-                            + "ON message (sender_type, sender_id, client_message_id)"));
+                            + "ON message (sender_type, sender_id, client_message_id)"),
+            // v6: another table, created by sql/schema.sql on the next start.
+            new UpgradeStep(6, "agent_run", null, null, null, null));
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;

@@ -57,6 +57,19 @@ public class ChatConversationService {
         return time.truncatedTo(ChronoUnit.SECONDS);
     }
 
+    /**
+     * The thread's current revision, for the dispatch row written with the message
+     * (Round 55.2). Zero when the thread is somehow absent, which the contract reads as
+     * "no revision yet" rather than failing the send.
+     */
+    public long revisionOf(Party one, Party other) {
+        Party first = canonicalFirst(one, other);
+        Party second = first.equals(one) ? other : one;
+        return conversationRepository.findByPair(first.type(), first.id(), second.type(), second.id())
+                .map(conversation -> conversation.getRevision() == null ? 0L : conversation.getRevision())
+                .orElse(0L);
+    }
+
     /** One page of the caller's threads, newest activity first with a stable tie-break. */
     public Page<ChatConversation> page(Long userId, String userType, Pageable pageable) {
         return conversationRepository.findPageForParty(userType, userId, pageable);

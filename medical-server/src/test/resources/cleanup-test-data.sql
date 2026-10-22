@@ -15,6 +15,9 @@ DELETE FROM chat_conversation WHERE
  OR (party_b_type = 'PATIENT' AND party_b_id NOT IN (100, 101, 102, 103))
  OR (party_a_type = 'STAFF' AND party_a_id NOT IN (1, 2))
  OR (party_b_type = 'STAFF' AND party_b_id NOT IN (1, 2));
+-- Durable dispatch rows belong to the messages a test created (Round 55.2); every
+-- class starts with an empty queue.
+DELETE FROM agent_run;
 DELETE FROM emergency_access WHERE user_id IS NOT NULL;
 DELETE FROM bill WHERE id NOT IN (500, 501, 502);
 DELETE FROM prescription_item WHERE prescription_id NOT IN (300, 301, 302);

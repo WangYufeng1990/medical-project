@@ -50,6 +50,7 @@ public class ChatService {
     private final PatientLookup patientLookup;
     private final StaffLookup staffLookup;
     private final ChatConversationService chatConversationService;
+    private final AgentRunService agentRunService;
     private final StaffAccountState staffAccountState;
     private final PatientPortalAccountState patientPortalAccountState;
     private final DoctorPatientScope doctorPatientScope;
@@ -121,6 +122,11 @@ public class ChatService {
         // transaction (and is translated) instead of as an opaque rollback.
         messageRepository.saveAndFlush(msg);
         chatConversationService.recordMessage(sender, receiver, msg.getId(), sentAt);
+        // Round 55.2: the job is written in this transaction, so a stored patient message
+        // always has one; staff-to-staff and staff-to-patient traffic is not model work.
+        if (PATIENT.equals(sender.type())) {
+            agentRunService.recordForMessage(msg, sender.id());
+        }
         MessageVO vo = MessageVO.fromEntity(msg);
         notifyAfterCommit(new NewMessageEvent(sender.id(), sender.type(),
                 receiver.id(), receiver.type(), vo));

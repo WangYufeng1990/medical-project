@@ -305,6 +305,34 @@ CREATE TABLE IF NOT EXISTS chat_conversation (
     INDEX idx_chat_conversation_party_b (party_b_type, party_b_id, last_message_time)
 );
 
+-- Round 55.2: a durable dispatch row. The message and this row are written in one
+-- transaction, so a job exists exactly when its message does; the row then carries the
+-- lease, attempt and deadline the dispatcher needs to retry safely. One run per message
+-- is an invariant (unique key), which is what makes a duplicate dispatch a no-op.
+CREATE TABLE IF NOT EXISTS agent_run (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    message_id BIGINT NOT NULL,
+    patient_id BIGINT NOT NULL,
+    conversation_revision BIGINT NOT NULL,
+    state VARCHAR(20) NOT NULL,
+    attempt INT NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 3,
+    next_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deadline_at TIMESTAMP NOT NULL,
+    lease_owner VARCHAR(64) DEFAULT NULL,
+    lease_expires_at TIMESTAMP DEFAULT NULL,
+    execution_generation BIGINT NOT NULL DEFAULT 0,
+    last_error VARCHAR(500) DEFAULT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_run_message (message_id),
+    INDEX idx_agent_run_due (state, next_attempt_at),
+    INDEX idx_agent_run_lease (state, lease_expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,

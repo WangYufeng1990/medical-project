@@ -364,6 +364,12 @@ curl -s localhost:8090/health/ready            # provider + contract version
 MEDICAL_AGENT_INBOUND_TOKEN=dev-token docker compose up --build medical-agent
 ```
 
+Round 55.2 adds the Java-side durable dispatcher: a stored patient message also writes
+an `agent_run` row (same transaction), and a scheduler with its own thread pool claims,
+leases and retries the job with bounded backoff and a deadline. It is **off by default**
+and configured through `app.agent.*` / `AGENT_*` variables; the Python service has no
+run endpoint yet, so a real dispatch gets a 404 and backs off until 55.3/55.4.
+
 The contract lives in `contracts/agent/v1/`: JSON Schemas generated from the Pydantic
 models plus fixtures both languages read. After changing a model, regenerate and let
 the drift tests run:

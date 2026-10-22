@@ -21,6 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class DevSchemaGuardTest {
 
+    /** The version just before the v4 table step (chat_conversation). */
+    private static final int BEFORE_THE_CONVERSATION_STEP = 3;
+    /** The version just before the v5 column step (message.client_message_id). */
+    private static final int BEFORE_THE_COLUMN_STEP = 4;
+    /** A version this build has no contiguous path from: the steps start at 4. */
+    private static final int BEFORE_ANY_KNOWN_STEP = 2;
+
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
@@ -79,12 +86,13 @@ class DevSchemaGuardTest {
         probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, version INT NOT NULL, "
                 + "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
         probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
                 + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
                 + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
                 + "update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted TINYINT NOT NULL DEFAULT 0, "
                 + "version INT NOT NULL DEFAULT 0, PRIMARY KEY (id))");
-        probe.update("INSERT INTO schema_version (version) VALUES (?)", DevSchemaGuard.SCHEMA_VERSION - 1);
+        probe.update("INSERT INTO schema_version (version) VALUES (?)", BEFORE_THE_COLUMN_STEP);
 
         new DevSchemaGuard(probe, "jdbc:h2:mem:column-upgrade").run();
 
@@ -111,6 +119,7 @@ class DevSchemaGuardTest {
         probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, version INT NOT NULL, "
                 + "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
         probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
                 + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
                 + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, client_message_id VARCHAR(100) DEFAULT NULL, "
@@ -119,7 +128,7 @@ class DevSchemaGuardTest {
                 + "version INT NOT NULL DEFAULT 0, PRIMARY KEY (id))");
         probe.update("INSERT INTO message (sender_id, sender_type, receiver_id, receiver_type, content) "
                 + "VALUES (1,'STAFF',100,'PATIENT','a message from before the upgrade')");
-        probe.update("INSERT INTO schema_version (version) VALUES (?)", DevSchemaGuard.SCHEMA_VERSION - 1);
+        probe.update("INSERT INTO schema_version (version) VALUES (?)", BEFORE_THE_COLUMN_STEP);
 
         new DevSchemaGuard(probe, "jdbc:h2:mem:partial-upgrade").run();
 
@@ -142,12 +151,12 @@ class DevSchemaGuardTest {
         // still refuse rather than stamp a version the database does not match.
         jdbcTemplate.execute("DROP TABLE chat_conversation");
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 2);
+                BEFORE_THE_CONVERSATION_STEP);
 
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/stale-db").run());
 
-        assertTrue(e.getMessage().contains("v" + (DevSchemaGuard.SCHEMA_VERSION - 2)),
+        assertTrue(e.getMessage().contains("v" + BEFORE_THE_CONVERSATION_STEP),
                 "message must name the version found: " + e.getMessage());
         assertTrue(e.getMessage().contains("H2_DB_PATH"),
                 "message must point at the fix: " + e.getMessage());
@@ -164,7 +173,7 @@ class DevSchemaGuardTest {
         jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS elsewhere");
         jdbcTemplate.execute("CREATE TABLE elsewhere.chat_conversation (id BIGINT PRIMARY KEY)");
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 2);
+                BEFORE_THE_CONVERSATION_STEP);
 
         assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/other-schema-db").run());
@@ -176,7 +185,7 @@ class DevSchemaGuardTest {
     void failsFastOnAnOlderSchemaThisBuildCannotComplete() {
         // No additive step is known from v2 to v3, so the guard cannot upgrade it.
         jdbcTemplate.update("INSERT INTO schema_version (version) VALUES (?)",
-                DevSchemaGuard.SCHEMA_VERSION - 3);
+                BEFORE_ANY_KNOWN_STEP);
 
         assertThrows(IllegalStateException.class,
                 () -> new DevSchemaGuard(jdbcTemplate, "jdbc:h2:file:/tmp/ancient-db").run());

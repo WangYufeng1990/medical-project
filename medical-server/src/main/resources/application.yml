@@ -55,3 +55,18 @@ app:
     key: ${AES_KEY}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  # Round 55.2: durable agent dispatch. Off by default - a deployment enables model-
+  # assisted drafting deliberately, and nothing else in messaging depends on it.
+  agent:
+    enabled: ${AGENT_ENABLED:false}
+    scheduling-enabled: ${AGENT_SCHEDULING_ENABLED:true}
+    base-url: ${AGENT_BASE_URL:http://localhost:8090}
+    service-token: ${AGENT_SERVICE_TOKEN:}
+    poll-interval-ms: 5000
+    batch-size: 10
+    lease: 60s
+    deadline: 30m
+    max-attempts: 3
+    base-backoff: 5s
+    max-backoff: 5m
+    request-timeout: 5s
