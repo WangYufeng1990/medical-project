@@ -117,6 +117,9 @@ class RunStartRequest(BaseModel):
     patient_id: StrictPositiveInt
     conversation_revision: StrictRevision
     sender_type: Literal["PATIENT"] = "PATIENT"
+    # The generation the capability is bound to; the worker echoes it when it submits a
+    # result, which is what lets Java refuse a stale worker (Round 55.3/55.4).
+    execution_generation: StrictPositiveInt
     content: str = Field(min_length=1, max_length=4000)
     locale: str = Field(default="en", min_length=2, max_length=16)
     request_id: str = Field(min_length=8, max_length=64)

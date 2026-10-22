@@ -197,6 +197,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         assertEquals("PATIENT", body.get("sender_type").asText());
         assertEquals("What are your opening hours?", body.get("content").asText());
         assertTrue(body.hasNonNull("request_id"));
+        assertEquals(1L, body.get("execution_generation").asLong());
 
         Map<String, Object> run = runFor(messageId);
         assertEquals("RUNNING", run.get("state"));
@@ -497,7 +498,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         properties.setRequestTimeout(Duration.ofMillis(500));
         AgentRunClient client = new HttpAgentRunClient(properties);
         AgentRunStartRequest request = new AgentRunStartRequest("v1", 1L, 1L, 100L, 1L,
-                "PATIENT", "hello", "en", "request-1");
+                "PATIENT", 1L, "hello", "en", "request-1");
 
         assertThrows(RuntimeException.class, () -> client.start(request, "capability"));
     }

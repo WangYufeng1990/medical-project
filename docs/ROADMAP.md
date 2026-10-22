@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: Round 54 complete (2026-10-19 → 2026-10-21) and Round 55.1 done (2026-10-21); 55.2–55.4 and Rounds 56–59 remain Pending. No implementation or benchmark result is claimed beyond 55.1.**
+**Status: Rounds 54 and 55 complete (2026-10-19 → 2026-10-22); Rounds 56–59 remain Pending. Round 55's four slices are Done with their evidence recorded below, and their named limits — an unexecuted Postgres/CI/Docker path, a mock classifier, provisional result payloads — are stated in each slice's record.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -4875,7 +4875,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 **Still not claimed:** the paging and notice tests exercise the state helpers, not the rendered components — that boundary is unchanged. Round 54 is complete on this evidence, but acceptance remains the reviewer's call.
 
-## Round 55 — Python service and reliable execution (In progress: 55.1–55.3 Done, 55.4 Pending)
+## Round 55 — Python service and reliable execution (Done: 55.1–55.4)
 
 **Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
 
@@ -4884,7 +4884,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / **Done** (2026-10-22, after review) | agent_run atomic intake; claim/lease/attempt/deadline (all enforced in the claim); attempted-error categories instead of remote text; bounded backoff; separate executor; reconcile expired and exhausted claims | AgentDispatchIntegrationTest + AgentRestartRecoveryIntegrationTest: Python down does not break message send; a refused/rejected dispatch is retried without storing the response body; a restart dispatches the queued job from a second application context; expired deadlines and exhausted attempts never reach the service; one claim winner per job — 16 tests (see the 55.2 records) |
 | 55.3 Service/task authorization | P0 / **Done** (2026-10-22, after review) | Directional outbound/inbound credentials, opaque capability digests bound to run + generation, generation- and state-fenced dispatch writes, live-lease/deadline checks inside verify **and** the result UPDATE, current account check, internal allowlist | AgentExecutionAuthorizationTest + AgentDispatchIntegrationTest: forged/expired/cross-run/revoked/stale access rejected, a result accepted mid-dispatch is never reopened or requeued, the outbound token is not an inbound one, expired leases and deadlines refuse GET and POST, and the result UPDATE itself refuses a write whose lease lapsed after the check — 35 agent tests (see the 55.3 records) |
-| 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
+| 55.4 Minimal persistent graph | P0 / **Done** (2026-10-22) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite here, Postgres in deployment); state recovery by resume; CI workflow added | test_graph.py + test_checkpoints.py: a different process resumes the same run without re-classifying; a repeat dispatch neither drafts nor submits again; a crashed attempt is resumed rather than restarted; checkpoints hold no secrets — 20 new Python tests (see 55.4 record below) |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
 
@@ -5087,6 +5087,84 @@ Tests: with the capability valid and the generation unchanged, setting the lease
 **Verification (actually run):** `mvn clean verify` → **349 tests, 0 failures, 0 errors, BUILD SUCCESS** (342 + 7); `LayeringGuardTest` 4/4.
 
 **Still not claimed.** The result payload stays provisional until Round 57. Java enforces these checks on its endpoints; the Python worker does not exist yet, so "a stale worker cannot call tools" is enforced here and not yet end-to-end. Per-tool allowlists arrive with the appointment tool (Round 58).
+
+### Round 55.4 — Minimal persistent graph and the real worker (Done, 2026-10-22)
+
+**Baseline:** `d11903ab`, clean tree, **349 Java tests / 69 Python tests**. Contract change:
+`run-start.request` gained `execution_generation`.
+
+**Contract.** The worker must know which generation it acts for: that is what it echoes on the
+result, and what lets Java refuse a stale attempt. `execution_generation` is now a required
+strict-positive field; both valid fixtures were updated, `run-start.invalid-missing-generation`
+pins it on both sides, and Java's dispatcher DTO sends it (asserted in the dispatch test).
+
+**The graph** (`medical-agent/src/medical_agent/graph/`): `validate_content → classify_message →
+draft_reply → submit_result`, compiled with a LangGraph checkpointer. Classification is
+keyword-derived for now but goes through the provider seam (async `invoke`), so Round 56 swaps the
+classifier without moving the graph. The provider call gets its own loop because the graph is
+synchronous and the endpoint runs in FastAPI's threadpool, which has none.
+
+**The worker** (`worker.py`, `java_client.py`): one dispatch runs the graph and, from
+`submit_result`, posts `{generation, outcome}` to Java's internal results endpoint with the
+service's outbound token and the attempt's capability. Credentials live in a context variable for
+the duration of the call — never in the graph state, so they cannot reach a checkpoint.
+`process()` reconciles instead of blindly restarting: if the checkpoint already records this
+generation as submitted it returns without work (a repeat dispatch produces no second draft), and
+if the checkpoint is part-way through it resumes rather than starting over.
+
+**The endpoint** (`POST /internal/v1/runs`): constant-time inbound-token check (401), required
+capability header (400), contract validation (422), then the work; 202 is answered only after the
+graph ran and the result was submitted.
+
+**Checkpoints.** `MEDICAL_AGENT_CHECKPOINT_URL` selects the store: Postgres for deployment, SQLite
+otherwise; `docker compose` starts Postgres next to the service. The Postgres saver and
+`psycopg[binary]` are installed and the branch imports, but **no Postgres server exists here**, so
+only the SQLite path is exercised.
+
+**Tests (20 new; 71 total).**
+- `test_graph.py` (6): classifies (`APPOINTMENT`), drafts and submits once with the right
+  generation and exactly one provider call; a crash in `submit_result` is resumed by the next
+  `process` without re-classifying (one provider call, two submissions); a repeat dispatch returns
+  the same draft with no extra provider call or submission; empty content is refused before any
+  model work; the checkpoint file contains neither the capability marker nor the outbound token.
+- `test_checkpoints.py` (1): a **child process** writes a checkpoint and dies, then a **different
+  process** resumes from that file and finishes — the classification still ran once.
+- `test_api_runs.py` (5): an authenticated dispatch runs the graph and posts the result to
+  `/api/v1/internal/agent/runs/41/results` with `X-Agent-Service-Token: <outbound>`,
+  `X-Agent-Capability: <capability>` and `{"generation":1,"outcome":"APPOINTMENT:DRAFT_READY"}`;
+  wrong inbound token 401, missing capability 400, missing generation 422, unknown field 422 —
+  none reaching Java.
+
+**Red evidence.** The graph first failed on `ValueError: 'draft' is already being used as a state
+key` (a node name colliding with a state key), then on the provider signature (`ProviderResponse`
+fields, async `invoke`) — design mistakes the tests forced out before anything was claimed. The
+cross-process test first failed on the resume leg with `Connection refused`, which is exactly the
+crash-then-resume behaviour it now asserts.
+
+**Live probe (actually run):** uvicorn on `:8099` with both tokens and a stub Java server —
+`POST /internal/v1/runs` answered `202 {"run_id":77,"status":"ACCEPTED"}` and the stub received
+`/api/v1/internal/agent/runs/77/results` with `probe-outbound`, `probe-capability` and
+`{"generation":2,"outcome":"APPOINTMENT:DRAFT_READY"}`.
+
+**CI** (the round's closing instruction): `.github/workflows/ci.yml` runs `./mvnw -B clean verify`,
+the Python checks (`ruff`, `mypy`, `pytest` against `requirements.lock`) and the frontend
+(`npm ci`, `check`, `test`, `build`). It is written but **not executed here** — no CI runner exists
+in this environment, so it is a claim about the configuration, not a green run.
+
+**Verification (actually run):** Java `mvn clean verify` → **349 tests, 0 failures**; Python
+`pytest` → **71 passed**, `ruff` clean, `mypy --strict` no issues in 19 source files;
+`docker compose config` valid with both tokens set.
+
+**Limits.**
+- The classification is a keyword mock and the draft a fixed template; Rounds 56/57 replace both.
+- Postgres checkpoints, the compose stack and the CI workflow are **unexecuted** here (no server,
+  daemon or runner). SQLite checkpoints and the cross-process resume are what the evidence covers.
+- Graph-level failures are coarse: a validation or submission error leaves the run to Java's
+  lease/deadline machinery instead of reporting a typed failure (56/57).
+- The graph runs synchronously inside the request; a real provider would need the async execution
+  the plan describes. Acceptable for the mock, not for production latency.
+- Compose environment names changed with 55.3's direction split: Java's outbound token is
+  `AGENT_OUTBOUND_TOKEN`, the service's inbound token is `AGENT_INBOUND_TOKEN`.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

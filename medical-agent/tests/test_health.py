@@ -11,6 +11,7 @@ from medical_agent.config import Settings
 
 def settings_for(monkeypatch: pytest.MonkeyPatch, provider: str = "mock") -> Settings:
     monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "internal-token")
+    monkeypatch.setenv("MEDICAL_AGENT_OUTBOUND_TOKEN", "outbound-token")
     monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", provider)
     if provider == "deepseek":
         monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "sk-test")

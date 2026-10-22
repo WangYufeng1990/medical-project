@@ -40,3 +40,5 @@ medical-agent/.venv/
 
 # Local notes
 docs/.local/
+# Round 55.4: default LangGraph checkpoint file (SQLite, developer machine)
+medical-agent/.agent/

@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 10.0
     max_prompt_chars: int = 8000
 
+    # The worker calls Java back (Round 55.4). Required when a run is dispatched: without
+    # them the worker could only fail after doing the model work.
+    java_base_url: str = "http://localhost:8080"
+    outbound_token: SecretStr | None = None
+
+    # Postgres in deployment, SQLite for a developer machine and the tests.
+    checkpoint_url: str = "sqlite://./.agent/checkpoints.sqlite"
+
     @model_validator(mode="after")
     def check_credentials(self) -> Settings:
         if self.inbound_token is None or not self.inbound_token.get_secret_value():
@@ -56,6 +64,10 @@ class Settings(BaseSettings):
             raise ValueError("MEDICAL_AGENT_DEEPSEEK_API_KEY is required when provider=deepseek")
         if self.request_timeout_seconds <= 0:
             raise ValueError("MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS must be positive")
+        if self.outbound_token is None or not self.outbound_token.get_secret_value():
+            raise ValueError(
+                "MEDICAL_AGENT_OUTBOUND_TOKEN is required: results are submitted to Java"
+            )
         return self
 
 

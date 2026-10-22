@@ -13,9 +13,19 @@ dependencies = [
     "pydantic>=2.14,<3",
     "pydantic-settings>=2.16,<3",
     "httpx>=0.28,<1",
+    # Round 55.4: the graph and its checkpoint store.
+    "langgraph>=0.2,<0.3",
+    "langgraph-checkpoint-sqlite>=2.0,<3",
 ]
 
 [project.optional-dependencies]
+postgres = [
+    # Deployment target for checkpoints; the tests use SQLite because they need no server.
+    "langgraph-checkpoint-postgres>=2.0,<3",
+    # The driver: without a libpq build the saver cannot even import.
+    "psycopg[binary]>=3.2,<4",
+]
+
 dev = [
     "pytest>=9.1,<10",
     "ruff>=0.17,<1",

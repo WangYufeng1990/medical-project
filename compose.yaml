@@ -1,12 +1,19 @@
-# Round 55.1: the agent service only. MySQL/PostgreSQL/Redis for the AI workflow join in
-# the rounds that actually use them (PostgreSQL for knowledge + checkpoints, 55.4+);
-# adding them here first would be an unverified service definition nobody exercises.
+# Round 55.4: the agent service plus the Postgres its checkpoints live in. The Java side
+# runs outside this file today (it needs MySQL, which joins in a later round); its two
+# tokens are passed here so the directions stay separate.
 services:
   medical-agent:
     build: ./medical-agent
+    depends_on:
+      checkpoints:
+        condition: service_healthy
     environment:
-      # Required: internal calls are authenticated. Use an env file, never a default.
-      MEDICAL_AGENT_INBOUND_TOKEN: ${MEDICAL_AGENT_INBOUND_TOKEN:?set MEDICAL_AGENT_INBOUND_TOKEN}
+      # Required: the token Java presents (Java's outbound token).
+      MEDICAL_AGENT_INBOUND_TOKEN: ${AGENT_OUTBOUND_TOKEN:?set AGENT_OUTBOUND_TOKEN}
+      # The token the worker presents to Java (Java's inbound token).
+      MEDICAL_AGENT_OUTBOUND_TOKEN: ${AGENT_INBOUND_TOKEN:?set AGENT_INBOUND_TOKEN}
+      MEDICAL_AGENT_JAVA_BASE_URL: ${AGENT_JAVA_BASE_URL:-http://host.docker.internal:8080}
+      MEDICAL_AGENT_CHECKPOINT_URL: postgresql://agent:agent@checkpoints:5432/agent
       MEDICAL_AGENT_PROVIDER: ${MEDICAL_AGENT_PROVIDER:-mock}
     ports:
       - "${MEDICAL_AGENT_PORT:-8090}:8000"
@@ -15,3 +22,22 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # LangGraph checkpoints. The tests use a SQLite file because they need no server; this is
+  # the deployment target, and its dedicated image is not exercised by the test suite.
+  checkpoints:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agent
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+    volumes:
+      - agent-checkpoints:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  agent-checkpoints:

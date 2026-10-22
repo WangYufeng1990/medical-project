@@ -43,6 +43,7 @@ def test_a_request_cannot_ask_for_unbounded_output() -> None:
 
 def test_the_factory_returns_the_mock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "internal-token")
+    monkeypatch.setenv("MEDICAL_AGENT_OUTBOUND_TOKEN", "outbound-token")
 
     provider = build_provider(Settings())
 
@@ -52,6 +53,7 @@ def test_the_factory_returns_the_mock(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_the_factory_refuses_deepseek_until_round_56(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "internal-token")
+    monkeypatch.setenv("MEDICAL_AGENT_OUTBOUND_TOKEN", "outbound-token")
     monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", "deepseek")
     monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "sk-test")
 

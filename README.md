@@ -370,8 +370,16 @@ leases and retries the job with bounded backoff and a deadline. It is **off by d
 and configured through `app.agent.*` / `AGENT_*` variables. The service-to-service credentials
 are directional: `AGENT_OUTBOUND_TOKEN` is what Java sends to Python, `AGENT_INBOUND_TOKEN` is
 what Python must present when it calls back (`app.agent.outbound-token` / `inbound-token`, the
-latter empty by default and therefore denying every callback). The Python service has no run
-endpoint yet, so a real dispatch gets a 404 and backs off until 55.4.
+latter empty by default and therefore denying every callback).
+
+Round 55.4 gives the service the intake it was missing: `POST /internal/v1/runs` authenticates
+with that inbound token, requires the per-attempt capability, runs a small LangGraph graph
+(validate → mock classification → draft → submit result back to Java) and checkpoints each
+step. Checkpoints live in Postgres in deployment (`MEDICAL_AGENT_CHECKPOINT_URL`) and in a
+SQLite file on a developer machine; `docker compose` starts Postgres next to the service with
+`AGENT_OUTBOUND_TOKEN` / `AGENT_INBOUND_TOKEN` (both required). LangGraph's Postgres saver is
+installed but **not exercised here** — this environment has no Postgres server, and the tests
+cover the SQLite path plus a cross-process resume.
 
 The contract lives in `contracts/agent/v1/`: JSON Schemas generated from the Pydantic
 models plus fixtures both languages read. After changing a model, regenerate and let

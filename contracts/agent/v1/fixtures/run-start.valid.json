@@ -7,5 +7,6 @@
   "sender_type": "PATIENT",
   "content": "Can I move my Thursday appointment to next week?",
   "locale": "en",
-  "request_id": "6f2b1c9e-run-41"
+  "request_id": "6f2b1c9e-run-41",
+  "execution_generation": 1
 }

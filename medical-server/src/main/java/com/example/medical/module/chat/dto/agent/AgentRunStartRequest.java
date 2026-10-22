@@ -12,7 +12,8 @@ import java.util.UUID;
  * {@code contracts/agent/v1/run-start.request.schema.json}.
  */
 @JsonPropertyOrder({"contract_version", "run_id", "message_id", "patient_id",
-        "conversation_revision", "sender_type", "content", "locale", "request_id"})
+        "conversation_revision", "sender_type", "execution_generation", "content", "locale",
+        "request_id"})
 public record AgentRunStartRequest(
         @JsonProperty("contract_version") String contractVersion,
         @JsonProperty("run_id") Long runId,
@@ -20,6 +21,7 @@ public record AgentRunStartRequest(
         @JsonProperty("patient_id") Long patientId,
         @JsonProperty("conversation_revision") Long conversationRevision,
         @JsonProperty("sender_type") String senderType,
+        @JsonProperty("execution_generation") Long executionGeneration,
         @JsonProperty("content") String content,
         @JsonProperty("locale") String locale,
         @JsonProperty("request_id") String requestId) {
@@ -43,6 +45,7 @@ public record AgentRunStartRequest(
                 run.getPatientId(),
                 run.getConversationRevision(),
                 "PATIENT",
+                run.getExecutionGeneration(),
                 text,
                 "en",
                 UUID.nameUUIDFromBytes(("agent-run:" + run.getId() + ":g"

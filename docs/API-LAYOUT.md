@@ -620,6 +620,19 @@ patient-facing endpoint buys nothing — those still require a JWT, so such a re
 `POST .../results` carries a **provisional** payload: Round 57 replaces `outcome` with the
 draft/review contract. The authorization checks around it are final.
 
+### Agent service endpoint (Java → Python, internal)
+`POST /internal/v1/runs` on the service. `Authorization: Bearer <AGENT_OUTBOUND_TOKEN>` (Java's
+outbound token, i.e. the service's `MEDICAL_AGENT_INBOUND_TOKEN`); a missing or wrong value is
+401. `X-Agent-Capability` is required (400 when absent) and is the per-attempt capability from
+Java. The body is `run-start.request.schema.json`, which since Round 55.4 includes
+`execution_generation` — the worker echoes it when it submits a result, so Java can refuse a
+stale attempt.
+
+The endpoint answers 202 `{"run_id":…, "status":"ACCEPTED"}` only after the graph has run and
+the result has been submitted to `POST /api/v1/internal/agent/runs/{runId}/results` (with the
+service's outbound token and the same capability). A malformed body is 422 before any model
+work.
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 
