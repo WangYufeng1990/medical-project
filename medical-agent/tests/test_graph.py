@@ -32,6 +32,17 @@ class RecordingProvider:
                                 model="mock-1", latency_ms=1)
 
 
+class FlakyProvider(RecordingProvider):
+    """Explodes on the first call, so a checkpoint can stop before classification."""
+
+    async def invoke(self, request: ProviderRequest) -> ProviderResponse:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("the provider exploded")
+        return ProviderResponse(text="mock:classification", provider="mock",
+                                model="mock-1", latency_ms=1)
+
+
 class RecordingSubmit:
     def __init__(self, fail_first: bool = False, fail_at: tuple[int, ...] = ()) -> None:
         self.fail_first = fail_first
@@ -214,3 +225,46 @@ def test_a_failed_submission_after_taking_over_a_generation_retries_only_the_sub
     assert recovered["draft"] == first["draft"], "the same draft, submitted again"
     assert [state["execution_generation"] for state in submit.submissions] == [1, 2, 2]
     assert recovered["submitted_generation"] == 2
+
+
+def test_a_new_generation_resumes_a_failed_classification(checkpointer) -> None:
+    # generation 1 stops before the classification exists; generation 2 must run it, not
+    # declare the draft complete and submit a state that has no draft.
+    provider = FlakyProvider()
+    submit = RecordingSubmit()
+    worker = AgentWorker(provider, checkpointer, submit)
+
+    with pytest.raises(RuntimeError):
+        worker.process(start_request(), credentials())
+    recovered = worker.process(start_request(execution_generation=2), credentials())
+
+    assert provider.calls == 2, "the classification ran again under the new generation"
+    assert recovered["classification"] == "APPOINTMENT"
+    assert recovered["draft"], "the draft exists before anything is submitted"
+    assert [state["execution_generation"] for state in submit.submissions] == [2]
+
+
+def test_a_new_generation_resumes_from_the_draft_node(checkpointer) -> None:
+    # A checkpoint that finished classifying but not drafting: the take-over must run the
+    # draft node, not jump to the submission.
+    submit = RecordingSubmit()
+    worker = AgentWorker(RecordingProvider(), checkpointer, submit)
+    config = {"configurable": {"thread_id": "run-41"}}
+    worker._graph.update_state(  # type: ignore[attr-defined]
+        config,
+        {
+            "run_id": 41,
+            "message_id": 9001,
+            "patient_id": 100,
+            "conversation_revision": 12,
+            "execution_generation": 1,
+            "content": "Can I reschedule my appointment?",
+            "classification": "APPOINTMENT",
+        },
+        as_node="classify_message",
+    )
+
+    recovered = worker.process(start_request(execution_generation=2), credentials())
+
+    assert recovered["draft"], "the pending draft node ran"
+    assert [state["execution_generation"] for state in submit.submissions] == [2]

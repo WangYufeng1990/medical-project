@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: Round 54 complete (2026-10-19 → 2026-10-21); Round 55 in progress (55.1–55.3 Done, 55.4 In Progress after review); Rounds 56–59 remain Pending. Round 55.4's Postgres, Docker and GitHub Actions paths are still unexecuted here and are named as such in its records.**
+**Status: Round 54 complete (2026-10-19 → 2026-10-21); Round 55 in progress (55.1–55.3 Done, 55.4 In Progress after review); Rounds 56–59 remain Pending. Round 55.4's Postgres and Docker paths are still unexecuted here; the CI workflow has run on GitHub, and each record says which commit was green.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -5146,10 +5146,11 @@ crash-then-resume behaviour it now asserts.
 `/api/v1/internal/agent/runs/77/results` with `probe-outbound`, `probe-capability` and
 `{"generation":2,"outcome":"APPOINTMENT:DRAFT_READY"}`.
 
-**CI** (the round's closing instruction): `.github/workflows/ci.yml` runs `./mvnw -B clean verify`,
-the Python checks (`ruff`, `mypy`, `pytest` against `requirements.lock`) and the frontend
-(`npm ci`, `check`, `test`, `build`). It is written but **not executed here** — no CI runner exists
-in this environment, so it is a claim about the configuration, not a green run.
+**CI** (the round's closing instruction): `.github/workflows/ci.yml` runs the backend
+(`mvn -B clean verify`), the Python checks (`ruff`, `mypy`, `pytest` against `requirements.lock`)
+and the frontend (`npm ci`, `check`, `test`, `build`). Its first fully green run was `4acaf31e`:
+all three jobs passed there. Later commits are only as green as their own run, and the documents
+name the commit rather than implying the workflow is green in general.
 
 **Verification (actually run):** Java `mvn clean verify` → **349 tests, 0 failures**; Python
 `pytest` → **71 passed**, `ruff` clean, `mypy --strict` no issues in 19 source files;
@@ -5227,7 +5228,8 @@ on the unchanged Java tree; no Java file changed in these fixes.
 **Still open before 55.4 can be accepted:**
 - A real Postgres run (initialisation, two requests, rebuild-and-resume, connection release on
   shutdown): there is no Postgres server in this environment and no Docker daemon to start one.
-- The GitHub Actions backend job actually passing on this commit.
+- The GitHub Actions run for the newest commit (the `4acaf31e` run is green; `5d7920bc` and this
+  one were pending at review time).
 - An end-to-end Java↔Python retry with both processes running: the retry order is proven against a
   Java-like receiver, not against `AgentInternalController` itself.
 
@@ -5259,6 +5261,38 @@ JDK and the Maven cache, and `mvn` comes from the runner image.
 backend job are still missing, as is an end-to-end Java↔Python retry.
 
 **Verification (actually run):** Python `pytest` → **77 passed**; `ruff` clean; `mypy --strict`
+clean. Java unchanged.
+
+### Round 55.4 review fixes (third pass, 2026-10-22)
+
+**P2 — a new generation took over an unfinished graph by declaring the draft complete.** The
+take-over called `update_state(..., as_node=DRAFT_NODE)` whenever the generation changed, which
+schedules the submit node as if drafting had finished. A checkpoint stopped earlier — the provider
+failed during classification, or the process died before drafting — was therefore pushed forward
+with no classification or draft, and the submission then failed on a missing key.
+
+The take-over now reads the checkpoint instead of assuming it: a draft that exists with nothing
+pending re-enters at the submit node (the case the previous pass fixed); any pending node —
+validation, classification or drafting — is kept, and only the execution generation is adopted
+before resuming; a checkpoint with neither a draft nor pending work is recomputed from the start
+under the new generation rather than submitted half-built. The same draft check now guards the
+"same generation, submission not recorded" branch.
+
+**Evidence.** `test_graph.py::test_a_new_generation_resumes_a_failed_classification` (the provider
+explodes under generation 1; generation 2 runs the classification again, produces the draft and
+submits only generation 2) and `test_a_new_generation_resumes_from_the_draft_node` (a checkpoint
+that finished classifying: the draft node runs before anything is submitted). With the previous
+worker the first test fails with `assert 1 == 2` on the provider call count — the classification
+never ran. The earlier `[1, 2, 2]` submission-retry test still passes.
+
+**CI status, stated per commit.** The workflow's first fully green run was `4acaf31e` (all three
+jobs). `5d7920bc` and this commit were still pending at review time, so no claim is made about
+them; the records name the commit.
+
+**Status unchanged:** 55.4 stays **In progress** (real Postgres run and an end-to-end Java↔Python
+retry are still missing, and the newest commit's CI run is pending).
+
+**Verification (actually run):** Python `pytest` → **79 passed**; `ruff` clean; `mypy --strict`
 clean. Java unchanged.
 
 ## Round 56 — Classification and versioned RAG (Pending)
