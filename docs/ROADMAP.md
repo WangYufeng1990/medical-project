@@ -4884,7 +4884,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / **Done** (2026-10-22, after review) | agent_run atomic intake; claim/lease/attempt/deadline (all enforced in the claim); attempted-error categories instead of remote text; bounded backoff; separate executor; reconcile expired and exhausted claims | AgentDispatchIntegrationTest + AgentRestartRecoveryIntegrationTest: Python down does not break message send; a refused/rejected dispatch is retried without storing the response body; a restart dispatches the queued job from a second application context; expired deadlines and exhausted attempts never reach the service; one claim winner per job — 16 tests (see the 55.2 records) |
 | 55.3 Service/task authorization | P0 / **Done** (2026-10-22, after review) | Directional outbound/inbound credentials, opaque capability digests bound to run + generation, generation- and state-fenced dispatch writes, live-lease/deadline checks inside verify **and** the result UPDATE, current account check, internal allowlist | AgentExecutionAuthorizationTest + AgentDispatchIntegrationTest: forged/expired/cross-run/revoked/stale access rejected, a result accepted mid-dispatch is never reopened or requeued, the outbound token is not an inbound one, expired leases and deadlines refuse GET and POST, and the result UPDATE itself refuses a write whose lease lapsed after the check — 35 agent tests (see the 55.3 records) |
-| 55.4 Minimal persistent graph | P0 / **In progress** (2026-10-22; review: generation handover, checkpointer lifetime and per-run serialization fixed — real Postgres and GitHub Actions still unverified) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite here, Postgres in deployment); recovery by resume; run-level serialization; CI workflow | test_graph.py, test_api_runs.py: a Java-style retry at generation 2 adopts the finished work and submits generation 2; a stale generation is refused; two concurrent dispatches of one run classify, draft and submit once; the checkpointer is closed with the application — 25 Python tests beyond 55.1–55.3 (see the 55.4 records) |
+| 55.4 Minimal persistent graph | P0 / **In progress** (2026-10-22; review: generation handover — including a failed submission after the take-over — checkpointer lifetime and per-run serialization fixed; real Postgres and GitHub Actions still unverified) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite here, Postgres in deployment); recovery by resume; run-level serialization; CI workflow | test_graph.py, test_api_runs.py: a Java-style retry at generation 2 adopts the finished work and submits generation 2; a stale generation is refused; two concurrent dispatches of one run classify, draft and submit once; the checkpointer is closed with the application — 25 Python tests beyond 55.1–55.3 (see the 55.4 records) |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
 
@@ -5202,7 +5202,7 @@ connection answers inside the application and raises `ProgrammingError` after it
 SQLite tests and the resume helper now use the factory as a context manager.
 
 **3. P2 — CI called a Maven wrapper that does not exist.** The repository has neither `mvnw` nor
-`.mvn/`. The backend job now runs `mvn -B clean verify`, which the `setup-java` action provides.
+`.mvn/`. The backend job now runs `mvn -B clean verify`. `setup-java` configures the JDK and the Maven cache; the `mvn` executable itself comes from the Ubuntu runner image.
 **Still unverified:** GitHub Actions has not run this workflow — there is no runner in this
 environment — so this is a correction to the configuration, not a green pipeline. Adding a real
 wrapper would need the wrapper plugin's artifacts, which the sandboxed Maven cannot download.
@@ -5230,6 +5230,36 @@ on the unchanged Java tree; no Java file changed in these fixes.
 - The GitHub Actions backend job actually passing on this commit.
 - An end-to-end Java↔Python retry with both processes running: the retry order is proven against a
   Java-like receiver, not against `AgentInternalController` itself.
+
+### Round 55.4 review fixes (second pass, 2026-10-22)
+
+**P2 — a failed submission after taking a generation over restarted the whole graph.** The
+take-over path updated the checkpoint's `execution_generation` and then submitted *outside* the
+graph. If that submission failed — or the process died between the update and the submission —
+the next request for the same generation found `submitted_generation` still on the old attempt and
+no pending node, so it fell through to a fresh `invoke(...)`: the message was classified and
+drafted again.
+
+The submission is no longer performed outside the graph. Taking over a generation re-enters the
+graph at the draft node (`update_state(..., as_node="draft_reply")`), which schedules the
+`submit_result` node, so the next step is a checkpointed submission and a failure leaves a pending
+`submit_result` task. The same reconstruction is applied when the current generation's work is
+finished but its submission is not recorded, which is the state a crash leaves behind.
+
+**Evidence.** `test_graph.py::test_a_failed_submission_after_taking_over_a_generation_retries_only_the_submission`:
+generation 1 completes and submits; generation 2 takes over and its submission fails; the same
+generation 2 arrives again — one provider call, the same draft, submission generations `[1, 2, 2]`
+and `submitted_generation = 2`. With the previous worker this test fails with
+`assert 2 == 1` on the provider call count, which is the restart the review described.
+
+**Doc correction.** The CI workflow comment now says what the action does: `setup-java` supplies the
+JDK and the Maven cache, and `mvn` comes from the runner image.
+
+**Status unchanged:** 55.4 stays **In progress** — a real Postgres run and a green GitHub Actions
+backend job are still missing, as is an end-to-end Java↔Python retry.
+
+**Verification (actually run):** Python `pytest` → **77 passed**; `ruff` clean; `mypy --strict`
+clean. Java unchanged.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

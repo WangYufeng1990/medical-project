@@ -33,15 +33,16 @@ class RecordingProvider:
 
 
 class RecordingSubmit:
-    def __init__(self, fail_first: bool = False) -> None:
+    def __init__(self, fail_first: bool = False, fail_at: tuple[int, ...] = ()) -> None:
         self.fail_first = fail_first
+        self.fail_at = fail_at
         self.submissions: list[dict[str, object]] = []
 
     def __call__(self, state: dict[str, object]) -> None:
-        if self.fail_first and not self.submissions:
-            self.submissions.append(dict(state))
-            raise RuntimeError("Java was unreachable")
         self.submissions.append(dict(state))
+        call = len(self.submissions)
+        if (self.fail_first and call == 1) or call in self.fail_at:
+            raise RuntimeError("Java was unreachable")
 
 
 def start_request(
@@ -192,3 +193,24 @@ def test_two_concurrent_dispatches_of_one_run_do_the_work_once(checkpointer) -> 
     assert len(outcomes) == 2, "both callers got an answer"
     assert provider.calls == 1, "the classification ran once"
     assert len(submit.submissions) == 1, "and the result was submitted once"
+
+
+def test_a_failed_submission_after_taking_over_a_generation_retries_only_the_submission(
+    checkpointer,
+) -> None:
+    # The gap this closes: generation 1 finished and submitted; generation 2 takes the
+    # checkpoint over but its submission fails; the same generation 2 arrives again. The
+    # classifier and draft must not run again - only the submission is retried.
+    provider = RecordingProvider()
+    submit = RecordingSubmit(fail_at=(2,))
+    worker = AgentWorker(provider, checkpointer, submit)
+
+    first = worker.process(start_request(), credentials())  # generation 1, submitted
+    with pytest.raises(RuntimeError):
+        worker.process(start_request(execution_generation=2), credentials())
+    recovered = worker.process(start_request(execution_generation=2), credentials())
+
+    assert provider.calls == 1, "the draft must not be recomputed after the take-over"
+    assert recovered["draft"] == first["draft"], "the same draft, submitted again"
+    assert [state["execution_generation"] for state in submit.submissions] == [1, 2, 2]
+    assert recovered["submitted_generation"] == 2

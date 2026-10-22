@@ -7,6 +7,10 @@ Recovery has three cases, and they are not the same:
   draft are reused and only the execution generation is adopted before resuming; submitting
   the old generation would be refused by Java (409).
 
+Because the submission runs inside the graph, re-entering it after the draft node is what
+makes a failed submission recoverable: the checkpoint holds a pending ``submit_result`` task,
+so the next request resumes that node instead of starting the graph over.
+
 One lock per run makes the check-then-act step atomic inside this process, because FastAPI
 runs the endpoint in a thread pool and Java's claim protection does not cover Python. A stale
 request (older generation than the checkpoint) refuses rather than overwriting newer work.
@@ -21,7 +25,7 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from medical_agent.graph.builder import build_graph
+from medical_agent.graph.builder import DRAFT_NODE, build_graph
 from medical_agent.graph.state import RunState
 from medical_agent.java_client import (
     CallCredentials,
@@ -49,7 +53,6 @@ class AgentWorker:
         submit: Callable[[RunState], None] = submit_result,
     ) -> None:
         self._graph = build_graph(provider, submit, checkpointer)
-        self._submit = submit
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
 
@@ -86,9 +89,17 @@ class AgentWorker:
             if values.get("submitted_generation") == request.execution_generation:
                 return cast(RunState, values)
             if recorded < request.execution_generation:
-                return self._adopt_generation(request, credentials, values, snapshot.next)
+                # Java retried: adopt the generation and re-enter at the submit node so the
+                # finished draft is kept and the submission is checkpointed.
+                self._schedule_submission(request.run_id, request.execution_generation)
+                return self._resume_locked(request.run_id, credentials)
             if snapshot.next:
                 return self._resume_locked(request.run_id, credentials)
+            # Same generation, work finished, submission not recorded: a previous attempt
+            # died between adopting the generation and submitting it. Re-enter the submit
+            # node rather than starting the graph again.
+            self._schedule_submission(request.run_id, request.execution_generation)
+            return self._resume_locked(request.run_id, credentials)
 
         token = use_credentials(credentials)
         try:
@@ -109,41 +120,13 @@ class AgentWorker:
         finally:
             reset_credentials(token)
 
-    def _adopt_generation(
-        self,
-        request: RunStartRequest,
-        credentials: CallCredentials,
-        values: dict[str, Any],
-        pending: tuple[str, ...],
-    ) -> RunState:
-        """A newer Java generation takes over the work this checkpoint already holds."""
-        config = self._config(request.run_id)
+    def _schedule_submission(self, run_id: int, generation: int) -> None:
+        """Re-enter the graph at the draft node, so the next step is the submit node."""
         self._graph.update_state(
-            config, {"execution_generation": request.execution_generation}
+            self._config(run_id),
+            {"execution_generation": generation},
+            as_node=DRAFT_NODE,
         )
-        if pending:
-            return self._resume_locked(request.run_id, credentials)
-
-        # The graph finished its work under the old generation; only the submission is
-        # repeated, with the generation Java is waiting for.
-        adopted: RunState = {
-            **cast(RunState, values),
-            "execution_generation": request.execution_generation,
-        }
-        token = use_credentials(credentials)
-        try:
-            self._submit(adopted)
-        finally:
-            reset_credentials(token)
-        self._graph.update_state(
-            config,
-            {
-                "execution_generation": request.execution_generation,
-                "submitted_generation": request.execution_generation,
-            },
-        )
-        return cast(RunState, {**values, "execution_generation": request.execution_generation,
-                               "submitted_generation": request.execution_generation})
 
     def _resume_locked(self, run_id: int, credentials: CallCredentials) -> RunState:
         token = use_credentials(credentials)

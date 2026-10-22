@@ -20,8 +20,9 @@ jobs:
           cache: maven
       # clean matters: Surefire never deletes old reports, so a stale target/ counts classes
       # that no longer exist.
-      # set up-java provides Maven; this repository has no wrapper, so ./mvnw would fail
-      # on a clean checkout.
+      # setup-java provides the JDK and the Maven cache; `mvn` itself comes from the
+      # Ubuntu runner image. The repository has no wrapper, so ./mvnw would fail on a
+      # clean checkout.
       - run: mvn -B clean verify
 
   python:
