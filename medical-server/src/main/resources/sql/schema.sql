@@ -333,6 +333,24 @@ CREATE TABLE IF NOT EXISTS agent_run (
     INDEX idx_agent_run_lease (state, lease_expires_at)
 );
 
+-- Round 55.3: a per-attempt capability. The raw token is never stored - only its
+-- SHA-256 digest - and it is bound to the run and the execution generation that issued
+-- it, so a re-dispatch (a new generation) fences the previous worker.
+CREATE TABLE IF NOT EXISTS agent_capability (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    run_id BIGINT NOT NULL,
+    digest CHAR(64) NOT NULL,
+    generation BIGINT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_capability_run_generation (run_id, generation),
+    INDEX idx_agent_capability_digest (digest)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,

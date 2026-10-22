@@ -71,25 +71,41 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
      * service, awaiting a result", and once it runs out the reconcile sweep is what decides
      * whether the job is retried.
      */
+    /**
+     * Acknowledges a dispatch. Guarded by the generation the caller claimed, so a worker
+     * whose lease was reclaimed (and the job re-claimed) cannot write over the new attempt.
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE AgentRun r SET r.state = :state, r.lastError = NULL, r.updateTime = :now "
-            + "WHERE r.id = :id")
-    int markState(@Param("id") Long id, @Param("state") String state, @Param("now") LocalDateTime now);
+            + "WHERE r.id = :id AND r.executionGeneration = :generation")
+    int markState(@Param("id") Long id, @Param("state") String state,
+                  @Param("generation") Long generation, @Param("now") LocalDateTime now);
 
     /** Terminal states release the lease so nothing can reclaim them. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE AgentRun r SET r.state = :state, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
-            + "r.lastError = :error, r.updateTime = :now WHERE r.id = :id")
+            + "r.lastError = :error, r.updateTime = :now "
+            + "WHERE r.id = :id AND r.executionGeneration = :generation")
     int transition(@Param("id") Long id, @Param("state") String state,
-                   @Param("error") String error, @Param("now") LocalDateTime now);
+                   @Param("error") String error, @Param("generation") Long generation,
+                   @Param("now") LocalDateTime now);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE AgentRun r SET r.state = :pending, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
             + "r.nextAttemptAt = :nextAttemptAt, r.lastError = :error, r.updateTime = :now "
-            + "WHERE r.id = :id")
+            + "WHERE r.id = :id AND r.executionGeneration = :generation")
     int retryLater(@Param("id") Long id, @Param("nextAttemptAt") LocalDateTime nextAttemptAt,
-                   @Param("error") String error, @Param("now") LocalDateTime now,
-                   @Param("pending") String pending);
+                   @Param("error") String error, @Param("generation") Long generation,
+                   @Param("now") LocalDateTime now, @Param("pending") String pending);
+
+    /** The worker handed a result over; the run waits for review (Round 57 defines the draft). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE AgentRun r SET r.state = :state, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
+            + "r.updateTime = :now WHERE r.id = :id AND r.executionGeneration = :generation "
+            + "AND r.state = :running")
+    int complete(@Param("id") Long id, @Param("generation") Long generation,
+                 @Param("state") String state, @Param("now") LocalDateTime now,
+                 @Param("running") String running);
 
     /**
      * Puts jobs whose lease ran out back in the queue. A worker that died mid-dispatch

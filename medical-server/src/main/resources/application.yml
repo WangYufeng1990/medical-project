@@ -70,3 +70,4 @@ app:
     base-backoff: 5s
     max-backoff: 5m
     request-timeout: 5s
+    capability-ttl: 5m

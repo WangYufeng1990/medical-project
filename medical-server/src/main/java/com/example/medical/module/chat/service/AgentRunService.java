@@ -1,6 +1,7 @@
 package com.example.medical.module.chat.service;
 
 import com.example.medical.module.chat.agent.AgentDispatchProperties;
+import com.example.medical.module.chat.agent.AgentCapabilityService;
 import com.example.medical.module.chat.agent.AgentDispatchException;
 import com.example.medical.module.chat.agent.AgentRunClient;
 import com.example.medical.module.chat.dto.agent.AgentRunStartRequest;
@@ -37,6 +38,7 @@ public class AgentRunService {
 
     private final AgentRunRepository runs;
     private final AgentRunStateStore states;
+    private final AgentCapabilityService capabilities;
     private final MessageRepository messages;
     private final ChatConversationService conversations;
     private final AgentRunClient client;
@@ -123,12 +125,15 @@ public class AgentRunService {
         if (run == null) return;
         Message message = messages.findById(run.getMessageId()).orElse(null);
         if (message == null) {
-            states.fail(id, "message no longer exists");
+            states.fail(id, run.getExecutionGeneration(), "message no longer exists");
             return;
         }
         try {
-            client.start(AgentRunStartRequest.of(run, message));
-            states.markRunning(id);
+            // A fresh capability per attempt, bound to this generation (Round 55.3). Only the
+            // digest is stored; the token travels in a header and is never logged.
+            String capability = capabilities.issue(run);
+            client.start(AgentRunStartRequest.of(run, message), capability);
+            states.markRunning(id, run.getExecutionGeneration());
         } catch (RuntimeException failure) {
             // Only the category: an exception message may carry the remote response body,
             // and that body may quote the patient's own message (Round 55.2 review).
@@ -138,10 +143,11 @@ public class AgentRunService {
             int attempt = run.getAttempt() == null ? 0 : run.getAttempt();
             int maxAttempts = run.getMaxAttempts() == null ? properties.getMaxAttempts() : run.getMaxAttempts();
             if (attempt >= maxAttempts) {
-                states.fail(id, error);
+                states.fail(id, run.getExecutionGeneration(), error);
                 log.warn("Agent run {} failed after {} attempts: {}", id, attempt, error);
             } else {
-                states.retryLater(id, LocalDateTime.now().plus(backoff(attempt)), error);
+                states.retryLater(id, run.getExecutionGeneration(),
+                        LocalDateTime.now().plus(backoff(attempt)), error);
                 log.debug("Agent run {} attempt {} failed, retrying later: {}", id, attempt, error);
             }
         }

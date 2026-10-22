@@ -28,7 +28,7 @@ public class HttpAgentRunClient implements AgentRunClient {
     private final AgentDispatchProperties properties;
 
     @Override
-    public void start(AgentRunStartRequest request) {
+    public void start(AgentRunStartRequest request, String capability) {
         String baseUrl = properties.getBaseUrl();
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalStateException("app.agent.base-url is not configured");
@@ -43,6 +43,7 @@ public class HttpAgentRunClient implements AgentRunClient {
         if (properties.getServiceToken() != null && !properties.getServiceToken().isBlank()) {
             headers.setBearerAuth(properties.getServiceToken());
         }
+        headers.set("X-Agent-Capability", capability);
         try {
             restTemplate.postForEntity(trimTrailingSlash(baseUrl) + "/internal/v1/runs",
                     new HttpEntity<>(request, headers), Void.class);

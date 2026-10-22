@@ -33,6 +33,8 @@ public class AgentDispatchProperties {
     private Duration baseBackoff = Duration.ofSeconds(5);
     private Duration maxBackoff = Duration.ofMinutes(5);
     private Duration requestTimeout = Duration.ofSeconds(5);
+    /** How long a worker may present the capability it was given for one attempt. */
+    private Duration capabilityTtl = Duration.ofMinutes(5);
 
     /** Ties a lease to this process; generated once when it is not configured. */
     private String leaseOwner = "";

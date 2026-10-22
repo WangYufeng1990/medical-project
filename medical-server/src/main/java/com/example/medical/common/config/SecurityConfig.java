@@ -63,7 +63,11 @@ public class SecurityConfig {
                                     "/api/v1/patient/login", "/api/v1/patient/refresh",
                                     "/api/v1/patient/forgot-password", "/api/v1/patient/reset-password",
                                     "/api/v1/fhir/metadata",
-                                    "/api/v1/chat/subscribe").permitAll()
+                                    "/api/v1/chat/subscribe",
+                                    // Round 55.3: the agent service authenticates with a
+                                    // directional service token plus a run capability; see
+                                    // AgentInternalController. Not reachable with a patient JWT.
+                                    "/api/v1/internal/agent/**").permitAll()
                             .requestMatchers("/doc.html", "/swagger-ui/**", "/webjars/**", "/v3/api-docs/**").permitAll();
                     if (h2ConsoleEnabled) {
                         auth.requestMatchers("/h2-console/**").permitAll();

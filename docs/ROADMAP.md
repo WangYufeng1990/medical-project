@@ -4875,7 +4875,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 **Still not claimed:** the paging and notice tests exercise the state helpers, not the rendered components — that boundary is unchanged. Round 54 is complete on this evidence, but acceptance remains the reviewer's call.
 
-## Round 55 — Python service and reliable execution (In progress: 55.1–55.2 Done, 55.3–55.4 Pending)
+## Round 55 — Python service and reliable execution (In progress: 55.1–55.3 Done, 55.4 Pending)
 
 **Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
 
@@ -4883,7 +4883,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 |---|---|---|---|
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / **Done** (2026-10-22, after review) | agent_run atomic intake; claim/lease/attempt/deadline (all enforced in the claim); attempted-error categories instead of remote text; bounded backoff; separate executor; reconcile expired and exhausted claims | AgentDispatchIntegrationTest + AgentRestartRecoveryIntegrationTest: Python down does not break message send; a refused/rejected dispatch is retried without storing the response body; a restart dispatches the queued job from a second application context; expired deadlines and exhausted attempts never reach the service; one claim winner per job — 16 tests (see the 55.2 records) |
-| 55.3 Service/task authorization | P0 / Pending | Directional credentials, opaque capability digests, generations, current account check and internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked access and stale workers rejected; capability not persisted in graph state |
+| 55.3 Service/task authorization | P0 / **Done** (2026-10-22) | Directional service credential, opaque capability digests bound to run + generation, generation-fenced state writes, current account check, internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked/stale access rejected, service token alone cannot read patient records, only a digest is stored — 13/13 pass (see 55.3 record below) |
 | 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
@@ -5003,6 +5003,66 @@ Four findings were re-checked against the source; all four held.
 **Verification (actually run):** `mvn clean verify` → **329 tests, 0 failures, 0 errors, BUILD SUCCESS** (323 + 5 dispatcher tests + 1 restart test); `LayeringGuardTest` 4/4. The red state for the review items was observed before the fixes: the 422 body was stored verbatim, an expired job was sent, an exhausted job made one more call, and the second job of a slow batch was reclaimed immediately.
 
 **Still not claimed:** no Python run endpoint exists, so a real dispatch answers 404 and backs off; no result submission, review or publication (55.3/57); multi-instance lease safety beyond the guarded claim; no CI workflow; the Docker image is unverified here.
+
+### Round 55.3 — Service and task authorization (Done, 2026-10-22)
+
+**Baseline:** `125132a6`, clean tree, **329 tests**. Schema v7.
+
+**Two credentials, two meanings.** The **service token** (`app.agent.service-token`, sent as
+`X-Agent-Service-Token`) says which process is calling; a blank configuration denies every
+internal call rather than opening them. The **capability** is a 32-byte random token issued
+per attempt, sent as `X-Agent-Capability`; the database stores only its SHA-256 digest, bound
+to the run and to the `execution_generation` that issued it. Neither credential alone reaches
+patient data.
+
+**What enforces it.**
+
+| Piece | Guard |
+|---|---|
+| `AgentServiceToken` | Constant-time comparison; blank configured token → every call denied |
+| `AgentCapabilityService.issue` | Random token, digest-only storage, per-run + per-generation row, TTL (`app.agent.capability-ttl`, 5 min) |
+| `AgentCapabilityService.verify` | Known digest, same run, not expired, generation equals the run's current one, run state `RUNNING` |
+| `AgentCapabilityService.revoke` | Capabilities are deleted when a run stops accepting work |
+| `AgentInternalController` | The whole internal allowlist: `GET /runs/{runId}` and `POST /runs/{runId}/results`; both re-check the patient's current account state |
+| `AgentRunRepository` | `markState`, `transition`, `retryLater` and the new `complete` are now guarded by `execution_generation`, so a worker whose lease was reclaimed cannot write over the attempt that replaced it |
+| `SecurityConfig` | `/api/v1/internal/agent/**` is `permitAll` so the controller can authenticate its own callers; the patient API still needs a JWT |
+
+**Tests (`AgentExecutionAuthorizationTest`, 13).** A missing service token, a wrong one, a
+missing capability and a forged one are refused; a valid pair reads the run context; the
+service token alone cannot read `/api/v1/patients/100` (the internal allowlist is not a
+patient credential); a capability cannot be used for another run; an expired capability is
+refused; a capability from a previous generation is refused; a successful result moves the
+run to `WAITING_REVIEW` and revokes the capability, after which the same token is refused; a
+result carrying a stale generation is a conflict and leaves the run untouched; a patient
+whose account is disabled stops the worker; and the database holds a 64-hex digest — the raw
+token appears in no row.
+
+**Red evidence.** The capability table did not exist, so `verify` could only answer "unknown
+capability": the forged-capability test passed for that reason until the issue path existed,
+and the generation test could not be expressed at all. The full gate then caught the schema
+guard's minimal probe databases, which started at v4 and needed the new v7 table to complete
+the chain (`The step to v7 needs table 'agent_capability'`), the same way 55.2 had extended
+them for `agent_run`.
+
+**Also fixed from the 55.2 review (non-blocking findings).** The restart test is named and
+documented as a **context rebuild in one JVM** — it does not claim JVM-exit or crash
+recovery. The provider-error log test now raises the service logger to DEBUG, first asserts
+that the retry line with `AGENT_HTTP_422` was actually captured (so "no marker in the logs"
+cannot pass on an empty list), then asserts the marker is absent, and restores the level.
+
+**Verification (actually run):** `mvn clean verify` → **342 tests, 0 failures, 0 errors, BUILD
+SUCCESS** (329 + 13); `LayeringGuardTest` 4/4 with no allowlist.
+
+**Limits of this slice.**
+- The result payload is provisional; Round 57 defines the draft/review contract.
+- Capability rotation happens per claim; an expired lease that is reclaimed issues a new
+  generation and therefore a new capability, which is what fences the old worker — but the
+  Python side is not yet implemented, so "the old worker cannot call tools" is enforced on
+  Java's internal endpoints only (55.4 brings the worker).
+- Capabilities are not yet limited to a tool list (`allowed_tools`); the plan's per-task tool
+  allowlist arrives with the appointment tool in Round 58.
+- The internal endpoints are reachable without a JWT by design; the service token is the
+  only process credential, so its configuration and rotation are an operational concern.
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

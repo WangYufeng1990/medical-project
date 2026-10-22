@@ -24,12 +24,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Round 55.2 — a queued job survives the process that queued it.
+ * Round 55.2 — a queued job survives the application context that queued it.
  * <p>
- * The dispatcher's other tests run inside one Spring context, so stopping and starting the
- * application is the only way to show what the durable row is for. Both contexts connect to
- * the same in-memory database (kept alive by {@code DB_CLOSE_DELAY=-1}); the first leaves a
- * PENDING job behind and the second — a genuinely new application instance — dispatches it.
+ * The dispatcher's other tests run inside one Spring context, so rebuilding the application
+ * is the only way to show what the durable row is for. Both contexts run in the <b>same
+ * JVM</b> and share one in-memory database kept alive by {@code DB_CLOSE_DELAY=-1}: the
+ * first leaves a PENDING job behind and the second dispatches it.
+ * <p>
+ * This proves context rebuild, not crash recovery. A JVM exit, a crashed process or a
+ * disk-backed restore is a different question (the in-memory database would be gone), and
+ * this test does not answer it.
  */
 class AgentRestartRecoveryIntegrationTest {
 
@@ -62,7 +66,7 @@ class AgentRestartRecoveryIntegrationTest {
     }
 
     @Test
-    void aJobQueuedBeforeARestartIsDispatchedByTheNextProcess() throws Exception {
+    void aJobQueuedBeforeARestartIsDispatchedByTheNextContext() throws Exception {
         long messageId;
         long runId;
 

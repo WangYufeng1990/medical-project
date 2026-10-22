@@ -595,6 +595,27 @@ An unrecognised path or verb used to answer 500 because the catch-all handler sw
 
 **Behaviour change (M7):** before this round the raw-parameter endpoints had no bound at all and `?size=9999` was served; the frontend used exactly that for CSV export and `size: 999` for a patient dropdown.
 
+### Internal agent endpoints (service-to-service, Round 55.3)
+The agent service authenticates with **two** credentials that mean different things, and
+neither is a patient JWT. `X-Agent-Service-Token` names the calling process (configured as
+`app.agent.service-token`; a blank configuration denies every call). `X-Agent-Capability`
+is an opaque, short-lived token bound to one run and one execution generation; the server
+stores only its SHA-256 digest.
+
+| Endpoint | What it returns / does |
+|---|---|
+| `GET /api/v1/internal/agent/runs/{runId}` | The run context a worker may see: `runId`, `patientId`, `conversationRevision`, `state`, `generation` |
+| `POST /api/v1/internal/agent/runs/{runId}/results` | A result for the generation the worker was given (`{generation, outcome}`); the run moves to `WAITING_REVIEW` and the capability is revoked |
+
+These two operations are the whole internal allowlist. Every call checks the service token,
+the capability's run and generation, the capability's expiry, the run state (`RUNNING`) and
+the patient's current account state; a stale generation (a re-dispatch) or a completed run is
+refused. Passing the service token to a patient-facing endpoint buys nothing — those still
+require a JWT, so such a request is 401.
+
+`POST .../results` carries a **provisional** payload: Round 57 replaces `outcome` with the
+draft/review contract. The authorization checks around it are final.
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 

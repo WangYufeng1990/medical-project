@@ -384,16 +384,25 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
                 new ch.qos.logback.core.read.ListAppender<>();
         appender.start();
+        ch.qos.logback.classic.Level previousLevel = serviceLogger.getLevel();
         serviceLogger.addAppender(appender);
+        // The retry line is DEBUG; without raising the level the appender would see nothing
+        // and "no marker in the logs" would pass for the wrong reason.
+        serviceLogger.setLevel(ch.qos.logback.classic.Level.DEBUG);
         try {
             agentRuns.dispatchDue();
         } finally {
+            serviceLogger.setLevel(previousLevel);
             serviceLogger.detachAppender(appender);
         }
 
         String recordedError = (String) runFor(messageId).get("last_error");
         assertEquals("AGENT_HTTP_422", recordedError, "only the category is stored");
         assertFalse(recordedError.contains(marker));
+        assertTrue(appender.list.stream().anyMatch(event ->
+                        event.getLevel() == ch.qos.logback.classic.Level.DEBUG
+                                && event.getFormattedMessage().contains("AGENT_HTTP_422")),
+                "the retry must be logged with its category, so the check below is not vacuous");
         assertFalse(appender.list.stream().anyMatch(event ->
                         event.getFormattedMessage().contains(marker)
                                 || (event.getThrowableProxy() != null && event.getThrowableProxy()
@@ -415,7 +424,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         AgentRunStartRequest request = new AgentRunStartRequest("v1", 1L, 1L, 100L, 1L,
                 "PATIENT", "hello", "en", "request-1");
 
-        assertThrows(RuntimeException.class, () -> client.start(request));
+        assertThrows(RuntimeException.class, () -> client.start(request, "capability"));
     }
 
     // ── helpers ─────────────────────────────────────────────────────
