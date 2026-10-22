@@ -23,6 +23,7 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
     boolean existsByMessageId(Long messageId);
 
     @Query("SELECT r.id FROM AgentRun r WHERE r.state = :state AND r.nextAttemptAt <= :now "
+            + "AND r.deadlineAt > :now AND r.attempt < r.maxAttempts "
             + "ORDER BY r.nextAttemptAt ASC, r.id ASC")
     List<Long> findDueIds(@Param("state") String state, @Param("now") LocalDateTime now,
                           Pageable pageable);
@@ -31,14 +32,39 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
      * Takes the lease. The attempt and generation move here, in the same statement that
      * decides who owns the job, so a dispatcher that loses the race simply updates 0 rows.
      */
+    /**
+     * Takes the lease. The conditions are the whole claim policy: due, still inside its
+     * deadline and not out of attempts. Checking any of them only in Java would let a job
+     * that expired while this batch was busy be sent to the service anyway.
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE AgentRun r SET r.state = :running, r.leaseOwner = :owner, "
             + "r.leaseExpiresAt = :leaseUntil, r.attempt = r.attempt + 1, "
             + "r.executionGeneration = r.executionGeneration + 1, r.updateTime = :now "
-            + "WHERE r.id = :id AND r.state = :pending AND r.nextAttemptAt <= :now")
+            + "WHERE r.id = :id AND r.state = :pending AND r.nextAttemptAt <= :now "
+            + "AND r.deadlineAt > :now AND r.attempt < r.maxAttempts")
     int claim(@Param("id") Long id, @Param("owner") String owner,
               @Param("leaseUntil") LocalDateTime leaseUntil, @Param("now") LocalDateTime now,
               @Param("running") String running, @Param("pending") String pending);
+
+    /** Pending jobs that can never be attempted again end here rather than waiting. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE AgentRun r SET r.state = :failed, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
+            + "r.lastError = :reason, r.updateTime = :now "
+            + "WHERE r.state = :pending AND r.attempt >= r.maxAttempts")
+    int failExhaustedPending(@Param("now") LocalDateTime now, @Param("pending") String pending,
+                             @Param("failed") String failed, @Param("reason") String reason);
+
+    /**
+     * A job whose last permitted attempt is still leased when the lease runs out can never
+     * be retried; without this it would sit in RUNNING until the overall deadline.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE AgentRun r SET r.state = :failed, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
+            + "r.lastError = :reason, r.updateTime = :now "
+            + "WHERE r.state = :running AND r.leaseExpiresAt < :now AND r.attempt >= r.maxAttempts")
+    int failExhaustedRunning(@Param("now") LocalDateTime now, @Param("running") String running,
+                             @Param("failed") String failed, @Param("reason") String reason);
 
     /**
      * Acknowledges a dispatch. The lease is deliberately kept: it now means "handed to the

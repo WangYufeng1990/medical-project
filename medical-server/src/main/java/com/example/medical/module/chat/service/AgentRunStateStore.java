@@ -48,6 +48,18 @@ public class AgentRunStateStore {
     }
 
     @Transactional
+    public int failExhaustedPending(LocalDateTime now, String reason) {
+        return runs.failExhaustedPending(now, AgentRunState.PENDING.name(),
+                AgentRunState.FAILED.name(), reason);
+    }
+
+    @Transactional
+    public int failExhaustedRunning(LocalDateTime now, String reason) {
+        return runs.failExhaustedRunning(now, AgentRunState.RUNNING.name(),
+                AgentRunState.FAILED.name(), reason);
+    }
+
+    @Transactional
     public int expireDeadlines(LocalDateTime now, String reason) {
         return runs.expireDeadlines(now, AgentRunState.PENDING.name(), AgentRunState.RUNNING.name(),
                 AgentRunState.FAILED.name(), reason);

@@ -2,6 +2,7 @@ package com.example.medical;
 
 import com.example.medical.module.chat.agent.AgentDispatchProperties;
 import com.example.medical.module.chat.agent.AgentRunClient;
+import com.example.medical.module.chat.agent.AgentRunScheduler;
 import com.example.medical.module.chat.agent.HttpAgentRunClient;
 import com.example.medical.module.chat.dto.agent.AgentRunStartRequest;
 import com.example.medical.module.chat.entity.Message;
@@ -51,12 +52,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.agent.scheduling-enabled=false",
         "app.agent.service-token=test-agent-token",
         "app.agent.poll-interval-ms=3600000",
-        "app.agent.lease=60s",
+        // A short lease so "expired while the batch was busy" is reachable, and a longer
+        // client timeout so the slow dispatch still succeeds rather than timing out.
+        "app.agent.lease=1s",
         "app.agent.deadline=30m",
         "app.agent.max-attempts=3",
         "app.agent.base-backoff=1s",
         "app.agent.max-backoff=2s",
-        "app.agent.request-timeout=2s",
+        "app.agent.request-timeout=5s",
 })
 class AgentDispatchIntegrationTest extends IntegrationTestSupport {
 
@@ -65,6 +68,8 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     private static final AtomicInteger CALLS = new AtomicInteger();
     private static final List<String> BODIES = new CopyOnWriteArrayList<>();
     private static volatile int stubStatus = 202;
+    private static volatile String stubBody = "";
+    private static volatile long firstRequestDelayMillis = 0;
 
     static {
         try {
@@ -72,8 +77,17 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
             AGENT_STUB.createContext("/internal/v1/runs", exchange -> {
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 BODIES.add(body);
-                CALLS.incrementAndGet();
-                exchange.sendResponseHeaders(stubStatus, -1);
+                int call = CALLS.incrementAndGet();
+                if (call == 1 && firstRequestDelayMillis > 0) {
+                    try {
+                        Thread.sleep(firstRequestDelayMillis);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                byte[] response = stubBody.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(stubStatus, response.length == 0 ? -1 : response.length);
+                if (response.length > 0) exchange.getResponseBody().write(response);
                 exchange.close();
             });
             AGENT_STUB.setExecutor(Executors.newFixedThreadPool(2));
@@ -93,6 +107,9 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     private AgentRunService agentRuns;
 
     @Autowired
+    private AgentRunScheduler agentScheduler;
+
+    @Autowired
     private MessageRepository messageRepository;
 
     private String patientToken;
@@ -105,10 +122,15 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     }
 
     @BeforeEach
-    void resetStub() {
+    void resetState() {
         stubStatus = 202;
+        stubBody = "";
+        firstRequestDelayMillis = 0;
         CALLS.set(0);
         BODIES.clear();
+        // Each test owns its queue: a PENDING row from a previous test would be dispatched
+        // alongside the new one and make every call count ambiguous.
+        jdbcTemplate.update("DELETE FROM agent_run");
     }
 
     @AfterAll
@@ -212,13 +234,13 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     // ── recovery ────────────────────────────────────────────────────
 
     @Test
-    void aPendingRunIsReplayedAfterARestart() throws Exception {
+    void aFailedRunIsReplayedAfterItsBackoff() throws Exception {
         stubStatus = 503;
         long messageId = sendAsPatient("Retry me after the restart");
         agentRuns.dispatchDue();
         assertEquals("PENDING", runFor(messageId).get("state"));
 
-        // The next pass (a fresh dispatcher process would do the same) once the service is up.
+        // The next pass, once the backoff has elapsed and the service is up.
         stubStatus = 202;
         jdbcTemplate.update("UPDATE agent_run SET next_attempt_at = ? WHERE message_id = ?",
                 java.sql.Timestamp.valueOf(LocalDateTime.now().minusSeconds(1)), messageId);
@@ -264,17 +286,121 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void exhaustingTheAttemptsFailsTheRun() throws Exception {
-        stubStatus = 503;
+    void exhaustingTheAttemptsEndsTheRunWithoutAnotherCall() throws Exception {
         long messageId = sendAsPatient("The last permitted attempt");
         jdbcTemplate.update("UPDATE agent_run SET attempt = 3 WHERE message_id = ?", messageId);
 
-        agentRuns.dispatchDue();
+        agentScheduler.runOnce();
 
         assertEquals("FAILED", runFor(messageId).get("state"));
-        assertEquals(1, jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM agent_run WHERE message_id = ? AND state = 'FAILED'",
-                Integer.class, messageId));
+        assertEquals(0, CALLS.get(), "a job out of attempts must not reach the service again");
+        assertEquals(3, ((Number) runFor(messageId).get("attempt")).intValue(),
+                "and its attempt counter must not move");
+    }
+
+    @Test
+    void aJobWhoseLeaseExpiredOnItsLastAttemptEndsInsteadOfWaiting() throws Exception {
+        long messageId = sendAsPatient("The worker died on the last attempt");
+        jdbcTemplate.update("UPDATE agent_run SET state = 'RUNNING', attempt = 3, "
+                        + "lease_owner = 'dead-worker', lease_expires_at = ? WHERE message_id = ?",
+                java.sql.Timestamp.valueOf(LocalDateTime.now().minusMinutes(1)), messageId);
+
+        agentRuns.reconcile();
+
+        assertEquals("FAILED", runFor(messageId).get("state"),
+                "no attempt is left, so the row must not return to the queue");
+        assertEquals(0, CALLS.get());
+    }
+
+    @Test
+    void aJobPastItsDeadlineIsNeverSent() throws Exception {
+        long messageId = sendAsPatient("This job's deadline has already passed");
+        jdbcTemplate.update("UPDATE agent_run SET deadline_at = ? WHERE message_id = ?",
+                java.sql.Timestamp.valueOf(LocalDateTime.now().minusMinutes(1)), messageId);
+
+        agentScheduler.runOnce();
+
+        assertEquals(0, CALLS.get(), "the real pass order reconciles before it dispatches");
+        assertEquals(0, ((Number) runFor(messageId).get("attempt")).intValue());
+        assertEquals("FAILED", runFor(messageId).get("state"));
+    }
+
+    @Test
+    void aJobThatExpiresWhileTheBatchIsBusyIsNotSent() throws Exception {
+        long first = sendAsPatient("The job that will hold the dispatcher");
+        long second = sendAsPatient("The job that expires while waiting");
+        jdbcTemplate.update("UPDATE agent_run SET deadline_at = ? WHERE message_id = ?",
+                java.sql.Timestamp.valueOf(LocalDateTime.now().plusSeconds(2)), second);
+        firstRequestDelayMillis = 2_500; // longer than the second job has left
+
+        agentScheduler.runOnce();
+
+        assertEquals(1, CALLS.get(), "only the first job may be sent");
+        assertEquals("PENDING", runFor(second).get("state"),
+                "the claim refuses a job whose deadline passed while the batch was busy");
+        assertEquals(0, ((Number) runFor(second).get("attempt")).intValue());
+        assertEquals(1, ((Number) runFor(first).get("attempt")).intValue(),
+                "the first job was attempted once");
+        assertEquals("RUNNING", runFor(first).get("state"));
+
+        agentRuns.reconcile();
+        assertEquals("FAILED", runFor(second).get("state"), "the deadline sweep ends it");
+        assertEquals("PENDING", runFor(first).get("state"),
+                "and a dispatch slower than its own lease is reclaimed — which is why the "
+                        + "lease must exceed the client timeout");
+    }
+
+    @Test
+    void eachClaimGetsALeaseFromItsOwnMoment() throws Exception {
+        long first = sendAsPatient("The slow job at the head of the batch");
+        long second = sendAsPatient("The quick job behind it");
+        firstRequestDelayMillis = 2_500; // longer than the configured 2s lease
+
+        agentScheduler.runOnce();
+
+        assertEquals(2, CALLS.get());
+        Integer liveLease = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agent_run WHERE message_id = ? "
+                        + "AND lease_expires_at > CURRENT_TIMESTAMP", Integer.class, second);
+        assertEquals(1, liveLease,
+                "the second job's lease starts when it is claimed, not when the batch started");
+        assertEquals("RUNNING", runFor(second).get("state"));
+
+        agentRuns.reconcile();
+        assertEquals("RUNNING", runFor(second).get("state"),
+                "reconcile must not reclaim a job whose lease started after the batch");
+        assertTrue(first > 0);
+    }
+
+    @Test
+    void aProviderErrorBodyNeverReachesTheDatabaseOrTheLogs() throws Exception {
+        // The stub answers like a validation failure that echoes the input.
+        String marker = "SYNTHETIC-PATIENT-TEXT-7f3a";
+        stubStatus = 422;
+        stubBody = "{\"detail\":\"invalid content: " + marker + "\"}";
+        long messageId = sendAsPatient("A message the agent rejects");
+        ch.qos.logback.classic.Logger serviceLogger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(AgentRunService.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        serviceLogger.addAppender(appender);
+        try {
+            agentRuns.dispatchDue();
+        } finally {
+            serviceLogger.detachAppender(appender);
+        }
+
+        String recordedError = (String) runFor(messageId).get("last_error");
+        assertEquals("AGENT_HTTP_422", recordedError, "only the category is stored");
+        assertFalse(recordedError.contains(marker));
+        assertFalse(appender.list.stream().anyMatch(event ->
+                        event.getFormattedMessage().contains(marker)
+                                || (event.getThrowableProxy() != null && event.getThrowableProxy()
+                                .getMessage().contains(marker))),
+                "the response body must not be logged either");
+        assertEquals("PENDING", runFor(messageId).get("state"), "and the job is retried later");
+        assertTrue(CALLS.get() >= 1);
     }
 
     @Test

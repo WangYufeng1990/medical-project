@@ -20,10 +20,18 @@ public class AgentRunScheduler {
     public void poll() {
         if (!properties.isEnabled() || !properties.isSchedulingEnabled()) return;
         try {
-            service.dispatchDue();
-            service.reconcile();
+            runOnce();
         } catch (RuntimeException e) {
             log.warn("Agent dispatch pass failed; the rows stay durable", e);
         }
+    }
+
+    /**
+     * One pass in the order the queue needs: reconcile first, so a job that is past its
+     * deadline or out of attempts ends without being sent, then dispatch what is left.
+     */
+    public void runOnce() {
+        service.reconcile();
+        service.dispatchDue();
     }
 }

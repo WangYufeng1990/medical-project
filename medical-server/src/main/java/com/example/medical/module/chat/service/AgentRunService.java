@@ -1,6 +1,7 @@
 package com.example.medical.module.chat.service;
 
 import com.example.medical.module.chat.agent.AgentDispatchProperties;
+import com.example.medical.module.chat.agent.AgentDispatchException;
 import com.example.medical.module.chat.agent.AgentRunClient;
 import com.example.medical.module.chat.dto.agent.AgentRunStartRequest;
 import com.example.medical.module.chat.entity.AgentRun;
@@ -85,8 +86,12 @@ public class AgentRunService {
                 PageRequest.of(0, Math.max(1, properties.getBatchSize())));
         int dispatched = 0;
         for (Long id : due) {
-            int claimed = states.claim(id, properties.ownerId(), now.plus(properties.getLease()), now);
-            if (claimed == 0) continue; // another dispatcher owns it now
+            // A fresh clock per claim: the batch is dispatched one HTTP call at a time, and
+            // a lease taken from the batch's start could already be expired by the time a
+            // later job is claimed — which reconcile would then reclaim straight away.
+            LocalDateTime claimAt = LocalDateTime.now();
+            int claimed = states.claim(id, properties.ownerId(), claimAt.plus(properties.getLease()), claimAt);
+            if (claimed == 0) continue; // another dispatcher owns it, or it expired/ran out
             deliver(id);
             dispatched++;
         }
@@ -102,10 +107,14 @@ public class AgentRunService {
         LocalDateTime now = LocalDateTime.now();
         int reclaimed = states.reclaimExpired(now);
         int expired = states.expireDeadlines(now, "agent run deadline exceeded");
-        if (reclaimed > 0 || expired > 0) {
-            log.info("Agent runs reconciled: {} reclaimed, {} failed past deadline", reclaimed, expired);
+        int exhaustedPending = states.failExhaustedPending(now, "attempts exhausted");
+        int exhaustedRunning = states.failExhaustedRunning(now, "lease expired after the last attempt");
+        if (reclaimed > 0 || expired > 0 || exhaustedPending > 0 || exhaustedRunning > 0) {
+            log.info("Agent runs reconciled: {} reclaimed, {} past deadline, {} out of attempts "
+                            + "while pending, {} out of attempts while leased",
+                    reclaimed, expired, exhaustedPending, exhaustedRunning);
         }
-        return reclaimed + expired;
+        return reclaimed + expired + exhaustedPending + exhaustedRunning;
     }
 
     private void deliver(Long id) {
@@ -121,8 +130,11 @@ public class AgentRunService {
             client.start(AgentRunStartRequest.of(run, message));
             states.markRunning(id);
         } catch (RuntimeException failure) {
-            String error = truncate(failure.getMessage() == null
-                    ? failure.getClass().getSimpleName() : failure.getMessage());
+            // Only the category: an exception message may carry the remote response body,
+            // and that body may quote the patient's own message (Round 55.2 review).
+            String error = failure instanceof AgentDispatchException dispatchFailure
+                    ? dispatchFailure.category()
+                    : failure.getClass().getSimpleName();
             int attempt = run.getAttempt() == null ? 0 : run.getAttempt();
             int maxAttempts = run.getMaxAttempts() == null ? properties.getMaxAttempts() : run.getMaxAttempts();
             if (attempt >= maxAttempts) {
