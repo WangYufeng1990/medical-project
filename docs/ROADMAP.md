@@ -4451,7 +4451,7 @@ Update `docs/API-LAYOUT.md` when token/session behavior, conflict response shape
 
 ## Healthcare AI Agent enhancement — approved implementation plan (2026-10-19)
 
-**Status: Round 54 complete (2026-10-19 → 2026-10-21); Round 55 in progress (55.1–55.3 Done, 55.4 In Progress after review); Rounds 56–59 remain Pending. Round 55.4's Postgres and Docker paths are still unexecuted here; the CI workflow has run on GitHub, and each record says which commit was green.**
+**Status: Rounds 54 and 55 complete (2026-10-19 → 2026-10-22) on the H2 + SQLite test environment; Rounds 56–59 remain Pending. PostgreSQL deployment is deferred by the 2026-10-22 scope decision and is not claimed as verified. The CI workflow was removed on 2026-10-22 (`fb8b4134`, "use local validation"); validation is local and no CI status is claimed.**
 
 Reviewed source baseline: `b73f771124d3f1a906c7260f13560ee39d29c071` on master. This plan follows Round 53 and preserves its completion history. The planning review inspected source, diffs and committed test evidence; it did not rerun Maven. Implementers must establish a fresh passing baseline before changes.
 
@@ -4552,7 +4552,7 @@ Occupied-slot lookup is not a complete availability engine: the current ±30-min
 | Java common/security/ | Shared internal authorization contracts |
 | medical-web/src/views/chat/reviews/ | Staff review queue and detail |
 | contracts/agent/ | Versioned JSON Schema and cross-language fixtures |
-| compose.yaml and .github/workflows/ | Reproducible runtime and verification |
+| compose.yaml | Reproducible runtime (a GitHub Actions workflow existed briefly; the owner removed it in `fb8b4134` for local validation) |
 
 | Proposed endpoint | Caller / behavior |
 |---|---|
@@ -4875,7 +4875,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 
 **Still not claimed:** the paging and notice tests exercise the state helpers, not the rendered components — that boundary is unchanged. Round 54 is complete on this evidence, but acceptance remains the reviewer's call.
 
-## Round 55 — Python service and reliable execution (In progress: 55.1–55.3 Done, 55.4 In Progress)
+## Round 55 — Python service and reliable execution (Done: 55.1–55.4, H2 + SQLite)
 
 **Goal:** complete the Mock Agent transport and recovery path before real-model behavior. **Estimate:** 32–48 hours. Depends on Round 54.
 
@@ -4884,7 +4884,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / **Done** (2026-10-22, after review) | agent_run atomic intake; claim/lease/attempt/deadline (all enforced in the claim); attempted-error categories instead of remote text; bounded backoff; separate executor; reconcile expired and exhausted claims | AgentDispatchIntegrationTest + AgentRestartRecoveryIntegrationTest: Python down does not break message send; a refused/rejected dispatch is retried without storing the response body; a restart dispatches the queued job from a second application context; expired deadlines and exhausted attempts never reach the service; one claim winner per job — 16 tests (see the 55.2 records) |
 | 55.3 Service/task authorization | P0 / **Done** (2026-10-22, after review) | Directional outbound/inbound credentials, opaque capability digests bound to run + generation, generation- and state-fenced dispatch writes, live-lease/deadline checks inside verify **and** the result UPDATE, current account check, internal allowlist | AgentExecutionAuthorizationTest + AgentDispatchIntegrationTest: forged/expired/cross-run/revoked/stale access rejected, a result accepted mid-dispatch is never reopened or requeued, the outbound token is not an inbound one, expired leases and deadlines refuse GET and POST, and the result UPDATE itself refuses a write whose lease lapsed after the check — 35 agent tests (see the 55.3 records) |
-| 55.4 Minimal persistent graph | P0 / **In progress** (2026-10-22; review: generation handover — including a failed submission after the take-over — checkpointer lifetime and per-run serialization fixed; real Postgres and GitHub Actions still unverified) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite here, Postgres in deployment); recovery by resume; run-level serialization; CI workflow | test_graph.py, test_api_runs.py: a Java-style retry at generation 2 adopts the finished work and submits generation 2; a stale generation is refused; two concurrent dispatches of one run classify, draft and submit once; the checkpointer is closed with the application — 25 Python tests beyond 55.1–55.3 (see the 55.4 records) |
+| 55.4 Minimal persistent graph | P0 / **Done** (2026-10-22, H2 + SQLite; Postgres deferred by the 2026-10-22 scope decision) | Intake → validation → Mock classification → draft → result submission; LangGraph checkpoints (SQLite in this environment); recovery by resume; run-level serialization | AgentEndToEndIntegrationTest (real Java + uvicorn processes): a refused callback requeues the run, the retry claims generation 2 and the second Python process resumes the checkpoint, submitting generation 2 → WAITING_REVIEW; messaging stays available while the agent fails — plus the 79 Python tests (see the 55.4 records) |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
 
@@ -5146,11 +5146,10 @@ crash-then-resume behaviour it now asserts.
 `/api/v1/internal/agent/runs/77/results` with `probe-outbound`, `probe-capability` and
 `{"generation":2,"outcome":"APPOINTMENT:DRAFT_READY"}`.
 
-**CI** (the round's closing instruction): `.github/workflows/ci.yml` runs the backend
-(`mvn -B clean verify`), the Python checks (`ruff`, `mypy`, `pytest` against `requirements.lock`)
-and the frontend (`npm ci`, `check`, `test`, `build`). Its first fully green run was `4acaf31e`:
-all three jobs passed there. Later commits are only as green as their own run, and the documents
-name the commit rather than implying the workflow is green in general.
+**CI**: a workflow was written this round and ran once green on `4acaf31e` (backend, Python and
+frontend jobs). It was then **removed by the owner** in `fb8b4134` ("Remove automatic CI workflow;
+use local validation"), so there is no CI status to claim from that commit on. Validation is local
+and is listed in the verification sections.
 
 **Verification (actually run):** Java `mvn clean verify` → **349 tests, 0 failures**; Python
 `pytest` → **71 passed**, `ruff` clean, `mypy --strict` no issues in 19 source files;
@@ -5158,8 +5157,9 @@ name the commit rather than implying the workflow is green in general.
 
 **Limits.**
 - The classification is a keyword mock and the draft a fixed template; Rounds 56/57 replace both.
-- Postgres checkpoints, the compose stack and the CI workflow are **unexecuted** here (no server,
-  daemon or runner). SQLite checkpoints and the cross-process resume are what the evidence covers.
+- Postgres checkpoints and the compose stack are **unexecuted** here (no server, no daemon).
+  SQLite checkpoints and the cross-process resume are what the evidence covers. The CI workflow was
+  removed after one green run, so nothing about later commits is claimed from it.
 - Graph-level failures are coarse: a validation or submission error leaves the run to Java's
   lease/deadline machinery instead of reporting a typed failure (56/57).
 - The graph runs synchronously inside the request; a real provider would need the async execution
@@ -5285,15 +5285,67 @@ that finished classifying: the draft node runs before anything is submitted). Wi
 worker the first test fails with `assert 1 == 2` on the provider call count — the classification
 never ran. The earlier `[1, 2, 2]` submission-retry test still passes.
 
-**CI status, stated per commit.** The workflow's first fully green run was `4acaf31e` (all three
-jobs). `5d7920bc` and this commit were still pending at review time, so no claim is made about
-them; the records name the commit.
+**CI status.** The workflow's only green run was `4acaf31e` (all three jobs); `5d7920bc` was still
+pending when the workflow was removed in `fb8b4134`. From that commit on, validation is local and
+this record claims no CI result.
 
 **Status unchanged:** 55.4 stays **In progress** (real Postgres run and an end-to-end Java↔Python
 retry are still missing, and the newest commit's CI run is pending).
 
 **Verification (actually run):** Python `pytest` → **79 passed**; `ruff` clean; `mypy --strict`
 clean. Java unchanged.
+
+### Round 55.4 — scope decision and end-to-end acceptance (2026-10-22)
+
+**Scope decision (2026-10-22).** The current development and test environment is **Java H2 +
+Python SQLite**: H2 holds the business data, `agent_run` and the capability digests; SQLite holds
+the LangGraph checkpoints. Moving Python checkpoints to H2 is not required. A real PostgreSQL run
+is **deferred and no longer blocks 55.4 or Round 55** — Postgres is a deployment option, not a
+core deliverable of this project. The Postgres adapter is kept, and it is documented as
+**not verified by an actual run** (no Postgres server or Docker daemon exists here). No database
+migration, MySQL/PostgreSQL/Testcontainers or cloud deployment work is added in this round; those
+are recorded as future, on-demand verification items.
+
+**End-to-end acceptance (`AgentEndToEndIntegrationTest`, opt-in via `-Dagent.e2e=true`).** One
+Spring context on a random port plus **two real uvicorn processes** started from the test, on H2
+and one SQLite checkpoint file:
+
+1. The first Python process is given a **wrong outbound credential**, so its result submission is
+   refused by Java (401) and the dispatch fails (500 → `AGENT_HTTP_500`). The run stays PENDING with
+   attempt 1 and generation 1, and the patient message is stored and readable through
+   `GET /api/v1/patient/me/messages/2` — human messaging does not depend on the agent.
+2. The first process is stopped; a second Python process starts with the **correct credential and
+   the same checkpoint file**. `next_attempt_at` is moved into the past and the dispatcher claims
+   the run again: attempt 2, **generation 2**.
+3. The second process resumes its checkpoint and submits the result with generation 2; Java runs
+   the result endpoint (service token + capability + generation + live lease + deadline) and the
+   run reaches **WAITING_REVIEW**, with one run row for the message and no error left over.
+
+The test also exposed a real defect: a successful result left the previous attempt's error in
+`last_error`. `complete` now clears it, so the column means "the last failure that was not
+followed by success".
+
+**What this proves and what it does not.** It proves the two processes, the directional
+credentials, the retry that increments the generation, the reuse of the checkpoint across Python
+processes, the final state and the independence of human messaging. It does **not** prove by
+itself that the resumed graph skipped its classification — that is proven by the Python worker
+tests, which count provider calls — and it does not exercise Postgres.
+
+**Verification (actually run).** `mvn -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true test` →
+**1 passed** (10.5 s, two Python processes). `mvn clean verify` → **350 tests, 0 failures, 1 skipped**
+(the opt-in end-to-end test is skipped in the default run). Python `pytest` → **79 passed**, `ruff`
+and `mypy --strict` clean. 55.1–55.3's evidence is unchanged.
+
+**Validation, not CI.** The workflow had gained an `end-to-end` job for exactly this test, but the
+owner removed the workflow in `fb8b4134` ("use local validation"). The acceptance is therefore run
+locally, and the command is recorded so it can be repeated:
+`mvn -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true test` (plus `mvn clean verify`, `pytest`,
+`ruff`, `mypy`).
+
+**Unverified boundaries (named, not implied away).** PostgreSQL deployment (adapter kept, never
+executed); Docker images (`docker compose config` only, no daemon here); a real DeepSeek model
+(the adapter exists, no key or call in this environment); multi-instance workers (the lock is
+per-process, as the review scoped it); CI (workflow removed — local validation only).
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

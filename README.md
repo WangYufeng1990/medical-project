@@ -377,9 +377,15 @@ with that inbound token, requires the per-attempt capability, runs a small LangG
 (validate → mock classification → draft → submit result back to Java) and checkpoints each
 step. Checkpoints live in Postgres in deployment (`MEDICAL_AGENT_CHECKPOINT_URL`) and in a
 SQLite file on a developer machine; `docker compose` starts Postgres next to the service with
-`AGENT_OUTBOUND_TOKEN` / `AGENT_INBOUND_TOKEN` (both required). LangGraph's Postgres saver is
-installed but **not exercised here** — this environment has no Postgres server, and the tests
-cover the SQLite path plus a cross-process resume.
+`AGENT_OUTBOUND_TOKEN` / `AGENT_INBOUND_TOKEN` (both required). LangGraph's Postgres saver is installed but **not executed anywhere yet** — by the
+2026-10-22 scope decision PostgreSQL is a deployment option and is not a current deliverable, so
+the environment stays H2 (Java) + SQLite (Python checkpoints). The tests cover the SQLite path,
+a cross-process resume, and a real two-process end-to-end retry:
+
+```bash
+cd medical-server
+mvn -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true test
+```
 
 The contract lives in `contracts/agent/v1/`: JSON Schemas generated from the Pydantic
 models plus fixtures both languages read. After changing a model, regenerate and let

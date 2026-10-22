@@ -104,7 +104,8 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE AgentRun r SET r.state = :state, r.leaseOwner = NULL, r.leaseExpiresAt = NULL, "
-            + "r.updateTime = :now WHERE r.id = :id AND r.executionGeneration = :generation "
+            + "r.lastError = NULL, r.updateTime = :now "
+            + "WHERE r.id = :id AND r.executionGeneration = :generation "
             + "AND r.state = :running AND r.leaseExpiresAt > :now AND r.deadlineAt > :now")
     int complete(@Param("id") Long id, @Param("generation") Long generation,
                  @Param("state") String state, @Param("now") LocalDateTime now,
