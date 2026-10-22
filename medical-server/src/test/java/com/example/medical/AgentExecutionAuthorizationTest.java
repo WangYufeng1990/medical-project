@@ -39,7 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         "app.agent.enabled=true",
         "app.agent.scheduling-enabled=false",
-        "app.agent.service-token=" + AgentExecutionAuthorizationTest.SERVICE_TOKEN,
+        "app.agent.inbound-token=" + AgentExecutionAuthorizationTest.INBOUND_TOKEN,
+        "app.agent.outbound-token=" + AgentExecutionAuthorizationTest.OUTBOUND_TOKEN,
         "app.agent.poll-interval-ms=3600000",
         "app.agent.lease=60s",
         "app.agent.capability-ttl=2m",
@@ -47,19 +48,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
 
-    static final String SERVICE_TOKEN = "test-agent-service-token";
+    static final String INBOUND_TOKEN = "test-agent-inbound-token";
+    static final String OUTBOUND_TOKEN = "test-agent-outbound-token";
 
     private static final HttpServer AGENT_STUB;
     private static final String BASE_URL;
     /** The capability header of each dispatch, in order. */
     private static final List<String> CAPABILITIES = new CopyOnWriteArrayList<>();
+    /** The Authorization header of each dispatch, in order. */
+    private static final List<String> AUTHORIZATIONS = new CopyOnWriteArrayList<>();
 
     static {
         try {
             AGENT_STUB = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             AGENT_STUB.createContext("/internal/v1/runs", exchange -> {
                 String capability = exchange.getRequestHeaders().getFirst("X-Agent-Capability");
+                String authorization = exchange.getRequestHeaders().getFirst("Authorization");
                 CAPABILITIES.add(capability == null ? "" : capability);
+                AUTHORIZATIONS.add(authorization == null ? "" : authorization);
                 exchange.getRequestBody().readAllBytes();
                 exchange.sendResponseHeaders(202, -1);
                 exchange.close();
@@ -93,6 +99,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM agent_capability");
         jdbcTemplate.update("DELETE FROM agent_run");
         CAPABILITIES.clear();
+        AUTHORIZATIONS.clear();
     }
 
     // ── the two credentials ─────────────────────────────────────────
@@ -121,7 +128,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         Dispatched dispatched = dispatchedRun("Message with a dispatched run");
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN))
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -130,7 +137,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         Dispatched dispatched = dispatchedRun("Message with a dispatched run");
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", "forged-capability-value"))
                 .andExpect(status().isForbidden());
     }
@@ -140,7 +147,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         Dispatched dispatched = dispatchedRun("Message with a dispatched run");
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.runId").value(dispatched.runId()))
@@ -153,7 +160,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         // The internal allowlist is the two /internal/agent operations; the patient API
         // still needs a patient JWT, so the service credential buys nothing there.
         mockMvc.perform(get("/api/v1/patients/100")
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN))
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -165,7 +172,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         Dispatched second = dispatchedRun("Second run");
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + second.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", first.capability()))
                 .andExpect(status().isForbidden());
     }
@@ -177,7 +184,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 Timestamp.valueOf(LocalDateTime.now().minusMinutes(1)), dispatched.runId());
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
     }
@@ -190,7 +197,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 + "WHERE id = ?", dispatched.runId());
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
     }
@@ -203,7 +210,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isOk());
 
@@ -213,7 +220,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 "the capability is gone once the run stops accepting work");
 
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
     }
@@ -226,7 +233,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "generation", dispatched.generation() + 1, "outcome", "DRAFT_READY")))
-                        .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isConflict());
 
@@ -239,7 +246,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         jdbcTemplate.update("UPDATE patient_auth SET status = 0 WHERE patient_id = 100");
         try {
             mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
-                            .header("X-Agent-Service-Token", SERVICE_TOKEN)
+                            .header("X-Agent-Service-Token", INBOUND_TOKEN)
                             .header("X-Agent-Capability", dispatched.capability()))
                     .andExpect(status().isForbidden());
         } finally {
@@ -263,10 +270,72 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 dispatched.capability()));
     }
 
+    // ── direction and time ──────────────────────────────────────────
+
+    @Test
+    void theDispatchCarriesTheOutboundTokenAndNotTheInboundOne() throws Exception {
+        dispatchedRun("Message whose dispatch credential is inspected");
+
+        assertEquals(1, AUTHORIZATIONS.size());
+        assertEquals("Bearer " + OUTBOUND_TOKEN, AUTHORIZATIONS.get(0),
+                "Java must present its outbound credential to the agent service");
+        assertNotEquals("Bearer " + INBOUND_TOKEN, AUTHORIZATIONS.get(0));
+    }
+
+    @Test
+    void theOutboundTokenIsNotAnInboundCredential() throws Exception {
+        // Directional credentials: the value Java sends out cannot be replayed back in with
+        // a valid capability.
+        Dispatched dispatched = dispatchedRun("Message whose outbound token is replayed");
+
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
+                        .header("X-Agent-Service-Token", OUTBOUND_TOKEN)
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aLeaseThatExpiredRefusesTheWorker() throws Exception {
+        Dispatched dispatched = dispatchedRun("Message whose lease expires before its result");
+        jdbcTemplate.update("UPDATE agent_run SET lease_expires_at = ? WHERE id = ?",
+                Timestamp.valueOf(LocalDateTime.now().minusSeconds(1)), dispatched.runId());
+
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + dispatched.runId())
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isForbidden());
+        assertEquals("RUNNING", runState(dispatched.runId()),
+                "no reconcile ran, so only the authorization check refuses this worker");
+    }
+
+    @Test
+    void aRunPastItsDeadlineRefusesTheWorker() throws Exception {
+        Dispatched dispatched = dispatchedRun("Message whose deadline passes before its result");
+        jdbcTemplate.update("UPDATE agent_run SET deadline_at = ? WHERE id = ?",
+                Timestamp.valueOf(LocalDateTime.now().minusSeconds(1)), dispatched.runId());
+
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
+                        .header("X-Agent-Service-Token", INBOUND_TOKEN)
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isForbidden());
+        assertEquals("RUNNING", runState(dispatched.runId()));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     private Dispatched dispatchedRun(String content) throws Exception {
         CAPABILITIES.clear();
+        AUTHORIZATIONS.clear();
         MvcResult result = mockMvc.perform(post("/api/v1/patient/me/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(

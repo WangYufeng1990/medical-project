@@ -4883,7 +4883,7 @@ Two findings from the review of `6f5fa08d` were re-checked; both held, and the r
 |---|---|---|---|
 | 55.1 Service and contract skeleton | P0 / **Done** (2026-10-21, after three review rounds) | FastAPI, configuration, Pydantic (strict identity fields, timezone-aware ISO timestamps with a validated offset), Provider interface/MockProvider, health checks, basic Compose, cross-language fixtures | test_contracts.py, test_config.py: bad payloads denied on both sides (24 fixtures incl. null, bounds, code-point lengths, coercions, timestamp spellings and offset ranges, nested types), missing required credentials fail, credentials never appear in startup errors, Java/Python agree — 58 pytest + 8 Java contract tests, ruff and mypy --strict clean (see the 55.1 records) |
 | 55.2 Durable dispatcher | P0 / **Done** (2026-10-22, after review) | agent_run atomic intake; claim/lease/attempt/deadline (all enforced in the claim); attempted-error categories instead of remote text; bounded backoff; separate executor; reconcile expired and exhausted claims | AgentDispatchIntegrationTest + AgentRestartRecoveryIntegrationTest: Python down does not break message send; a refused/rejected dispatch is retried without storing the response body; a restart dispatches the queued job from a second application context; expired deadlines and exhausted attempts never reach the service; one claim winner per job — 16 tests (see the 55.2 records) |
-| 55.3 Service/task authorization | P0 / **Done** (2026-10-22) | Directional service credential, opaque capability digests bound to run + generation, generation-fenced state writes, current account check, internal allowlist | AgentExecutionAuthorizationTest: forged/expired/cross-run/revoked/stale access rejected, service token alone cannot read patient records, only a digest is stored — 13/13 pass (see 55.3 record below) |
+| 55.3 Service/task authorization | P0 / **Done** (2026-10-22, after review) | Directional outbound/inbound credentials, opaque capability digests bound to run + generation, generation- and state-fenced dispatch writes, live-lease/deadline checks inside verify **and** the result UPDATE, current account check, internal allowlist | AgentExecutionAuthorizationTest + AgentDispatchIntegrationTest: forged/expired/cross-run/revoked/stale access rejected, a result accepted mid-dispatch is never reopened or requeued, the outbound token is not an inbound one, expired leases and deadlines refuse the worker — 34 agent tests (see the 55.3 records) |
 | 55.4 Minimal persistent graph | P0 / Pending | Intake → validation → Mock classification → draft; PostgreSQL checkpoint; state/status recovery | test_graph_recovery.py: restart recovers the same run; repeat execution does not create another draft; failed/unknown state safely reconciled |
 
 Add initial CI now: backend regression, Python lint/type/Mock tests and frontend checks. Do not wait until Round 59. Distinguish liveness from readiness and keep provider failure from making human messaging unavailable.
@@ -5063,6 +5063,30 @@ SUCCESS** (329 + 13); `LayeringGuardTest` 4/4 with no allowlist.
   allowlist arrives with the appointment tool in Round 58.
 - The internal endpoints are reachable without a JWT by design; the service token is the
   only process credential, so its configuration and rotation are an operational concern.
+
+### Round 55.3 review fixes (second pass, 2026-10-22)
+
+Three findings were re-checked; all three held, and each now has a test that failed before the fix.
+
+**1. P1 — a dispatch acknowledgement could reopen a completed run.** The generation guard was there, but no source-state guard: `deliver` wrote `RUNNING` after the HTTP call returned, so a result that arrived *during* that call (WAITING_REVIEW, lease cleared, capability revoked) was overwritten with RUNNING — a row with no capability and no lease. The failure path had the same hole: a late timeout requeued a job whose result had been accepted.
+
+Fixed by removing the acknowledgement entirely (the claim already sets RUNNING, so the successful dispatch has nothing left to write) and by requiring `state = RUNNING` in both `transition` and `retryLater`, alongside the generation. A refused write is now the expected outcome and is logged as such rather than treated as success.
+
+Tests: the stub's handler calls the real `POST /results` *before* it answers, then answers 202 — the run must end WAITING_REVIEW, with the capability gone; a second variant answers by closing the connection (the client sees a transport failure), and the run must **not** be requeued. The second test also asserts the retry path actually ran and was refused (a DEBUG line), so it cannot pass by never attempting the write.
+
+**2. P2 — the service credential had no direction.** Java sent `properties.getServiceToken()` outbound and verified the same value inbound: a second header, not a second credential. Split into `app.agent.outbound-token` (`AGENT_OUTBOUND_TOKEN`, sent as the Bearer token to Python) and `app.agent.inbound-token` (`AGENT_INBOUND_TOKEN`, required on callbacks; blank still denies everything).
+
+Tests: the dispatch request is asserted to carry the outbound token exactly; replaying the outbound token on a callback with a valid capability answers 401.
+
+**3. P2 — an expired lease or deadline still authorized work.** `verify` checked the capability TTL (5 min), generation and RUNNING, but not the lease (60 s) or the task deadline, and `complete` had no time condition — so in the window before a reconcile pass, a worker whose lease had run out could still read context and submit a result. `verify` now refuses a lease or deadline that is not in the future, and the result UPDATE repeats both conditions so the check cannot be overtaken.
+
+Tests: with the capability valid and the generation unchanged, setting the lease (and separately the deadline) into the past refuses both GET and POST and leaves the run RUNNING — no reconcile runs in the test.
+
+**Red evidence (measured, then reverted).** With the guards temporarily removed: the mid-dispatch result was left **PENDING** instead of WAITING_REVIEW (the requeue clobber); the outbound token was accepted where 401 was expected; and the expired-lease call reached the authorization path instead of being refused. The three fixes restore all four tests.
+
+**Verification (actually run):** `mvn clean verify` → **348 tests, 0 failures, 0 errors, BUILD SUCCESS** (342 + 6); `LayeringGuardTest` 4/4.
+
+**Still not claimed.** The result payload stays provisional until Round 57. Java enforces these checks on its endpoints; the Python worker does not exist yet, so "a stale worker cannot call tools" is enforced here and not yet end-to-end. Per-tool allowlists arrive with the appointment tool (Round 58).
 
 ## Round 56 — Classification and versioned RAG (Pending)
 

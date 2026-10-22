@@ -80,6 +80,16 @@ public class AgentCapabilityService {
         if (!AgentRunState.RUNNING.name().equals(run.getState())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "run is not accepting work");
         }
+        // The capability can outlive the lease it was issued under (5 minutes vs 60
+        // seconds), so a worker whose lease ran out must be refused here even before the
+        // reconcile sweep notices.
+        LocalDateTime now = LocalDateTime.now();
+        if (run.getLeaseExpiresAt() == null || !run.getLeaseExpiresAt().isAfter(now)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "the run's lease has expired");
+        }
+        if (run.getDeadlineAt() == null || !run.getDeadlineAt().isAfter(now)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "the run is past its deadline");
+        }
         return run;
     }
 

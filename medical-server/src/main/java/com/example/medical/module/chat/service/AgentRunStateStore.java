@@ -28,19 +28,15 @@ public class AgentRunStateStore {
     }
 
     @Transactional
-    public void markRunning(Long id, Long generation) {
-        runs.markState(id, AgentRunState.RUNNING.name(), generation, LocalDateTime.now());
+    public boolean retryLater(Long id, Long generation, LocalDateTime nextAttemptAt, String error) {
+        return runs.retryLater(id, nextAttemptAt, error, generation, LocalDateTime.now(),
+                AgentRunState.PENDING.name(), AgentRunState.RUNNING.name()) == 1;
     }
 
     @Transactional
-    public void retryLater(Long id, Long generation, LocalDateTime nextAttemptAt, String error) {
-        runs.retryLater(id, nextAttemptAt, error, generation, LocalDateTime.now(),
-                AgentRunState.PENDING.name());
-    }
-
-    @Transactional
-    public void fail(Long id, Long generation, String error) {
-        runs.transition(id, AgentRunState.FAILED.name(), error, generation, LocalDateTime.now());
+    public boolean fail(Long id, Long generation, String error) {
+        return runs.transition(id, AgentRunState.FAILED.name(), error, generation,
+                LocalDateTime.now(), AgentRunState.RUNNING.name()) == 1;
     }
 
     /** A worker's result: RUNNING → WAITING_REVIEW, only for the generation it was given. */

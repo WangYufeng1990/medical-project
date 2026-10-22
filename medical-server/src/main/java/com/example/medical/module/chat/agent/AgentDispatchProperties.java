@@ -25,7 +25,16 @@ public class AgentDispatchProperties {
     private boolean schedulingEnabled = true;
 
     private String baseUrl = "http://localhost:8090";
-    private String serviceToken = "";
+
+    /**
+     * The credential Java presents to the agent service (its inbound side). Distinct from
+     * {@link #inboundToken} on purpose: the plan asks for directional credentials, and one
+     * shared secret would let a leaked value be replayed in the other direction.
+     */
+    private String outboundToken = "";
+
+    /** The credential the agent service must present when it calls back (Round 55.3). */
+    private String inboundToken = "";
     private int batchSize = 10;
     private Duration lease = Duration.ofSeconds(60);
     private Duration deadline = Duration.ofMinutes(30);

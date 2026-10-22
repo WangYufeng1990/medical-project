@@ -127,7 +127,8 @@ class AgentRestartRecoveryIntegrationTest {
                         "--app.agent.enabled=true",
                         "--app.agent.scheduling-enabled=false",
                         "--app.agent.base-url=" + BASE_URL,
-                        "--app.agent.service-token=test-agent-token",
+                        "--app.agent.outbound-token=test-outbound-token",
+                        "--app.agent.inbound-token=test-inbound-token",
                         "--app.agent.request-timeout=5s",
                         "--server.port=0");
     }

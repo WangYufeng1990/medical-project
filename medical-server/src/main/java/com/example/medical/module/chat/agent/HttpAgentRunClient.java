@@ -40,8 +40,8 @@ public class HttpAgentRunClient implements AgentRunClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        if (properties.getServiceToken() != null && !properties.getServiceToken().isBlank()) {
-            headers.setBearerAuth(properties.getServiceToken());
+        if (properties.getOutboundToken() != null && !properties.getOutboundToken().isBlank()) {
+            headers.setBearerAuth(properties.getOutboundToken());
         }
         headers.set("X-Agent-Capability", capability);
         try {

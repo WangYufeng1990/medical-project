@@ -50,7 +50,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.agent.enabled=true",
         // The poller is driven by the tests themselves: a background pass would race them.
         "app.agent.scheduling-enabled=false",
-        "app.agent.service-token=test-agent-token",
+        "app.agent.outbound-token=test-outbound-token",
+        "app.agent.inbound-token=test-inbound-token",
         "app.agent.poll-interval-ms=3600000",
         // A short lease so "expired while the batch was busy" is reachable, and a longer
         // client timeout so the slow dispatch still succeeds rather than timing out.
@@ -70,6 +71,9 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     private static volatile int stubStatus = 202;
     private static volatile String stubBody = "";
     private static volatile long firstRequestDelayMillis = 0;
+    /** Runs inside the first dispatch request, before the stub answers. */
+    private static volatile java.util.function.Consumer<Dispatch> onFirstDispatch = dispatch -> { };
+    private static volatile boolean abortFirstDispatch = false;
 
     static {
         try {
@@ -77,13 +81,22 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
             AGENT_STUB.createContext("/internal/v1/runs", exchange -> {
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 BODIES.add(body);
+                String capability = exchange.getRequestHeaders().getFirst("X-Agent-Capability");
                 int call = CALLS.incrementAndGet();
-                if (call == 1 && firstRequestDelayMillis > 0) {
-                    try {
-                        Thread.sleep(firstRequestDelayMillis);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                if (call == 1) {
+                    if (firstRequestDelayMillis > 0) {
+                        try {
+                            Thread.sleep(firstRequestDelayMillis);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
                     }
+                    onFirstDispatch.accept(new Dispatch(body, capability));
+                }
+                if (abortFirstDispatch && call == 1) {
+                    // No response headers: the client sees the connection end.
+                    exchange.close();
+                    return;
                 }
                 byte[] response = stubBody.getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(stubStatus, response.length == 0 ? -1 : response.length);
@@ -110,6 +123,9 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     private AgentRunScheduler agentScheduler;
 
     @Autowired
+    private com.example.medical.module.chat.controller.AgentInternalController agentInternal;
+
+    @Autowired
     private MessageRepository messageRepository;
 
     private String patientToken;
@@ -126,6 +142,8 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         stubStatus = 202;
         stubBody = "";
         firstRequestDelayMillis = 0;
+        onFirstDispatch = dispatch -> { };
+        abortFirstDispatch = false;
         CALLS.set(0);
         BODIES.clear();
         // Each test owns its queue: a PENDING row from a previous test would be dispatched
@@ -229,6 +247,63 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         assertEquals(1, CALLS.get(), "the service must be called once for one job");
         assertEquals(1L, ((Number) runFor(messageId).get("attempt")).longValue());
         assertEquals("RUNNING", runFor(messageId).get("state"));
+    }
+
+    @Test
+    void aResultAcceptedDuringTheDispatchCallIsNotOverwritten() throws Exception {
+        // The worker answers the dispatch request's own result call before the dispatch
+        // request finishes: the row is WAITING_REVIEW with no capability and no lease by the
+        // time the dispatcher returns.
+        long messageId = sendAsPatient("A result that beats the dispatch response");
+        long runId = runIdFor(messageId);
+        onFirstDispatch = dispatch -> {
+            long generation = jdbcTemplate.queryForObject(
+                    "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
+            agentInternal.result("test-inbound-token", dispatch.capability(), runId,
+                    resultBody(generation));
+        };
+
+        agentRuns.dispatchDue();
+
+        assertEquals("WAITING_REVIEW", runFor(messageId).get("state"),
+                "the dispatch acknowledgement must not reopen a run whose result arrived");
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM agent_capability WHERE run_id = ?", Integer.class, runId));
+    }
+
+    @Test
+    void aFailedDispatchAfterAnAcceptedResultDoesNotRequeue() throws Exception {
+        long messageId = sendAsPatient("A result that arrives before the dispatch breaks");
+        long runId = runIdFor(messageId);
+        onFirstDispatch = dispatch -> {
+            long generation = jdbcTemplate.queryForObject(
+                    "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
+            agentInternal.result("test-inbound-token", dispatch.capability(), runId,
+                    resultBody(generation));
+        };
+        abortFirstDispatch = true;
+        ch.qos.logback.classic.Logger serviceLogger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(AgentRunService.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        ch.qos.logback.classic.Level previousLevel = serviceLogger.getLevel();
+        serviceLogger.addAppender(appender);
+        serviceLogger.setLevel(ch.qos.logback.classic.Level.DEBUG);
+        try {
+            agentRuns.dispatchDue();
+        } finally {
+            serviceLogger.setLevel(previousLevel);
+            serviceLogger.detachAppender(appender);
+        }
+
+        assertEquals("WAITING_REVIEW", runFor(messageId).get("state"),
+                "a late failure report must not put an accepted job back in the queue");
+        assertEquals(1, ((Number) runFor(messageId).get("attempt")).intValue());
+        assertEquals(1, CALLS.get());
+        assertTrue(appender.list.stream().anyMatch(event ->
+                        event.getFormattedMessage().contains("attempt had already moved on")),
+                "the failure path must have run and been refused, not skipped: " + appender.list);
     }
 
     // ── recovery ────────────────────────────────────────────────────
@@ -418,7 +493,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         // connection actually does instead of leaving it to be discovered in production.
         AgentDispatchProperties properties = new AgentDispatchProperties();
         properties.setBaseUrl("http://127.0.0.1:1");
-        properties.setServiceToken("test-agent-token");
+        properties.setOutboundToken("test-outbound-token");
         properties.setRequestTimeout(Duration.ofMillis(500));
         AgentRunClient client = new HttpAgentRunClient(properties);
         AgentRunStartRequest request = new AgentRunStartRequest("v1", 1L, 1L, 100L, 1L,
@@ -452,6 +527,22 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         return objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
     }
+
+    private long runIdFor(long messageId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM agent_run WHERE message_id = ?", Long.class, messageId);
+    }
+
+    private com.example.medical.module.chat.dto.agent.AgentRunResultRequest resultBody(long generation) {
+        com.example.medical.module.chat.dto.agent.AgentRunResultRequest body =
+                new com.example.medical.module.chat.dto.agent.AgentRunResultRequest();
+        body.setGeneration(generation);
+        body.setOutcome("DRAFT_READY");
+        return body;
+    }
+
+    /** What the stub saw: the request body and the capability it was given. */
+    private record Dispatch(String body, String capability) { }
 
     private Map<String, Object> runFor(long messageId) {
         return jdbcTemplate.queryForMap(

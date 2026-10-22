@@ -133,7 +133,8 @@ public class AgentRunService {
             // digest is stored; the token travels in a header and is never logged.
             String capability = capabilities.issue(run);
             client.start(AgentRunStartRequest.of(run, message), capability);
-            states.markRunning(id, run.getExecutionGeneration());
+            // No state write on success: the claim already set RUNNING, and a rewrite here
+            // could undo a result that arrived while this call was in flight.
         } catch (RuntimeException failure) {
             // Only the category: an exception message may carry the remote response body,
             // and that body may quote the patient's own message (Round 55.2 review).
@@ -143,12 +144,14 @@ public class AgentRunService {
             int attempt = run.getAttempt() == null ? 0 : run.getAttempt();
             int maxAttempts = run.getMaxAttempts() == null ? properties.getMaxAttempts() : run.getMaxAttempts();
             if (attempt >= maxAttempts) {
-                states.fail(id, run.getExecutionGeneration(), error);
-                log.warn("Agent run {} failed after {} attempts: {}", id, attempt, error);
+                boolean ended = states.fail(id, run.getExecutionGeneration(), error);
+                log.warn("Agent run {} failed after {} attempts ({}): {}", id, attempt, error,
+                        ended ? "recorded" : "attempt had already moved on");
             } else {
-                states.retryLater(id, run.getExecutionGeneration(),
+                boolean requeued = states.retryLater(id, run.getExecutionGeneration(),
                         LocalDateTime.now().plus(backoff(attempt)), error);
-                log.debug("Agent run {} attempt {} failed, retrying later: {}", id, attempt, error);
+                log.debug("Agent run {} attempt {} failed ({}), retrying later: {}", id, attempt, error,
+                        requeued ? "requeued" : "attempt had already moved on");
             }
         }
     }

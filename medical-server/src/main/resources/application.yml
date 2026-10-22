@@ -61,7 +61,8 @@ app:
     enabled: ${AGENT_ENABLED:false}
     scheduling-enabled: ${AGENT_SCHEDULING_ENABLED:true}
     base-url: ${AGENT_BASE_URL:http://localhost:8090}
-    service-token: ${AGENT_SERVICE_TOKEN:}
+    outbound-token: ${AGENT_OUTBOUND_TOKEN:}
+    inbound-token: ${AGENT_INBOUND_TOKEN:}
     poll-interval-ms: 5000
     batch-size: 10
     lease: 60s
