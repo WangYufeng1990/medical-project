@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import threading
 from pathlib import Path
 
 import pytest
@@ -201,3 +202,97 @@ def test_a_run_without_a_retriever_is_flagged_as_missing_evidence(tmp_path: Path
     assert state["evidence"] == []
     assert "evidence_missing" in state["flags"]
     assert "could not find" in state["draft"]
+
+
+class PausingRetriever(Retriever):
+    """Pauses the first search after its lexical scores, so another search can swap the index."""
+
+    def __init__(self, source):  # type: ignore[no-untyped-def]
+        self.paused = threading.Event()
+        self.resume = threading.Event()
+        self._should_pause = True
+        super().__init__(source)
+
+    def _lexical_scores(self, tokens, index):  # type: ignore[no-untyped-def]
+        scores = super()._lexical_scores(tokens, index)
+        if self._should_pause:
+            self._should_pause = False
+            self.paused.set()
+            self.resume.wait(timeout=10)
+        return scores
+
+
+def _payment_corpus(document_id: str, heading: str) -> tuple:
+    from medical_agent.kb.chunking import chunk_document
+
+    body = f"## {heading}\nA payment plan changes the schedule, not the amount owed."
+    return tuple(chunk_document(document_id, 1, f"{document_id} policy", body))
+
+
+def test_a_search_in_flight_keeps_the_index_it_started_with() -> None:
+    # The race the review found: a search used the new index with ids from the old one.
+    old = _payment_corpus("old-policy", "Payment")
+    new = _payment_corpus("new-policy", "Payment")
+    holder = {"chunks": old}
+    retriever = PausingRetriever(lambda: holder["chunks"])
+    errors: list[BaseException] = []
+    results: dict[str, object] = {}
+
+    def first() -> None:
+        try:
+            results["first"] = retriever.search("payment plan")
+        except BaseException as exc:
+            errors.append(exc)
+
+    first_thread = threading.Thread(target=first)
+    first_thread.start()
+    assert retriever.paused.wait(timeout=10), "the first search must reach the pause"
+
+    holder["chunks"] = new
+    results["second"] = retriever.search("payment plan")
+    retriever.resume.set()
+    first_thread.join(timeout=10)
+
+    assert not errors, f"a concurrent swap raised: {errors}"
+    first_documents = {hit.chunk.document_id for hit in results["first"].hits}  # type: ignore[union-attr]
+    second_documents = {hit.chunk.document_id for hit in results["second"].hits}  # type: ignore[union-attr]
+    assert first_documents == {"old-policy"}, "the search in flight must finish on its own index"
+    assert second_documents == {"new-policy"}, "a later search must see the new index"
+
+
+def test_concurrent_searches_never_mix_two_corpora() -> None:
+    old = _payment_corpus("old-policy", "Payment")
+    new = _payment_corpus("new-policy", "Payment")
+    holder = {"chunks": old}
+    retriever = Retriever(lambda: holder["chunks"])
+    errors: list[BaseException] = []
+    seen: list[set[str]] = []
+    stop = threading.Event()
+
+    def flipper() -> None:
+        while not stop.is_set():
+            holder["chunks"] = new if holder["chunks"] is old else old
+
+    def searcher() -> None:
+        while not stop.is_set():
+            try:
+                result = retriever.search("payment plan")
+                seen.append({hit.chunk.document_id for hit in result.hits})
+            except BaseException as exc:
+                errors.append(exc)
+
+    threads = [
+        threading.Thread(target=flipper),
+        *(threading.Thread(target=searcher) for _ in range(4)),
+    ]
+    for thread in threads:
+        thread.start()
+    threading.Event().wait(0.5)
+    stop.set()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors, f"concurrent searches raised: {errors[:3]}"
+    assert seen, "the searches must have produced results"
+    assert all(documents <= {"old-policy", "new-policy"} for documents in seen)
+    assert all(len(documents) == 1 for documents in seen), "one result, one corpus"

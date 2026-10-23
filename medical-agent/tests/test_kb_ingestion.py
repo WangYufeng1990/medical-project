@@ -186,3 +186,27 @@ def test_the_embedding_baseline_is_deterministic_and_labelled() -> None:
     assert len(first) == DIMENSIONS
     assert EMBEDDING_VERSION.startswith("hash")
     assert embed("") == [0.0] * DIMENSIONS
+
+
+def test_a_long_title_and_path_still_fit_the_limit() -> None:
+    # The review's case: 200-character title, two 200-character headings, 100-character body.
+    title = "T" * 200
+    body = "# " + "H" * 200 + "\n## " + "S" * 200 + "\n" + "B" * 100
+    chunks = chunk_document("long-titles", 1, title, body)
+
+    assert chunks
+    for chunk in chunks:
+        assert len(chunk.text) <= MAX_CHUNK_CHARS
+        assert chunk.title == title, "the metadata keeps the full title"
+        assert all(len(part) == 200 for part in chunk.heading_path), "the path stays complete"
+        assert "B" * 100 in chunk.text, "the body is still there"
+
+
+def test_the_body_is_preserved_across_chunks() -> None:
+    body = "## Payment\n" + "A payment plan changes the schedule, not the amount owed. " * 30
+    chunks = chunk_document("billing", 1, "Billing and insurance policy", body)
+
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= MAX_CHUNK_CHARS for chunk in chunks)
+    bodies = " ".join(chunk.text.split("\n", 1)[1] for chunk in chunks)
+    assert bodies.split() == body.split("\n", 1)[1].split()

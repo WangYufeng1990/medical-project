@@ -13,6 +13,9 @@ import re
 from dataclasses import dataclass
 
 MAX_CHUNK_CHARS = 600
+# The title and heading path are shown for a human reader and stored in full in the metadata;
+# the displayed prefix gets a budget of its own so a pathological title cannot eat the chunk.
+PREFIX_BUDGET = 150
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
@@ -38,9 +41,9 @@ def chunk_document(document_id: str, version: int, title: str, body: str) -> lis
         if not text:
             return
         path = tuple(headings) if headings else (title,)
-        prefix = f"{title} — {' / '.join(path)}\n"
+        prefix = _display_prefix(title, path)
         # The prefix counts: the chunk itself is what must stay within the limit.
-        room = max(50, MAX_CHUNK_CHARS - len(prefix))
+        room = MAX_CHUNK_CHARS - len(prefix)
         for piece in _split(text, room):
             chunk_text = f"{prefix}{piece}"
             chunk_id = f"{document_id}:{version}:{len(chunks):03d}"
@@ -67,6 +70,24 @@ def chunk_document(document_id: str, version: int, title: str, body: str) -> lis
         current.append(line)
     flush()
     return chunks
+
+
+def _display_prefix(title: str, path: tuple[str, ...], budget: int = PREFIX_BUDGET) -> str:
+    """A short prefix for the chunk text; the full title and path stay in the metadata."""
+    full = f"{title} — {' / '.join(path)}"
+    if len(full) <= budget:
+        return f"{full}\n"
+    head = _shorten(title, budget // 2)
+    tail = _shorten(" / ".join(path), budget - len(head) - 5)
+    return f"{head} — {tail}\n"
+
+
+def _shorten(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    if limit <= 3:
+        return text[: max(0, limit)]
+    return f"{text[: limit - 3]}..."
 
 
 def _split(text: str, limit: int) -> list[str]:

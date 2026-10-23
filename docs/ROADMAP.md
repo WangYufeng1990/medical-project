@@ -5643,6 +5643,34 @@ subtracts the title/heading prefix from the size budget, so `len(chunk.text) <= 
 source files); the opt-in dual-process test passes (10.7 s). Java unchanged (355 tests, 1 skipped
 from the last full run).
 
+### Round 56.3 review fixes (second pass, 2026-10-23)
+
+**1. P2 — the retriever rebuilt its index in place, so concurrent searches could mix two
+versions.** `_refresh()` replaced `_chunks_by_id`, the token maps and the vectors one field at a
+time while a search could already be reading them; two runs dispatch concurrently, and the worker's
+per-run lock does not cover the shared retriever. Measured against the previous implementation, the
+new concurrency test fails with `KeyError('old-policy:1:000')` and `KeyError('new-policy:1:000')`.
+
+The index is now an immutable `_Index` snapshot (frozen dataclass, read-only mappings) built once
+per corpus signature and swapped atomically under a lock; `search()` takes one snapshot and uses
+only it. Tests: a search paused after its lexical scores finishes on the index it started with while
+another search sees the new corpus, and four threads searching while the corpus flips never raise
+and never return chunks from two corpora in one result.
+
+**2. P2 — a long title or heading path could still exceed 600 characters.** The chunker kept at
+least 50 characters of body by construction (`room = max(50, …)`), which pushed the chunk past the
+limit whenever the prefix was long. The displayed prefix now has its own budget: it is shortened
+with an ellipsis so the total chunk stays within 600, while the metadata keeps the full title and
+heading path, and the body is never truncated (only split at sentence boundaries).
+
+Tests: the review's case (200-character title, two 200-character headings, 100-character body)
+produces chunks within the limit with the full title/path in metadata and the body present; a
+1 500-character body is split into chunks that all fit and whose bodies concatenate back to the
+original text.
+
+**Verification (actually run).** `pytest` → **159 passed**; `ruff` clean; `mypy --strict` clean (30
+source files). The dual-process test last passed on the previous commit (10.7 s); Java unchanged.
+
 ## Round 57 — Staff review and safe publication (Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
