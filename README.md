@@ -372,6 +372,27 @@ are directional: `AGENT_OUTBOUND_TOKEN` is what Java sends to Python, `AGENT_INB
 what Python must present when it calls back (`app.agent.outbound-token` / `inbound-token`, the
 latter empty by default and therefore denying every callback).
 
+### Run the agent service locally
+
+```bash
+cd medical-agent
+cp .env.example .env          # fill in MEDICAL_AGENT_DEEPSEEK_API_KEY; .env is gitignored
+./scripts/run-local.sh        # exports .env and starts uvicorn on :8090
+```
+
+With `MEDICAL_AGENT_PROVIDER=deepseek` the service calls the real model; `mock` keeps it offline.
+The Java dispatcher needs the matching directional credentials, for example:
+
+```bash
+AGENT_ENABLED=true AGENT_BASE_URL=http://localhost:8090 \
+AGENT_OUTBOUND_TOKEN=dev-inbound-token AGENT_INBOUND_TOKEN=dev-outbound-token \
+  ./mvnw spring-boot:run       # or: mvn spring-boot:run
+```
+
+`AGENT_OUTBOUND_TOKEN` must equal the service's `MEDICAL_AGENT_INBOUND_TOKEN`, and
+`AGENT_INBOUND_TOKEN` its `MEDICAL_AGENT_OUTBOUND_TOKEN` — the two directions carry different
+values on purpose.
+
 Round 56 adds an approved, versioned knowledge base under `medical-agent/kb/`: five short synthetic
 practice-policy documents, a manifest that records who approved each one and its SHA-256, title-aware
 chunks with stable ids, a deterministic embedding baseline, and publish/withdraw with automatic

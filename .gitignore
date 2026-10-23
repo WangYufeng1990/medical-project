@@ -42,3 +42,8 @@ medical-agent/.venv/
 docs/.local/
 # Round 55.4: default LangGraph checkpoint file (SQLite, developer machine)
 medical-agent/.agent/
+
+# Round 56.1: local secrets for the agent service (never committed)
+medical-agent/.env
+medical-agent/.env.*
+!medical-agent/.env.example
