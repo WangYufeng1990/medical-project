@@ -30,6 +30,8 @@ class VersionRecord:
     id: str
     created_at: str
     document_ids: tuple[str, ...]
+    # (id, version, sha256) per document: the approval a version was built from.
+    documents: tuple[tuple[str, int, str], ...]
     chunk_count: int
     status: VersionStatus = VersionStatus.STAGED
     chunks: tuple[Chunk, ...] = field(default_factory=tuple)
@@ -59,6 +61,10 @@ class KnowledgeBase:
             id=digest,
             created_at=datetime.now(UTC).isoformat(timespec="seconds"),
             document_ids=tuple(document.entry.id for document in corpus.documents),
+            documents=tuple(
+                (document.entry.id, document.entry.version, document.entry.sha256)
+                for document in corpus.documents
+            ),
             chunk_count=len(chunks),
             chunks=tuple(chunks),
         )
@@ -118,10 +124,15 @@ class KnowledgeBase:
     def _require_still_approved(self, record: VersionRecord) -> None:
         manifest = load_manifest(self._manifest_path)
         approved = {
-            entry.id: entry.sha256
+            entry.id: (entry.version, entry.sha256)
             for entry in manifest.documents
             if entry.status is DocumentStatus.APPROVED
         }
-        for document_id in record.document_ids:
-            if document_id not in approved:
+        for document_id, version, sha256 in record.documents:
+            current = approved.get(document_id)
+            if current is None:
                 raise CorpusError(f"document {document_id} is no longer approved")
+            if current != (version, sha256):
+                raise CorpusError(
+                    f"document {document_id} was re-approved at a different version or content"
+                )

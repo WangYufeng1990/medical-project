@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.state import RunState
-from medical_agent.kb.citations import Citation, build_citations, describe
+from medical_agent.kb.citations import Citation, build_citations, describe, verify_citations
 from medical_agent.kb.retrieval import Retriever
 
 
@@ -45,13 +45,20 @@ def retrieve_node(
 
     def retrieve(state: RunState) -> dict[str, object]:
         if retriever is None:
-            return {"evidence": [], "citations": [], "flags": list(state.get("flags", []))}
+            # No approved corpus is loaded: the same "I found nothing" path as a zero-hit
+            # search, so the draft never pretends to know a policy it was not given.
+            return {
+                "evidence": [],
+                "citations": [],
+                "flags": [*state.get("flags", []), "evidence_missing"],
+            }
         result = retriever.search(state["content"], limit=4)
         flags = list(state.get("flags", []))
         if result.empty:
             flags.append("evidence_missing")
             return {"evidence": [], "citations": [], "flags": flags}
         citations = build_citations(result.hits)
+        verify_citations(citations, result.hits)
         if result.conflict:
             flags.append("evidence_conflict")
         evidence = [

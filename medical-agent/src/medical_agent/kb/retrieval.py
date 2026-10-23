@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -57,29 +58,60 @@ class SearchResult:
 
 
 class Retriever:
+    """An index over the approved corpus, re-validated on every search.
+
+    The source can be a snapshot or a callable (``KnowledgeBase.chunks``), which is what the
+    service passes: a long-lived retriever must follow a withdrawal without a restart, so each
+    search re-reads the source and rebuilds the index when what it holds has changed.
+    """
+
     def __init__(
-        self, chunks: tuple[Chunk, ...], embedding_version: str = EMBEDDING_VERSION
+        self,
+        chunks: tuple[Chunk, ...] | Callable[[], tuple[Chunk, ...]],
+        embedding_version: str = EMBEDDING_VERSION,
     ) -> None:
-        self._chunks = chunks
+        self._source: Callable[[], tuple[Chunk, ...]] = (
+            chunks if callable(chunks) else (lambda: chunks)
+        )
         self._embedding_version = embedding_version
+        self._signature: tuple[tuple[str, str], ...] | None = None
+        self._chunks: tuple[Chunk, ...] = ()
+        self._chunks_by_id: dict[str, Chunk] = {}
+        self._tokens: dict[str, list[str]] = {}
+        self._lengths: dict[str, int] = {}
+        self._average_length = 0.0
+        self._document_frequency: Counter[str] = Counter()
+        self._vectors: dict[str, list[float]] = {}
+        self._refresh()
+
+    def _refresh(self) -> None:
+        chunks = tuple(self._source())
+        signature = tuple((chunk.id, chunk.content_hash) for chunk in chunks)
+        if signature == self._signature:
+            return
+        self._signature = signature
+        self._chunks = chunks
+        self._chunks_by_id = {chunk.id: chunk for chunk in chunks}
         self._tokens = {chunk.id: tokenize(chunk.text) for chunk in chunks}
         self._lengths = {chunk_id: len(tokens) for chunk_id, tokens in self._tokens.items()}
         self._average_length = (
             sum(self._lengths.values()) / len(self._lengths) if self._lengths else 0.0
         )
-        self._document_frequency: Counter[str] = Counter()
+        self._document_frequency = Counter()
         for tokens in self._tokens.values():
             self._document_frequency.update(set(tokens))
         self._vectors = {
-            chunk.id: embed(" ".join(self._tokens[chunk.id]))
-            for chunk in chunks
+            chunk.id: embed(" ".join(self._tokens[chunk.id])) for chunk in chunks
         }
-        self._chunks_by_id = {chunk.id: chunk for chunk in chunks}
 
     def search(self, query: str, limit: int = 4) -> SearchResult:
+        self._refresh()
         tokens = tokenize(query)
-        if not tokens or not self._chunks:
-            return SearchResult((), {"query_tokens": tokens, "reason": "no query or no corpus"})
+        if not tokens:
+            return SearchResult((), {"query_tokens": tokens, "reason": "no query"})
+        if not self._chunks:
+            return SearchResult((), {"query_tokens": tokens,
+                                     "reason": "no approved corpus is published"})
 
         lexical = self._lexical_scores(tokens)
         conflict = _tied_documents(lexical, self._chunks_by_id)
@@ -161,16 +193,15 @@ class Retriever:
 
 
 def _tied_documents(scores: dict[str, float], by_id: dict[str, Chunk]) -> bool:
-    """True when the best two matches are in different documents and score exactly the same.
+    """True when the *whole* best score group spans more than one document.
 
-    An exact tie is the only disagreement this baseline can detect without pretending to
-    understand the text: when two policies are equally good answers, picking one would be a
-    choice the server is not entitled to make, so the draft is flagged for staff instead.
+    An exact tie is the only disagreement these baselines can detect without pretending to
+    understand the text. Comparing only the first two chunks would miss "A, A, B" where two
+    chunks of one document come first, so the check looks at every chunk sharing the top score.
     """
-    ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-    if len(ordered) < 2:
+    if not scores:
         return False
-    (first_id, first_score), (second_id, second_score) = ordered[0], ordered[1]
-    if by_id[first_id].document_id == by_id[second_id].document_id:
-        return False
-    return abs(first_score - second_score) < 1e-9
+    best = max(scores.values())
+    tied = {by_id[chunk_id].document_id for chunk_id, score in scores.items()
+            if abs(score - best) < 1e-9}
+    return len(tied) > 1

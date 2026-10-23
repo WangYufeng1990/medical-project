@@ -50,12 +50,20 @@ def build_citations(hits: tuple[Hit, ...], limit: int = 3) -> tuple[Citation, ..
 
 
 def verify_citations(citations: tuple[Citation, ...], hits: tuple[Hit, ...]) -> None:
-    """Refuse a citation that is not one of the retrieved chunks, hash included."""
+    """Refuse a citation that does not describe a retrieved chunk, field by field."""
     retrieved = {hit.chunk.id: hit.chunk for hit in hits}
     for citation in citations:
         chunk = retrieved.get(citation.chunk_id)
         if chunk is None:
             raise CitationError(f"{citation.chunk_id} was not retrieved for this draft")
+        if chunk.document_id != citation.document_id:
+            raise CitationError(f"{citation.chunk_id} names another document")
+        if chunk.document_version != citation.document_version:
+            raise CitationError(f"{citation.chunk_id} names another document version")
+        if chunk.title != citation.title:
+            raise CitationError(f"{citation.chunk_id} names another title")
+        if tuple(chunk.heading_path) != tuple(citation.heading_path):
+            raise CitationError(f"{citation.chunk_id} names another heading path")
         if chunk.content_hash != citation.content_hash:
             raise CitationError(f"{citation.chunk_id} does not match the retrieved content")
 

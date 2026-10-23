@@ -109,6 +109,23 @@ def test_withdrawing_a_document_takes_the_published_version_out_of_service(tmp_p
         kb.publish(version.id)
 
 
+def test_a_reapproved_document_invalidates_the_old_release(tmp_path: Path) -> None:
+    manifest = copy_corpus(tmp_path)
+    kb = KnowledgeBase(manifest)
+    version = kb.ingest()
+    kb.publish(version.id)
+    assert kb.chunks()
+
+    # The document is approved again at a new version: the old release was built from the old
+    # approval and must not keep serving it.
+    edit_manifest(manifest, lambda m: m["documents"][0].update({"version": 2}))
+
+    assert kb.active() is None
+    assert kb.chunks() == ()
+    with pytest.raises(CorpusError, match="re-approved"):
+        kb.publish(version.id)
+
+
 def test_publishing_a_new_version_deactivates_the_previous_one(tmp_path: Path) -> None:
     manifest = copy_corpus(tmp_path)
     kb = KnowledgeBase(manifest)
@@ -148,7 +165,7 @@ def test_chunks_are_title_aware_and_bounded() -> None:
         assert chunk.heading_path
         assert len(chunk.id.split(":")) == 3
         assert len(chunk.content_hash) == 64
-        assert len(chunk.text) <= MAX_CHUNK_CHARS + 120
+        assert len(chunk.text) <= MAX_CHUNK_CHARS, "the prefix counts toward the limit"
 
 
 def test_the_corpus_is_synthetic_and_small() -> None:

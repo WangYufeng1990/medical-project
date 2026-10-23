@@ -38,8 +38,11 @@ def chunk_document(document_id: str, version: int, title: str, body: str) -> lis
         if not text:
             return
         path = tuple(headings) if headings else (title,)
-        for piece in _split(text, MAX_CHUNK_CHARS):
-            chunk_text = f"{title} — {' / '.join(path)}\n{piece}"
+        prefix = f"{title} — {' / '.join(path)}\n"
+        # The prefix counts: the chunk itself is what must stay within the limit.
+        room = max(50, MAX_CHUNK_CHARS - len(prefix))
+        for piece in _split(text, room):
+            chunk_text = f"{prefix}{piece}"
             chunk_id = f"{document_id}:{version}:{len(chunks):03d}"
             chunks.append(
                 Chunk(

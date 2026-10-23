@@ -69,6 +69,41 @@ def test_a_citation_with_a_changed_hash_is_refused(retriever: Retriever) -> None
         verify_citations((tampered,), result.hits)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("document_id", "billing-and-insurance"),
+        ("document_version", 999),
+        ("title", "Forged policy"),
+        ("heading_path", ("Forged", "Heading")),
+    ],
+)
+def test_a_citation_with_a_forged_identity_is_refused(
+    retriever: Retriever, field: str, value: object
+) -> None:
+    result = retriever.search("Can I get a refill?")
+    citation = build_citations(result.hits)[0]
+    values = {
+        "chunk_id": citation.chunk_id,
+        "document_id": citation.document_id,
+        "document_version": citation.document_version,
+        "title": citation.title,
+        "heading_path": citation.heading_path,
+        "content_hash": citation.content_hash,
+    }
+    values[field] = value
+    forged = Citation(**values)  # type: ignore[arg-type]
+
+    with pytest.raises(CitationError):
+        verify_citations((forged,), result.hits)
+
+
+def test_real_citations_pass_verification(retriever: Retriever) -> None:
+    result = retriever.search("Can I get a refill?")
+
+    verify_citations(build_citations(result.hits), result.hits)
+
+
 def test_citations_are_deduplicated_and_limited(retriever: Retriever) -> None:
     result = retriever.search("prescription refill", limit=6)
     citations = build_citations(result.hits, limit=3)

@@ -68,8 +68,8 @@ def _open_retriever(settings: Settings) -> Retriever | None:
     version = knowledge.ingest()
     if settings.kb_autopublish:
         knowledge.publish(version.id)
-    chunks = knowledge.chunks()
-    return Retriever(chunks) if chunks else None
+    # The callable, not a snapshot: a withdrawal must take effect without a restart.
+    return Retriever(knowledge.chunks)
 
 
 def create_app(

@@ -5360,8 +5360,8 @@ per-process, as the review scoped it); CI (workflow removed — local validation
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
-| 56.2 KB ingestion and release | P0 / **Done** (2026-10-23) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking with stable ids/hashes, deterministic embedding baseline, version publish/withdraw and automatic deactivation | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
-| 56.3 Retrieval and citations | P1 / **Done** (2026-10-23) | BM25 lexical baseline, hashing dense baseline, RRF hybrid, per-search diagnostics (both rankings, RRF k, documents, lexical support), server-built citations with hash verification, graph retrieval node with `evidence_missing` / `evidence_conflict` | test_retrieval.py (11) + test_citations.py (6): a policy question finds its policy, a question with no shared vocabulary finds nothing and is flagged, the dense baseline never adds an unmatched chunk, an exact tie between two documents is reported as a conflict, a withdrawn corpus retrieves nothing, and every citation matches a retrieved chunk's id and hash (see the 56.3 record) |
+| 56.2 KB ingestion and release | P0 / **Done** (2026-10-23, tightened in the 56.3 review) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking whose title prefix counts toward the size limit, deterministic embedding baseline, version publish/withdraw with a (version, hash) approval snapshot | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
+| 56.3 Retrieval and citations | P1 / **Done** (2026-10-23, after review) | BM25 lexical baseline, hashing dense baseline, RRF hybrid, per-search diagnostics (both rankings, RRF k, documents, lexical support), server-built citations with hash verification, graph retrieval node with `evidence_missing` / `evidence_conflict` | test_retrieval.py (11) + test_citations.py (6): a policy question finds its policy, a question with no shared vocabulary finds nothing and is flagged, the dense baseline never adds an unmatched chunk, an exact tie between two documents is reported as a conflict, a withdrawn corpus retrieves nothing, and every citation matches a retrieved chunk's id and hash (see the 56.3 record) |
 | 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
 
 Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
@@ -5601,6 +5601,47 @@ from the last run).
   detectable with these baselines and is not claimed.
 - Citations are server-built and verified, but the draft text is still a fixed template; whether a
   draft actually *uses* the evidence is Round 56.4's validation.
+
+### Round 56.3 review fixes (2026-10-23)
+
+Four findings were re-checked with probes against the committed code; all four held. The two
+open 56.2 items were fixed in the same pass because the retriever depends on them.
+
+**1. P1 — a running retriever outlived a withdrawal.** The application read `knowledge.chunks()`
+once at startup and kept that snapshot, so withdrawing a version afterwards changed nothing until
+a restart. `Retriever` now takes a **source** (`KnowledgeBase.chunks`, a callable) and re-reads it
+on every search, rebuilding its index when the (chunk id, hash) signature changes; a withdrawn or
+unpublished corpus returns no hits with `reason: "no approved corpus is published"`. The application
+passes the callable. Test: create one long-lived retriever, withdraw the version, and the same
+instance returns nothing.
+
+**2. P2 — citation verification checked only two fields.** `verify_citations` compared the chunk id
+and the content hash; a citation with the right id and hash but a forged document, version, title or
+heading path passed and `describe()` then printed the forged source. It now compares **every** field
+against the retrieved chunk, and the executed graph path calls it after `build_citations`, so the
+"verified" claim is no longer limited to a helper's tests. Tests: each of document, version, title
+and heading path tampered individually is refused; real citations pass.
+
+**3. P2 — no retriever skipped the missing-evidence path.** With no corpus loaded the node returned
+empty evidence and no flag, so a billing question got the ordinary template. "No retriever" and "zero
+hits" now take the same path: `evidence_missing`, and the draft says it could not find a practice
+policy. Test: a run without a retriever is flagged and produces the follow-up draft (the existing
+unpublished and zero-hit cases cover the other two roads to the same flag).
+
+**4. P2 — the conflict check only looked at the first two chunks.** For A, A, B with equal scores the
+first two both came from A and the conflict was missed. `_tied_documents` now inspects the **whole**
+top-score group and reports a conflict when it spans more than one document; a tie inside one document
+stays non-conflicting. Both cases are tested.
+
+**56.2 items, fixed in the same pass.** The release now stores the `(id, version, sha256)` approval
+it was built from and `_require_still_approved` compares all three, so re-approving a document at a
+new version invalidates the old release (test: the public version stops serving). And the chunker
+subtracts the title/heading prefix from the size budget, so `len(chunk.text) <= 600` genuinely holds
+(the test's earlier `+120` tolerance is gone).
+
+**Verification (actually run).** `pytest` → **155 passed**; `ruff` clean; `mypy --strict` clean (30
+source files); the opt-in dual-process test passes (10.7 s). Java unchanged (355 tests, 1 skipped
+from the last full run).
 
 ## Round 57 — Staff review and safe publication (Pending)
 

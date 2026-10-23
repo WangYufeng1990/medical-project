@@ -8,6 +8,7 @@ by silently picking one.
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def credentials() -> CallCredentials:
                            outbound_token="out")
 
 
-def run_with(retriever: Retriever, content: str, tmp_path: Path, run_id: int = 21) -> dict:
+def run_with(retriever: Retriever | None, content: str, tmp_path: Path, run_id: int = 21) -> dict:
     with open_checkpointer(f"sqlite://{tmp_path / 'r.sqlite'}") as checkpointer:
         worker = AgentWorker(StubProvider(), checkpointer, lambda state: None, retriever=retriever)
         return worker.process(
@@ -103,6 +104,27 @@ def test_the_dense_baseline_never_adds_an_unmatched_chunk(retriever: Retriever) 
     assert {hit.chunk.id for hit in result.hits} <= lexical_ids
 
 
+def test_a_long_lived_retriever_stops_serving_a_withdrawn_version(tmp_path: Path) -> None:
+    knowledge = KnowledgeBase(CORPUS / "manifest.json")
+    version = knowledge.ingest()
+    knowledge.publish(version.id)
+    live = Retriever(knowledge.chunks)  # what the application builds: a live view
+    assert live.search("bill payment").hits
+
+    knowledge.withdraw(version.id)
+
+    assert live.search("bill payment").empty, "a withdrawal must apply without a restart"
+    assert live.search("bill payment").diagnostics["reason"] == "no approved corpus is published"
+
+
+def test_an_unpublished_knowledge_base_searches_nothing(tmp_path: Path) -> None:
+    knowledge = KnowledgeBase(CORPUS / "manifest.json")
+    knowledge.ingest()  # staged, never published
+    live = Retriever(knowledge.chunks)
+
+    assert live.search("bill payment").empty
+
+
 def test_a_tie_between_two_documents_is_reported() -> None:
     shared = "## Payment\nA payment plan changes the schedule, not the amount owed."
     # The same title and body, so the two chunks score identically: only the document differs.
@@ -113,6 +135,35 @@ def test_a_tie_between_two_documents_is_reported() -> None:
 
     assert result.conflict, "two different documents ranked identically must not be picked between"
     assert {hit.chunk.document_id for hit in result.hits} == {"billing-a", "billing-b"}
+
+
+def test_a_tie_across_a_document_pair_is_a_conflict() -> None:
+    # A, A, B share the top score: comparing only the first two chunks would miss the B.
+    from medical_agent.kb.chunking import Chunk
+
+    text = "Billing policy — Billing policy / Payment\nA payment plan changes the schedule."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+
+    def chunk(chunk_id: str, document_id: str) -> Chunk:
+        return Chunk(id=chunk_id, document_id=document_id, document_version=1,
+                     title="Billing policy", heading_path=("Payment",), text=text,
+                     content_hash=digest)
+
+    result = Retriever(
+        (chunk("billing-a:1:000", "billing-a"), chunk("billing-a:1:001", "billing-a"),
+         chunk("billing-b:1:000", "billing-b"))
+    ).search("payment plan")
+
+    assert result.conflict
+    assert {hit.chunk.document_id for hit in result.hits} == {"billing-a", "billing-b"}
+
+
+def test_a_tie_inside_one_document_is_not_a_conflict() -> None:
+    body = "## Payment\nA payment plan changes the schedule, not the amount owed."
+    first = chunk_document("billing-a", 1, "Billing policy", body)
+    second = chunk_document("billing-a", 1, "Billing policy", "## Other\n" + body)
+
+    assert Retriever((*first, *second)).search("payment plan").conflict is False
 
 
 def test_a_withdrawn_corpus_retrieves_nothing(tmp_path: Path) -> None:
@@ -140,3 +191,13 @@ def test_the_graph_uses_retrieval_and_marks_missing_evidence(tmp_path: Path) -> 
     assert without["citations"] == []
     assert "evidence_missing" in without["flags"]
     assert "could not find" in without["draft"]
+
+
+def test_a_run_without_a_retriever_is_flagged_as_missing_evidence(tmp_path: Path) -> None:
+    # No manifest, or no published knowledge base: the draft must not fall back to a template
+    # that reads as if it knew a policy.
+    state = run_with(None, "Where do I send my bill payment?", tmp_path, 23)  # type: ignore[arg-type]
+
+    assert state["evidence"] == []
+    assert "evidence_missing" in state["flags"]
+    assert "could not find" in state["draft"]
