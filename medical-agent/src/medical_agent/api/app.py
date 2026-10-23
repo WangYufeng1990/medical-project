@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import secrets
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -18,6 +19,8 @@ from pydantic import BaseModel, ConfigDict
 from medical_agent.checkpoints import open_checkpointer
 from medical_agent.config import Settings
 from medical_agent.java_client import CallCredentials
+from medical_agent.kb.retrieval import Retriever
+from medical_agent.kb.store import KnowledgeBase
 from medical_agent.providers.base import Provider
 from medical_agent.providers.factory import build_provider
 from medical_agent.schemas.run import CONTRACT_VERSION, RunStartRequest
@@ -56,6 +59,19 @@ def _require_inbound_token(settings: Settings, authorization: str | None) -> Non
         raise HTTPException(status_code=401, detail="invalid inbound credential")
 
 
+def _open_retriever(settings: Settings) -> Retriever | None:
+    """Load the approved corpus once, at startup; a broken one stops the service loudly."""
+    manifest = Path(settings.kb_manifest_path)
+    if not manifest.is_file():
+        return None
+    knowledge = KnowledgeBase(manifest)
+    version = knowledge.ingest()
+    if settings.kb_autopublish:
+        knowledge.publish(version.id)
+    chunks = knowledge.chunks()
+    return Retriever(chunks) if chunks else None
+
+
 def create_app(
     settings: Settings,
     provider: Provider | None = None,
@@ -79,8 +95,10 @@ def create_app(
             if active_worker is None:
                 active_provider = selected if selected is not None else build_provider(settings)
                 checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
+                retriever = _open_retriever(settings)
                 active_worker = AgentWorker(active_provider, checkpointer,
-                                           max_prompt_chars=settings.max_prompt_chars)
+                                           max_prompt_chars=settings.max_prompt_chars,
+                                           retriever=retriever)
                 application.state.checkpointer = checkpointer
             application.state.worker = active_worker
             yield

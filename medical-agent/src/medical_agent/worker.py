@@ -35,6 +35,7 @@ from medical_agent.java_client import (
     submit_result,
     use_credentials,
 )
+from medical_agent.kb.retrieval import Retriever
 from medical_agent.providers.base import Provider
 from medical_agent.schemas.run import RunStartRequest
 
@@ -54,8 +55,11 @@ class AgentWorker:
         checkpointer: BaseCheckpointSaver[Any],
         submit: Callable[[RunState], None] = submit_result,
         max_prompt_chars: int = 8000,
+        retriever: Retriever | None = None,
     ) -> None:
-        self._graph = build_graph(Classifier(provider, max_prompt_chars), submit, checkpointer)
+        self._graph = build_graph(
+            Classifier(provider, max_prompt_chars), retriever, submit, checkpointer
+        )
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
 

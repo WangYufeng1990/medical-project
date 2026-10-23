@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Postgres in deployment, SQLite for a developer machine and the tests.
     checkpoint_url: str = "sqlite://./.agent/checkpoints.sqlite"
 
+    # The approved corpus: relative paths resolve against the working directory.
+    kb_manifest_path: str = "kb/manifest.json"
+    kb_autopublish: bool = True
+
     @model_validator(mode="after")
     def check_credentials(self) -> Settings:
         if self.inbound_token is None or not self.inbound_token.get_secret_value():

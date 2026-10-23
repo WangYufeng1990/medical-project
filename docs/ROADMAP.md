@@ -5353,7 +5353,7 @@ executed); Docker images (`docker compose config` only, no daemon here); a real 
 (the adapter exists, no key or call in this environment); multi-instance workers (the lock is
 per-process, as the review scoped it); CI (workflow removed — local validation only).
 
-## Round 56 — Classification and versioned RAG (In progress: 56.1–56.2 Done, 56.3–56.4 Pending)
+## Round 56 — Classification and versioned RAG (In progress: 56.1–56.3 Done, 56.4 Pending)
 
 **Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
 
@@ -5361,7 +5361,7 @@ per-process, as the review scoped it); CI (workflow removed — local validation
 |---|---|---|---|
 | 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
 | 56.2 KB ingestion and release | P0 / **Done** (2026-10-23) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking with stable ids/hashes, deterministic embedding baseline, version publish/withdraw and automatic deactivation | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
-| 56.3 Retrieval and citations | P1 / Pending | Lexical/dense baselines, RRF hybrid, diagnostics, server-built citations | test_retrieval.py, test_citations.py: references belong to retrieved evidence; empty/conflicting evidence escalates; baseline comparison recorded |
+| 56.3 Retrieval and citations | P1 / **Done** (2026-10-23) | BM25 lexical baseline, hashing dense baseline, RRF hybrid, per-search diagnostics (both rankings, RRF k, documents, lexical support), server-built citations with hash verification, graph retrieval node with `evidence_missing` / `evidence_conflict` | test_retrieval.py (11) + test_citations.py (6): a policy question finds its policy, a question with no shared vocabulary finds nothing and is flagged, the dense baseline never adds an unmatched chunk, an exact tie between two documents is reported as a conflict, a withdrawn corpus retrieves nothing, and every citation matches a retrieved chunk's id and hash (see the 56.3 record) |
 | 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
 
 Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
@@ -5553,6 +5553,54 @@ opt-in dual-process test passes (10.5 s). Python unchanged (128 passed, ruff/myp
 **Note on the key:** the full value was shared in this session's conversation. It is not in any
 commit (`git log -S` and the staged diff are clean) and `.env` is gitignored with mode 600, but
 rotation is the user's decision, and rotating only requires updating the local `.env`.
+
+### Round 56.3 — Retrieval and citations (Done, 2026-10-23)
+
+**Baseline:** `5b324b70` + Round 56.2's corpus, clean tree, **128 Python tests**. Implemented
+code-first this round, by instruction, then tested.
+
+**What was built** (`medical-agent/src/medical_agent/kb/`):
+
+| Piece | Behaviour |
+|---|---|
+| `retrieval.py` | BM25 (k1=1.2, b=0.75) over content tokens with stopwords removed; a dense baseline over the `hash64-v1` embedding; reciprocal rank fusion (k=60); `SearchResult` carries hits plus diagnostics (`query_tokens`, both rankings, `rrf_k`, `embedding_version`, `documents`, `lexical_support`) and a `conflict` flag |
+| `citations.py` | `Citation` = chunk id, document, version, title, heading path, content hash; `build_citations` (deduplicated, limited to 3) and `verify_citations`, which refuses any citation that was not retrieved or whose hash no longer matches |
+| graph | a `retrieve_evidence` node between classification and drafting stores `evidence`/`citations` and appends `evidence_missing` or `evidence_conflict`; the draft names its sources ("Sources: …") or says plainly that no policy was found |
+| app | the approved corpus is ingested and published at startup from `MEDICAL_AGENT_KB_MANIFEST_PATH` (default `kb/manifest.json`); a broken corpus stops the service loudly; tests and deployments without a manifest simply run without retrieval |
+
+**Design decision worth recording: the dense baseline only re-ranks.** A hashing embedding has no
+semantics, so on its own it "retrieves" something for any query at all — including nonsense. The
+hybrid therefore fuses the lexical result with a dense re-ranking of *the same candidates*; a
+question with no shared vocabulary returns nothing and is flagged `evidence_missing`. A real
+embedding model can relax that rule later, and the diagnostics keep both lists visible so the
+change is measurable.
+
+**Escalation.** "Empty or conflicting evidence escalates" means the draft is flagged for staff and
+never presented as an answer: `evidence_missing` produces "I could not find a practice policy…",
+and a conflict (two different documents tied for the best match) adds `evidence_conflict`. Nothing
+in this round publishes; every draft remains `review_required`.
+
+**Tests (17 new; 144 total).** `test_retrieval.py` (11): billing and refill questions find their
+policies; nonsense and empty queries return nothing; the limit holds; both baselines and the RRF
+constant are reported; every returned chunk has lexical support; an identical-text tie across two
+documents is flagged; a withdrawn corpus retrieves nothing; the graph attaches citations and flags
+missing evidence with a safe draft. `test_citations.py` (6): citations match retrieved chunks;
+forged ids and tampered hashes are refused; deduplication and the limit hold; `describe` names the
+title and heading.
+
+**Verification (actually run).** `pytest` → **144 passed**; `ruff check .` clean; `mypy --strict` no
+issues in 30 source files; the opt-in dual-process test still passes against the real service
+(10.7 s), which is what exercises the app's startup ingestion. Java untouched (355 tests, 1 skipped
+from the last run).
+
+**Limits.**
+- Retrieval quality is measured on five short synthetic documents: the baselines are plumbing, not
+  a ranking claim. The lexical baseline is the only one that can stand alone; the dense one cannot
+  until a real embedding model replaces `hash64-v1`.
+- Conflict detection can only see an exact tie; a semantic disagreement between policies is not
+  detectable with these baselines and is not claimed.
+- Citations are server-built and verified, but the draft text is still a fixed template; whether a
+  draft actually *uses* the evidence is Round 56.4's validation.
 
 ## Round 57 — Staff review and safe publication (Pending)
 
