@@ -386,12 +386,17 @@ The Java dispatcher needs the matching directional credentials, for example:
 ```bash
 AGENT_ENABLED=true AGENT_BASE_URL=http://localhost:8090 \
 AGENT_OUTBOUND_TOKEN=dev-inbound-token AGENT_INBOUND_TOKEN=dev-outbound-token \
-  ./mvnw spring-boot:run       # or: mvn spring-boot:run
+  mvn spring-boot:run
 ```
 
 `AGENT_OUTBOUND_TOKEN` must equal the service's `MEDICAL_AGENT_INBOUND_TOKEN`, and
 `AGENT_INBOUND_TOKEN` its `MEDICAL_AGENT_OUTBOUND_TOKEN` — the two directions carry different
 values on purpose.
+
+Timing has to line up as well: Java's `app.agent.request-timeout` (60 s by default) must cover the
+service's model call (`MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS`, 30 s in the example) plus the result
+callback, and `app.agent.lease` (180 s) must outlive that timeout or a dispatch still in flight is
+reclaimed. The service refuses to start with an incoherent combination.
 
 Round 56 adds an approved, versioned knowledge base under `medical-agent/kb/`: five short synthetic
 practice-policy documents, a manifest that records who approved each one and its SHA-256, title-aware

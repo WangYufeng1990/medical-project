@@ -65,10 +65,12 @@ app:
     inbound-token: ${AGENT_INBOUND_TOKEN:}
     poll-interval-ms: 5000
     batch-size: 10
-    lease: 60s
+    lease: 180s
     deadline: 30m
     max-attempts: 3
     base-backoff: 5s
     max-backoff: 5m
-    request-timeout: 5s
+    # Must exceed the service's model timeout (MEDICAL_AGENT_REQUEST_TIMEOUT_SECONDS)
+    # plus the callback; the lease below must outlive this timeout.
+    request-timeout: 60s
     capability-ttl: 5m

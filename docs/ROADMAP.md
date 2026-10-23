@@ -5523,6 +5523,37 @@ test does not exercise the knowledge base yet, which is 56.3's job.
 - Five short documents are enough for plumbing and retrieval-baseline tests; they are **not** the
   150–200 manually checked evaluation cases, which remain open for 56.3/56.4.
 
+### Round 56.1 review fixes (second pass, 2026-10-22/23)
+
+**1. The Docker build context now excludes local secrets and runtime state.** `.gitignore` does
+not apply to Docker, and `.dockerignore` did not list them: it now excludes `.env`, `.env.*`
+(keeping `.env.example`) and `.agent/`, so a future `COPY . .` cannot carry a key or a checkpoint
+into an image.
+
+**2. The Java dispatch timeout now covers the real model call, and the configuration refuses an
+incoherent combination.** With the service calling a real model, a 5 s Java timeout against a 30 s
+model call meant "Java gives up and re-dispatches while the model is still working". The defaults
+are now `request-timeout: 60s` and `lease: 180s` (the lease must outlive the timeout, or reconcile
+reclaims a job in flight), `AgentDispatchProperties.validate()` refuses `lease <= request-timeout`
+or `lease >= deadline` at startup, and both the YAML and the class defaults agree.
+
+Evidence: `AgentDispatchPropertiesTest` (4) pins the invariant and the documented 30 s model
+timeout; `AgentSlowDispatchIntegrationTest` answers a dispatch after 6 s — slower than the old
+default, inside the configured timeout — and asserts the run is `RUNNING`, the lease is still live
+and `reconcile()` does not reclaim it. The two older timing tests that depended on a lease shorter
+than the timeout were rewritten: a slow dispatch keeps its lease now, and the per-claim lease test
+compares the two leases instead of relying on an expiring one.
+
+**3. README no longer mentions `./mvnw`.** This repository has no wrapper; the local instruction is
+`mvn spring-boot:run`, and the timeout/lease relationship is documented next to the token pairing.
+
+**Verification (actually run).** `mvn clean verify` → **355 tests, 0 failures, 1 skipped**; the
+opt-in dual-process test passes (10.5 s). Python unchanged (128 passed, ruff/mypy clean).
+
+**Note on the key:** the full value was shared in this session's conversation. It is not in any
+commit (`git log -S` and the staged diff are clean) and `.env` is gitignored with mode 600, but
+rotation is the user's decision, and rotating only requires updating the local `.env`.
+
 ## Round 57 — Staff review and safe publication (Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.

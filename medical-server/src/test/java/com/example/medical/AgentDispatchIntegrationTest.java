@@ -53,14 +53,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.agent.outbound-token=test-outbound-token",
         "app.agent.inbound-token=test-inbound-token",
         "app.agent.poll-interval-ms=3600000",
-        // A short lease so "expired while the batch was busy" is reachable, and a longer
-        // client timeout so the slow dispatch still succeeds rather than timing out.
-        "app.agent.lease=1s",
+        // The lease must outlive the client timeout (enforced at startup): a dispatch that is
+        // still running must not be reclaimed. Deadlines are how the tests make time pass.
+        "app.agent.lease=30s",
         "app.agent.deadline=30m",
         "app.agent.max-attempts=3",
         "app.agent.base-backoff=1s",
         "app.agent.max-backoff=2s",
-        "app.agent.request-timeout=5s",
+        "app.agent.request-timeout=10s",
 })
 class AgentDispatchIntegrationTest extends IntegrationTestSupport {
 
@@ -421,9 +421,8 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
 
         agentRuns.reconcile();
         assertEquals("FAILED", runFor(second).get("state"), "the deadline sweep ends it");
-        assertEquals("PENDING", runFor(first).get("state"),
-                "and a dispatch slower than its own lease is reclaimed — which is why the "
-                        + "lease must exceed the client timeout");
+        assertEquals("RUNNING", runFor(first).get("state"),
+                "the slow dispatch keeps its lease: the lease outlives the client timeout");
     }
 
     @Test
@@ -435,17 +434,15 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
         agentScheduler.runOnce();
 
         assertEquals(2, CALLS.get());
-        Integer liveLease = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM agent_run WHERE message_id = ? "
-                        + "AND lease_expires_at > CURRENT_TIMESTAMP", Integer.class, second);
-        assertEquals(1, liveLease,
+        java.sql.Timestamp firstLease = (java.sql.Timestamp) runFor(first).get("lease_expires_at");
+        java.sql.Timestamp secondLease = (java.sql.Timestamp) runFor(second).get("lease_expires_at");
+        assertTrue(secondLease.after(firstLease),
                 "the second job's lease starts when it is claimed, not when the batch started");
         assertEquals("RUNNING", runFor(second).get("state"));
 
         agentRuns.reconcile();
         assertEquals("RUNNING", runFor(second).get("state"),
                 "reconcile must not reclaim a job whose lease started after the batch");
-        assertTrue(first > 0);
     }
 
     @Test
