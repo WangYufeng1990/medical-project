@@ -372,6 +372,12 @@ are directional: `AGENT_OUTBOUND_TOKEN` is what Java sends to Python, `AGENT_INB
 what Python must present when it calls back (`app.agent.outbound-token` / `inbound-token`, the
 latter empty by default and therefore denying every callback).
 
+Round 56 adds an approved, versioned knowledge base under `medical-agent/kb/`: five short synthetic
+practice-policy documents, a manifest that records who approved each one and its SHA-256, title-aware
+chunks with stable ids, a deterministic embedding baseline, and publish/withdraw with automatic
+deactivation when an approval is withdrawn. The corpus is synthetic on purpose — no third-party text
+and no patient data.
+
 Round 55.4 gives the service the intake it was missing: `POST /internal/v1/runs` authenticates
 with that inbound token, requires the per-attempt capability, runs a small LangGraph graph
 (validate → mock classification → draft → submit result back to Java) and checkpoints each

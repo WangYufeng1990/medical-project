@@ -5353,14 +5353,14 @@ executed); Docker images (`docker compose config` only, no daemon here); a real 
 (the adapter exists, no key or call in this environment); multi-instance workers (the lock is
 per-process, as the review scoped it); CI (workflow removed — local validation only).
 
-## Round 56 — Classification and versioned RAG (In progress: 56.1 Done, 56.2–56.4 Pending)
+## Round 56 — Classification and versioned RAG (In progress: 56.1–56.2 Done, 56.3–56.4 Pending)
 
 **Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
-| 56.2 KB ingestion and release | P0 / Pending | Approved synthetic policy manifest, parsing, title-aware chunks/hash/embedding, version publish/withdraw | test_kb_ingestion.py: repeated ingestion idempotent; unapproved content unavailable; withdrawn evidence cannot be published |
+| 56.2 KB ingestion and release | P0 / **Done** (2026-10-23) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking with stable ids/hashes, deterministic embedding baseline, version publish/withdraw and automatic deactivation | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
 | 56.3 Retrieval and citations | P1 / Pending | Lexical/dense baselines, RRF hybrid, diagnostics, server-built citations | test_retrieval.py, test_citations.py: references belong to retrieved evidence; empty/conflicting evidence escalates; baseline comparison recorded |
 | 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
 
@@ -5476,6 +5476,52 @@ without an HTTP call.
 clean (23 source files). `mvn clean verify` → **350 tests, 0 failures, 1 skipped**; the opt-in
 dual-process test passes (11.2 s). The 150–200 manually checked synthetic cases remain open, as the
 review allowed, and their first boundary set is now these four families.
+
+### Round 56.2 — KB ingestion and release (Done, 2026-10-23)
+
+**Source material.** The plan asks for an *approved synthetic* corpus, so the repository ships
+five short practice-policy documents written for this project (appointments, prescription refills,
+billing and insurance, laboratory results, privacy and consent — about 900 words in total). They are
+modelled on public patient-education topics rather than copied from anyone: the licensing check
+behind that decision is that US federal works are public domain, MedlinePlus explicitly permits
+reuse with attribution ([MedlinePlus: using content](https://medlineplus.gov/about/using/usingcontent/))
+and NHS content is available under the Open Government Licence
+([NHS terms](https://archive.datadictionary.nhs.uk/DD%20Release%20November%202025/notices/terms_and_conditions.html),
+[HEE guidance](https://support.library.hee.nhs.uk/support/solutions/articles/27000124231-Can-I-use-content-from-NHS-websites-in-publications-)).
+No third-party text, and no real patient data, is committed — the manifest records that provenance in
+its `corpus` field and a test asserts it.
+
+**What was built** (`medical-agent/kb/`, `medical-agent/src/medical_agent/kb/`):
+
+| Piece | Behaviour |
+|---|---|
+| `kb/manifest.json` | Per-document `id`, `title`, `version`, `status` (`approved`/`withdrawn`), `approved_by`, `approved_at`, `tags`, `file`, `sha256`; ids unique, approved entries must name an approver |
+| `loader.py` | Loads only approved entries; a missing file or a hash mismatch is a `CorpusError` (an edited document must be approved again); withdrawn entries are reported as skipped, files with no manifest entry are never read |
+| `chunking.py` | Splits Markdown by headings, carries the document title and heading path into every chunk, bounds chunks at 600 characters on sentence boundaries, and derives `id = <doc>:<version>:<index>` plus a SHA-256 of the chunk text — stable across runs |
+| `embedding.py` | `hash64-v1`: tokens hashed into 64 dimensions, L2-normalised, deterministic and dependency-free; explicitly a **baseline**, to be replaced behind the same function when 56.3 compares retrieval baselines |
+| `store.py` | `ingest()` builds a version whose id is a digest of the approved documents and the embedding version, so repeated ingestion returns the same version and chunks; `publish()` requires every document to be *still* approved with the same hash; `withdraw()` removes a version; `active()`/`chunks()` re-check the manifest and return nothing if an approval was withdrawn |
+
+**Tests (`test_kb_ingestion.py`, 10).** Repeated ingestion is idempotent (one version, identical
+chunk ids and hashes); an unapproved document is absent from the version and reported as skipped;
+a document file with no manifest entry is ignored; a tampered file is refused against its approved
+hash; a withdrawn version cannot be republished; withdrawing a document after publication takes the
+active version out of service and publishing it again is refused; publishing a new version
+deactivates the previous one; chunks start with the title, carry a heading path and stay bounded;
+the corpus is synthetic and under 2 000 words; the embedding baseline is deterministic, 64
+dimensions, and labelled.
+
+**Verification (actually run).** `pytest` → **128 passed**; `ruff check .` → clean; `mypy --strict` →
+no issues in 28 source files. Java untouched (350 tests, 1 skipped from the last run); the dual-process
+test does not exercise the knowledge base yet, which is 56.3's job.
+
+**Limits.**
+- The embedding is a hashing baseline, not a semantic model: it proves the plumbing, not retrieval
+  quality. 56.3 measures lexical vs dense vs hybrid with this baseline explicitly named.
+- The store is in memory; nothing is persisted between processes yet (the plan's Postgres knowledge
+  store is a deployment option by the 2026-10-22 decision, together with the deferred PostgreSQL
+  verification).
+- Five short documents are enough for plumbing and retrieval-baseline tests; they are **not** the
+  150–200 manually checked evaluation cases, which remain open for 56.3/56.4.
 
 ## Round 57 — Staff review and safe publication (Pending)
 

@@ -1,0 +1,76 @@
+{
+  "manifest_version": "v1",
+  "corpus": "synthetic practice policies written for this project; modelled on public patient-education topics (MedlinePlus, NHS, CMS) and containing no real patient data or third-party text",
+  "documents": [
+    {
+      "id": "appointments",
+      "title": "Appointment scheduling policy",
+      "version": 1,
+      "status": "approved",
+      "approved_by": "practice-manager",
+      "approved_at": "2026-10-20",
+      "tags": [
+        "appointment",
+        "scheduling"
+      ],
+      "file": "documents/appointments.md",
+      "sha256": "dd2e4bcfc5cedb68d550a26a594c986e34ea43e2fee3d8fb8975cfe882556794"
+    },
+    {
+      "id": "prescription-refills",
+      "title": "Prescription refill policy",
+      "version": 1,
+      "status": "approved",
+      "approved_by": "practice-manager",
+      "approved_at": "2026-10-20",
+      "tags": [
+        "prescription",
+        "refill"
+      ],
+      "file": "documents/prescription-refills.md",
+      "sha256": "d21acde63948a548e4ae0f4f8028e25b932883becd2a0889a0c7580f911006a8"
+    },
+    {
+      "id": "billing-and-insurance",
+      "title": "Billing and insurance policy",
+      "version": 1,
+      "status": "approved",
+      "approved_by": "practice-manager",
+      "approved_at": "2026-10-20",
+      "tags": [
+        "billing",
+        "insurance"
+      ],
+      "file": "documents/billing-and-insurance.md",
+      "sha256": "90a772f60bfb3a4b4118f797feb175072799bd85f8df9073c253de461ed18a65"
+    },
+    {
+      "id": "lab-results",
+      "title": "Laboratory results policy",
+      "version": 1,
+      "status": "approved",
+      "approved_by": "practice-manager",
+      "approved_at": "2026-10-20",
+      "tags": [
+        "lab",
+        "results"
+      ],
+      "file": "documents/lab-results.md",
+      "sha256": "e4e28b431f251918463e2f02c20d4d1dc927e16fe484c8aa5e71e161af219d88"
+    },
+    {
+      "id": "privacy-and-consent",
+      "title": "Privacy and consent policy",
+      "version": 1,
+      "status": "approved",
+      "approved_by": "practice-manager",
+      "approved_at": "2026-10-20",
+      "tags": [
+        "privacy",
+        "consent"
+      ],
+      "file": "documents/privacy-and-consent.md",
+      "sha256": "e8145f00050d27827733da1abe6f25ee0ee0ca91b51ac137ba3457e842054535"
+    }
+  ]
+}
