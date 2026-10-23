@@ -5359,7 +5359,7 @@ per-process, as the review scoped it); CI (workflow removed — local validation
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 56.1 Classification and safety | P0 / **Done** (2026-10-23) | Seven intents, three risk levels, multi-intent union, non-downgradable rules (14), fail-closed uncertainty, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (18) + test_deepseek_provider.py (6): mixed intent keeps EMERGENCY, a model cannot lower a rule risk, malformed/uncertain/provider-failure answers escalate, clinical decisions require a clinician, and the adapter's request shape, error masking and timeout are measured (see the 56.1 record) |
+| 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
 | 56.2 KB ingestion and release | P0 / Pending | Approved synthetic policy manifest, parsing, title-aware chunks/hash/embedding, version publish/withdraw | test_kb_ingestion.py: repeated ingestion idempotent; unapproved content unavailable; withdrawn evidence cannot be published |
 | 56.3 Retrieval and citations | P1 / Pending | Lexical/dense baselines, RRF hybrid, diagnostics, server-built citations | test_retrieval.py, test_citations.py: references belong to retrieved evidence; empty/conflicting evidence escalates; baseline comparison recorded |
 | 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
@@ -5430,15 +5430,52 @@ opt-in dual-process test still passes against the real service (`-Dagent.e2e=tru
 also what proves the mock path routes rather than escalating.
 
 **Limits.**
-- The rules are conservative keyword approximations: they can raise a false positive (which
-  escalates a routine message) but cannot miss a badly-worded emergency — the failure direction is
-  deliberate and documented, not an accuracy claim.
+- The rules are conservative keyword approximations on normalised text: they can raise a false
+  positive (which escalates a routine message) and they cannot promise to catch every paraphrase of
+  an emergency. The failure direction is deliberate; exhaustive coverage is not claimed.
 - `confidence` is model-reported and uncalibrated; the classifier only uses it as data, never as a
   publication gate.
 - The DeepSeek adapter is measured against a local stub; no real API call was made here (no key in
   this environment).
 - The plan asks for the first 150–200 manually checked synthetic cases alongside this round. They
   are **not** written yet; that remains open for 56.2–56.4 and is recorded rather than claimed.
+
+### Round 56.1 review fixes (2026-10-23)
+
+Four findings were re-checked with the committed classifier; all four held.
+
+**1. P1 — typography and line breaks bypassed the emergency rules.** The rules matched the raw
+string, so `I can’t breathe` (curly apostrophe) and `chest` + newline + `pain` stayed ROUTINE —
+ordinary ways of typing the same sentence. The rules now match a normalised copy (Unicode quotation
+marks, non-breaking spaces, en/em dashes and collapsed whitespace); the message itself is unchanged
+for the model, the draft and the result. Tests cover four variants; the roadmap's "cannot miss a
+badly-worded emergency" claim is **deleted** — a finite keyword list cannot promise that, and the
+document now says the rules can only be conservative, not exhaustive.
+
+**2. P2 — a model-classified clinical question could be "no clinician needed".** `requires_clinician`
+came only from rule hits. The final classification now sets it: a `CLINICAL_QUESTION` intent raises
+the risk to at least URGENT and requires a clinician, and any EMERGENCY requires one, whatever the
+model's flags. Two tests cover model-only answers that no rule matches.
+
+**3. P2 — `intents` was accepted as an object.** The merge iterated `parsed["intents"]`, so
+`{"intents": {"BILLING": true}}` became `["BILLING"]`. The raw answer is now validated by a strict
+Pydantic envelope (`extra="forbid"`, `strict=True`, `intents: list[str]` with 1–7 items,
+`confidence` a number in 0–1) before anything is merged; a wrong-shaped answer takes the
+`uncertain_output` path. Four new bad payloads are asserted (object, bare string, list of objects,
+eight entries).
+
+**4. P2 — OTHER could be the primary intent.** The merge kept the model's order, so `[OTHER,
+APPOINTMENT]` reported OTHER, and the mock (which answers OTHER) made every specific intent
+disappear from the result. OTHER is now dropped whenever a specific intent exists, and the primary
+intent is the first specific one. Three graph tests check the submitted outcome for appointment,
+billing and refill messages: `APPOINTMENT:ROUTINE:DRAFT_READY`, `BILLING:…`,
+`PRESCRIPTION_REFILL:…`. The outcome string moved into `outcome_for(state)` so it can be asserted
+without an HTTP call.
+
+**Verification (actually run).** Python `pytest` → **118 passed**; `ruff` clean; `mypy --strict`
+clean (23 source files). `mvn clean verify` → **350 tests, 0 failures, 1 skipped**; the opt-in
+dual-process test passes (11.2 s). The 150–200 manually checked synthetic cases remain open, as the
+review allowed, and their first boundary set is now these four families.
 
 ## Round 57 — Staff review and safe publication (Pending)
 

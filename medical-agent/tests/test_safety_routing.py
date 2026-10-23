@@ -14,7 +14,7 @@ import pytest
 from medical_agent.checkpoints import open_checkpointer
 from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.nodes import ValidationError
-from medical_agent.java_client import CallCredentials
+from medical_agent.java_client import CallCredentials, outcome_for
 from medical_agent.providers.base import ProviderError, ProviderRequest, ProviderResponse
 from medical_agent.schemas.classification import Intent, RiskLevel
 from medical_agent.schemas.run import RunStartRequest
@@ -103,6 +103,12 @@ def test_a_routine_message_stays_routine() -> None:
         '{"intents": ["OTHER"], "risk": "SOMETIMES", "confidence": 0.9}',
         '{"intents": ["OTHER"], "risk": "ROUTINE", "confidence": 1.5}',
         '{"intents": ["OTHER"], "risk": "ROUTINE", "confidence": "high"}',
+        # intents must be an array of strings: an object, a bare string or too many entries
+        '{"intents": {"BILLING": true}, "risk": "ROUTINE", "confidence": 0.9}',
+        '{"intents": "BILLING", "risk": "ROUTINE", "confidence": 0.9}',
+        '{"intents": [{"BILLING": true}], "risk": "ROUTINE", "confidence": 0.9}',
+        '{"intents": ["OTHER","OTHER","OTHER","OTHER","OTHER","OTHER","OTHER","OTHER"],'
+        ' "risk": "ROUTINE", "confidence": 0.9}',
     ],
 )
 def test_a_malformed_or_uncertain_answer_escalates(bad_answer: str) -> None:
@@ -143,7 +149,9 @@ def test_all_seven_intents_are_accepted() -> None:
         CannedProvider(answer([intent.value for intent in Intent])),
     )
 
-    assert len(decision.intents) == 7
+    # OTHER is dropped when something more specific is present, so the answer keeps six.
+    assert len(decision.intents) == 6
+    assert Intent.OTHER not in decision.intents
 
 
 def test_the_graph_drafts_a_clinician_review_and_never_a_ready_answer(tmp_path) -> None:
@@ -217,3 +225,70 @@ def test_the_mock_provider_routes_instead_of_escalating(tmp_path) -> None:
 
     assert state["risk"] == "ROUTINE"
     assert "uncertain_output" not in state["flags"]
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "I can\u2019t breathe",          # typographic apostrophe
+        "I have chest\npain",           # line break inside the phrase
+        "I have chest\u00a0pain",       # non-breaking space
+        "I  have   chest pain",          # collapsed spacing
+    ],
+)
+def test_typographic_variants_do_not_bypass_a_rule(content: str) -> None:
+    decision = classify(content, CannedProvider(answer(["OTHER"])))
+
+    assert decision.risk is RiskLevel.EMERGENCY
+    assert "emergency:chest_pain" in decision.flags or "emergency:breathing" in decision.flags
+
+
+def test_a_model_classified_clinical_question_needs_a_clinician() -> None:
+    # No rule fires; the model's own clinical classification must still require review and
+    # must not keep the message at ROUTINE.
+    decision = classify("What do you think about this?",
+                        CannedProvider(answer(["CLINICAL_QUESTION"])))
+
+    assert decision.requires_clinician is True
+    assert decision.risk is not RiskLevel.ROUTINE
+
+
+def test_a_model_classified_emergency_needs_a_clinician() -> None:
+    decision = classify("Something feels very wrong",
+                        CannedProvider(answer(["OTHER"], risk="EMERGENCY")))
+
+    assert decision.requires_clinician is True
+    assert decision.risk is RiskLevel.EMERGENCY
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("Can I book an appointment?", "APPOINTMENT:ROUTINE:DRAFT_READY"),
+        ("Where do I send my bill payment?", "BILLING:ROUTINE:DRAFT_READY"),
+        ("I need a prescription refill", "PRESCRIPTION_REFILL:ROUTINE:DRAFT_READY"),
+    ],
+)
+def test_the_mock_submits_the_specific_intent_not_other(
+    tmp_path, content: str, expected: str
+) -> None:
+    # The mock answers OTHER; the rules know better, so OTHER must not be the primary intent
+    # the graph reports back to Java.
+    from medical_agent.providers.mock import MockProvider
+
+    with ExitStack() as stack:
+        checkpointer = stack.enter_context(
+            open_checkpointer(f"sqlite://{tmp_path / (expected[:10] + '.sqlite')}")
+        )
+        worker = AgentWorker(MockProvider(), checkpointer, lambda state: None)
+        state = worker.process(
+            RunStartRequest(
+                run_id=11, message_id=110, patient_id=100, conversation_revision=2,
+                execution_generation=1, content=content, request_id="req-safety-4",
+            ),
+            CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                            outbound_token="out"),
+        )
+
+    assert state["intents"][0] != "OTHER"
+    assert outcome_for(state) == expected

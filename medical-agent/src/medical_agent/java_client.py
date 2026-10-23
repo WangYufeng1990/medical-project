@@ -34,6 +34,11 @@ def reset_credentials(token: contextvars.Token[CallCredentials | None]) -> None:
     _credentials.reset(token)
 
 
+def outcome_for(state: RunState) -> str:
+    """The provisional result string: routing decision, then the fact that a draft exists."""
+    return f"{state['classification']}:{state['risk']}:DRAFT_READY"
+
+
 def submit_result(state: RunState) -> None:
     """POST the result for this attempt; a failure raises so the graph stops there."""
     credentials = _credentials.get()
@@ -41,7 +46,7 @@ def submit_result(state: RunState) -> None:
         raise RuntimeError("no call credentials are bound to this execution")
     body = {
         "generation": state["execution_generation"],
-        "outcome": f"{state['classification']}:{state['risk']}:DRAFT_READY",
+        "outcome": outcome_for(state),
     }
     response = httpx.post(
         f"{credentials.java_base_url.rstrip('/')}/api/v1/internal/agent/runs/{state['run_id']}/results",

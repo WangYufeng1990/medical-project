@@ -13,8 +13,10 @@ Nothing here publishes anything: every classification is a routing decision for 
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from medical_agent.classification.safety import CLINICAL_DECISION, apply_rules
 from medical_agent.providers.base import Provider, ProviderRequest
@@ -41,6 +43,20 @@ class _ModelAnswer:
     confidence: float
 
 
+class _Envelope(BaseModel):
+    """The raw answer, validated before anything is merged (Round 56.1 review).
+
+    Strict on purpose: an intents value that is not a JSON array of strings, a confidence that
+    is not a number in 0-1, or an unknown field is a failure, not something to coerce.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    intents: Annotated[list[str], Field(min_length=1, max_length=7)]
+    risk: str
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+
+
 MAX_ANSWER_CHARS = 4096
 
 
@@ -56,9 +72,11 @@ class Classifier:
         except Exception:  # an unreadable answer must never read as routine
             return self._uncertain(rules)
 
-        intents = list(dict.fromkeys([*answer.intents, *rules.intents]))
-        if not intents:
-            intents = [Intent.OTHER]
+        # A specific intent is the answer; OTHER only survives when nothing else was found, so
+        # the primary intent (the first one) is never OTHER because the model said so.
+        merged = dict.fromkeys([*answer.intents, *rules.intents])
+        specific: list[Intent] = [intent for intent in merged if intent is not Intent.OTHER]
+        intents: list[Intent] = specific if specific else [Intent.OTHER]
         risk = RiskLevel.highest(answer.risk, rules.risk)
         flags = list(rules.flags)
         requires_clinician = rules.requires_clinician
@@ -66,6 +84,13 @@ class Classifier:
             flags.append("rule:raised_risk")
         if CLINICAL_DECISION in flags:
             risk = RiskLevel.highest(risk, RiskLevel.URGENT)
+            requires_clinician = True
+        # The final classification decides these, so a legal answer cannot route a clinical
+        # question or an emergency as "no clinician needed" (Round 56.1 review).
+        if Intent.CLINICAL_QUESTION in intents:
+            risk = RiskLevel.highest(risk, RiskLevel.URGENT)
+            requires_clinician = True
+        if risk is RiskLevel.EMERGENCY:
             requires_clinician = True
         return Classification(
             intents=intents,
@@ -76,7 +101,8 @@ class Classifier:
         )
 
     def _uncertain(self, rules) -> Classification:  # type: ignore[no-untyped-def]
-        intents = list(rules.intents) or [Intent.OTHER]
+        specific: list[Intent] = [intent for intent in rules.intents if intent is not Intent.OTHER]
+        intents: list[Intent] = specific if specific else [Intent.OTHER]
         return Classification(
             intents=intents,
             risk=RiskLevel.highest(rules.risk, UNCERTAIN_MINIMUM),
@@ -93,24 +119,13 @@ class Classifier:
         response = self._provider.invoke_now(ProviderRequest(prompt=prompt))
         if len(response.text) > MAX_ANSWER_CHARS:
             raise ValueError("the classifier's answer is too long to be the contract")
-        parsed = json.loads(_extract_json(response.text))
-        if not isinstance(parsed, dict):
-            raise ValueError("the classifier must answer with a JSON object")
-        if set(parsed) - {"intents", "risk", "confidence"}:
-            raise ValueError("unknown fields in the classifier's answer")
-        confidence = parsed["confidence"]
-        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-            raise ValueError("confidence must be a number")
-        if not 0.0 <= float(confidence) <= 1.0:
-            raise ValueError("confidence must be between 0 and 1")
-        intents = [Intent(value) for value in parsed["intents"]]
-        if not intents:
-            raise ValueError("at least one intent is required")
-        return _ModelAnswer(
-            intents=intents,
-            risk=RiskLevel(parsed["risk"]),
-            confidence=float(confidence),
-        )
+        envelope = _Envelope.model_validate_json(_extract_json(response.text))
+        try:
+            intents: list[Intent] = [Intent(value) for value in envelope.intents]
+            risk = RiskLevel(envelope.risk)
+        except ValueError:
+            raise ValueError("unknown intent or risk in the classifier's answer") from None
+        return _ModelAnswer(intents=intents, risk=risk, confidence=envelope.confidence)
 
 
 def _extract_json(text: str) -> str:

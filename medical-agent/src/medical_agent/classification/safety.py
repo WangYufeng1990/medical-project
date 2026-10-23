@@ -28,6 +28,18 @@ def _rule(rule_id: str, risk: RiskLevel, intent: Intent | None, pattern: str,
                       requires_clinician)
 
 
+# Typographic characters and line breaks are ordinary ways to type the same sentence, so the
+# rules see one normalised copy of the text. The message itself is kept verbatim for the
+# model and the draft.
+_QUOTES = str.maketrans({"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+                         "\u00a0": " ", "\u2013": "-", "\u2014": "-"})
+_WHITESPACE = re.compile(r"\s+")
+
+
+def normalize_for_rules(text: str) -> str:
+    return _WHITESPACE.sub(" ", text.translate(_QUOTES)).strip()
+
+
 RULES: tuple[SafetyRule, ...] = (
     _rule("emergency:chest_pain", RiskLevel.EMERGENCY, None,
           r"\bchest pain\b|\bcrushing chest\b|\bpressure in my chest\b"),
@@ -72,12 +84,13 @@ class RuleOutcome:
 
 
 def apply_rules(text: str) -> RuleOutcome:
+    normalised = normalize_for_rules(text)
     risk = RiskLevel.ROUTINE
     intents: list[Intent] = []
     flags: list[str] = []
     requires_clinician = False
     for rule in RULES:
-        if not rule.pattern.search(text):
+        if not rule.pattern.search(normalised):
             continue
         risk = RiskLevel.highest(risk, rule.risk)
         flags.append(rule.id)
