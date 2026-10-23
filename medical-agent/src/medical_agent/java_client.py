@@ -41,7 +41,7 @@ def submit_result(state: RunState) -> None:
         raise RuntimeError("no call credentials are bound to this execution")
     body = {
         "generation": state["execution_generation"],
-        "outcome": f"{state['classification']}:DRAFT_READY",
+        "outcome": f"{state['classification']}:{state['risk']}:DRAFT_READY",
     }
     response = httpx.post(
         f"{credentials.java_base_url.rstrip('/')}/api/v1/internal/agent/runs/{state['run_id']}/results",

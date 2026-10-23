@@ -26,6 +26,7 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.builder import DRAFT_NODE, build_graph
 from medical_agent.graph.state import RunState
 from medical_agent.java_client import (
@@ -52,8 +53,9 @@ class AgentWorker:
         provider: Provider,
         checkpointer: BaseCheckpointSaver[Any],
         submit: Callable[[RunState], None] = submit_result,
+        max_prompt_chars: int = 8000,
     ) -> None:
-        self._graph = build_graph(provider, submit, checkpointer)
+        self._graph = build_graph(Classifier(provider, max_prompt_chars), submit, checkpointer)
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
 

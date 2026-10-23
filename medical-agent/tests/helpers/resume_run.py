@@ -23,7 +23,14 @@ class CountingProvider:
     async def invoke(self, request: ProviderRequest) -> ProviderResponse:
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write("+")
-        return ProviderResponse(text="mock", provider="mock", model="mock-1", latency_ms=0)
+        return ProviderResponse(
+            text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+            provider="mock", model="mock-1", latency_ms=0)
+
+    def invoke_now(self, request: ProviderRequest) -> ProviderResponse:
+        import asyncio
+
+        return asyncio.run(self.invoke(request))
 
 
 def submit(_state: dict[str, object]) -> None:

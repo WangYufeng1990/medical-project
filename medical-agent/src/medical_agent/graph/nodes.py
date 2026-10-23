@@ -1,18 +1,9 @@
-"""The minimal graph's nodes (Round 55.4): validate, classify, draft, submit."""
+"""The minimal graph's nodes (Round 56.1): validate, classify, draft, submit."""
 
-import asyncio
 from collections.abc import Callable
 
+from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.state import RunState
-from medical_agent.providers.base import Provider, ProviderRequest
-
-CLASSIFICATIONS = ("APPOINTMENT", "BILLING", "CLINICAL", "OTHER")
-
-_KEYWORDS = {
-    "APPOINTMENT": ("appointment", "schedule", "reschedule", "book", "visit"),
-    "BILLING": ("bill", "invoice", "insurance", "payment", "charge"),
-    "CLINICAL": ("pain", "medicine", "prescription", "symptom", "dose", "allergy"),
-}
 
 
 class ValidationError(ValueError):
@@ -30,32 +21,36 @@ def validate_node(state: RunState) -> dict[str, object]:
     return {"content": content}
 
 
-def classify_node(provider: Provider) -> Callable[[RunState], dict[str, object]]:
-    """Mock classification, via the provider seam (Round 56 replaces the classifier)."""
-
+def classify_node(classifier: Classifier) -> Callable[[RunState], dict[str, object]]:
     def classify(state: RunState) -> dict[str, object]:
-        text = state["content"].lower()
-        classification = "OTHER"
-        for label, words in _KEYWORDS.items():
-            if any(word in text for word in words):
-                classification = label
-                break
-        # The label is keyword-derived for now; the provider call is the seam Round 56
-        # replaces with a real classifier. The graph is synchronous, so the call gets its
-        # own loop (the endpoint runs in FastAPI's threadpool, which has none).
-        asyncio.run(provider.invoke(ProviderRequest(prompt=state["content"], max_output_tokens=16)))
-        return {"classification": classification}
+        decision = classifier.classify(state["content"])
+        return {
+            "classification": decision.intents[0].value,
+            "intents": [intent.value for intent in decision.intents],
+            "risk": decision.risk.value,
+            "flags": list(decision.flags),
+            "confidence": decision.confidence,
+            "requires_clinician": decision.requires_clinician,
+        }
 
     return classify
 
 
 def draft_node(state: RunState) -> dict[str, object]:
-    return {
-        "draft": (
+    # Every v1 draft is for staff review; a clinician-required message says so in the text
+    # rather than producing an answer that could be mistaken for clinical advice (56.4 and
+    # Round 57 enforce publication separately).
+    if state.get("requires_clinician"):
+        draft = (
+            "A member of the care team will review your message and respond. "
+            "If this is an emergency, call 911."
+        )
+    else:
+        draft = (
             f"Thank you for your message about {state['classification'].lower()}. "
             "The care team will follow up."
         )
-    }
+    return {"draft": draft, "review_required": True}
 
 
 def submit_node(

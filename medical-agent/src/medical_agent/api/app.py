@@ -79,7 +79,8 @@ def create_app(
             if active_worker is None:
                 active_provider = selected if selected is not None else build_provider(settings)
                 checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
-                active_worker = AgentWorker(active_provider, checkpointer)
+                active_worker = AgentWorker(active_provider, checkpointer,
+                                           max_prompt_chars=settings.max_prompt_chars)
                 application.state.checkpointer = checkpointer
             application.state.worker = active_worker
             yield
@@ -130,6 +131,9 @@ def create_app(
             active = selected if selected is not None else build_provider(settings)
         except NotImplementedError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:  # a broken provider must not look ready
+            raise HTTPException(status_code=503,
+                                detail=f"the configured provider cannot be built: {exc}") from exc
         return ReadyResponse(
             status="ready",
             service=settings.service_name,

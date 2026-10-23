@@ -61,7 +61,14 @@ class StubJava(BaseHTTPRequestHandler):
 
 class StubProvider:
     async def invoke(self, request: ProviderRequest) -> ProviderResponse:
-        return ProviderResponse(text="mock", provider="mock", model="mock-1", latency_ms=1)
+        return ProviderResponse(text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", '
+                                     '"confidence": 0.9}', provider="mock", model="mock-1",
+                                latency_ms=1)
+
+    def invoke_now(self, request: ProviderRequest) -> ProviderResponse:
+        import asyncio
+
+        return asyncio.run(self.invoke(request))
 
 
 @pytest.fixture()
@@ -130,7 +137,7 @@ def test_an_authenticated_dispatch_runs_the_graph_and_submits_the_result(
     assert sent["path"] == "/api/v1/internal/agent/runs/41/results"
     assert sent["service_token"] == OUTBOUND
     assert sent["capability"] == CAPABILITY
-    assert sent["body"] == {"generation": 1, "outcome": "APPOINTMENT:DRAFT_READY"}
+    assert sent["body"] == {"generation": 1, "outcome": "APPOINTMENT:ROUTINE:DRAFT_READY"}
 
 
 def test_a_wrong_inbound_token_is_refused(client: TestClient) -> None:

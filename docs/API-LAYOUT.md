@@ -618,7 +618,9 @@ so nothing can slip in between the check and the write. Passing the service toke
 patient-facing endpoint buys nothing — those still require a JWT, so such a request is 401.
 
 `POST .../results` carries a **provisional** payload: Round 57 replaces `outcome` with the
-draft/review contract. The authorization checks around it are final.
+draft/review contract. Since Round 56.1 the outcome string carries the routing decision
+(`<INTENT>:<RISK>:DRAFT_READY`, e.g. `APPOINTMENT:ROUTINE:DRAFT_READY`). The authorization checks
+around it are final.
 
 ### Agent service endpoint (Java → Python, internal)
 `POST /internal/v1/runs` on the service. `Authorization: Bearer <AGENT_OUTBOUND_TOKEN>` (Java's

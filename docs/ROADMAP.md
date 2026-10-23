@@ -5353,18 +5353,92 @@ executed); Docker images (`docker compose config` only, no daemon here); a real 
 (the adapter exists, no key or call in this environment); multi-instance workers (the lock is
 per-process, as the review scoped it); CI (workflow removed — local validation only).
 
-## Round 56 — Classification and versioned RAG (Pending)
+## Round 56 — Classification and versioned RAG (In progress: 56.1 Done, 56.2–56.4 Pending)
 
 **Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 56.1 Classification and safety | P0 / Pending | Seven intents/multi-intent/risk, non-downgradable rules, DeepSeekProvider; configurable model/base URL/key and bounded invalid-output handling | test_safety_routing.py: mixed intent preserves risk; malformed/uncertain output escalates; clinical decisions never auto-publish; provider contract and timeout behavior measured |
+| 56.1 Classification and safety | P0 / **Done** (2026-10-23) | Seven intents, three risk levels, multi-intent union, non-downgradable rules (14), fail-closed uncertainty, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (18) + test_deepseek_provider.py (6): mixed intent keeps EMERGENCY, a model cannot lower a rule risk, malformed/uncertain/provider-failure answers escalate, clinical decisions require a clinician, and the adapter's request shape, error masking and timeout are measured (see the 56.1 record) |
 | 56.2 KB ingestion and release | P0 / Pending | Approved synthetic policy manifest, parsing, title-aware chunks/hash/embedding, version publish/withdraw | test_kb_ingestion.py: repeated ingestion idempotent; unapproved content unavailable; withdrawn evidence cannot be published |
 | 56.3 Retrieval and citations | P1 / Pending | Lexical/dense baselines, RRF hybrid, diagnostics, server-built citations | test_retrieval.py, test_citations.py: references belong to retrieved evidence; empty/conflicting evidence escalates; baseline comparison recorded |
 | 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
 
 Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
+
+### Round 56.1 — Classification and safety (Done, 2026-10-23)
+
+**Baseline:** `ccb8dcc5`, clean tree, **79 Python tests** (+350 Java). No Java file changed in this
+slice; the wire contract is untouched (`run-start.request` already carried `execution_generation`).
+
+**The taxonomy.** Seven intents (`APPOINTMENT`, `PRESCRIPTION_REFILL`, `BILLING`, `LAB_RESULTS`,
+`CLINICAL_QUESTION`, `ADMINISTRATIVE_REQUEST`, `OTHER`), three risk levels (`ROUTINE` < `URGENT` <
+`EMERGENCY`) and a `Classification` model (`intents` 1–7, `risk`, `confidence` 0–1, `flags`,
+`requires_clinician`) with `extra="forbid"`, so an answer that is not this shape is a failure to
+handle, not something to guess around.
+
+**Rules set a floor the model cannot lower** (`classification/safety.py`, 14 rules): emergency
+phrases (chest pain, breathing, stroke signs, severe bleeding, self-harm, seizure) → `EMERGENCY`;
+infant fever and pregnancy bleeding → `URGENT`; "should I stop taking / what dose / is it safe" →
+`clinical_decision` + clinician; appointment, refill, billing and lab words contribute intents. The
+merge is monotonic: `max(model risk, rule risk)`, a union of intents and flags, and a
+`rule:raised_risk` flag whenever the rules actually overruled the model.
+
+**Uncertainty escalates rather than guessing.** Any unreadable answer — not JSON, missing or
+unknown fields, an unknown intent or risk, an empty intent list, a confidence outside 0–1 or of the
+wrong type, an answer longer than the contract, a provider error or an unexpected exception — falls
+back to the rule outcome with `uncertain_output`, confidence 0, `requires_clinician` and **at least
+`URGENT`**. A failed provider therefore never yields `ROUTINE`.
+
+**The DeepSeek adapter** (`providers/deepseek.py`) is wired into the factory, configurable through
+`MEDICAL_AGENT_DEEPSEEK_{API_KEY,BASE_URL,MODEL}` and the request bound; it sends
+`temperature: 0`, `max_tokens`, and reduces every failure to `ProviderError` carrying a status or a
+fixed phrase — never the response body, which can quote the patient's message.
+
+**The no-model deployments still route.** The classifier asks the provider for the contract, and
+the built-in `MockProvider` now answers that prompt with a valid `OTHER/ROUTINE/0.5` object (other
+prompts are still echoed), so `MEDICAL_AGENT_PROVIDER=mock` produces normal routing decisions
+instead of escalating every message to `uncertain_output`.
+
+**Graph integration.** `classify_message` now runs the classifier and stores intents, risk, flags,
+confidence and `requires_clinician`; `draft_reply` writes a review-only draft ("A member of the care
+team will review your message…" whenever a clinician is required) and sets `review_required: true`
+on every v1 output; the submitted result's provisional outcome now carries the routing decision
+(`<INTENT>:<RISK>:DRAFT_READY`).
+
+**Tests (25 new; 105 total).** `test_safety_routing.py` (18): mixed intent keeps the highest risk
+and flags the raise; a model cannot downgrade a stroke phrase; a clinical decision is flagged and
+never `ROUTINE`; a routine message stays routine; eight malformed answers escalate; a provider
+failure and an unexpected exception escalate; an uncertain answer on chest pain still keeps
+`EMERGENCY`; all seven intents are accepted; the graph drafts a clinician review with
+`review_required`; empty content is refused before any model call. `test_deepseek_provider.py` (6) plus one mock-routing test:
+request shape (path, bearer, model, `max_tokens`, `temperature: 0`), a non-200 answer becomes a
+failure without the body, a wrong-shaped or empty answer fails, a slow model times out, and an
+unreachable host fails.
+
+**Red evidence.** Three failures shaped the design: the graph node called a provider method that did
+not exist (`AttributeError: 'RecordingProvider' object has no attribute 'invoke_now'`), which added
+the synchronous entry point the graph needs; `confidence: 1.5` escaped as a Pydantic error instead
+of escalating, so the range check moved into the answer parser; and a provider `RuntimeError` was not
+caught, so the classifier now fails closed on any exception. A take-over test also broke, correctly:
+provider failures no longer stop the graph, so that test now injects the failure at the classifier
+node, which is the layer that can still leave a checkpoint mid-way.
+
+**Verification (actually run).** `pytest` → **105 passed**; `ruff check .` → clean; `mypy --strict` →
+no issues in 23 source files. Java: `mvn clean verify` → **350 tests, 0 failures, 1 skipped**, and the
+opt-in dual-process test still passes against the real service (`-Dagent.e2e=true`, 12.0 s), which is
+also what proves the mock path routes rather than escalating.
+
+**Limits.**
+- The rules are conservative keyword approximations: they can raise a false positive (which
+  escalates a routine message) but cannot miss a badly-worded emergency — the failure direction is
+  deliberate and documented, not an accuracy claim.
+- `confidence` is model-reported and uncalibrated; the classifier only uses it as data, never as a
+  publication gate.
+- The DeepSeek adapter is measured against a local stub; no real API call was made here (no key in
+  this environment).
+- The plan asks for the first 150–200 manually checked synthetic cases alongside this round. They
+  are **not** written yet; that remains open for 56.2–56.4 and is recorded rather than claimed.
 
 ## Round 57 — Staff review and safe publication (Pending)
 

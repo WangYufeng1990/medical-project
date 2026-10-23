@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from medical_agent.config import ProviderName, Settings
 from medical_agent.providers.base import ProviderRequest
+from medical_agent.providers.deepseek import DeepSeekProvider
 from medical_agent.providers.factory import build_provider
 from medical_agent.providers.mock import MockProvider
 
@@ -51,14 +52,17 @@ def test_the_factory_returns_the_mock(monkeypatch: pytest.MonkeyPatch) -> None:
     assert provider.name == "mock"
 
 
-def test_the_factory_refuses_deepseek_until_round_56(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_factory_builds_the_deepseek_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEDICAL_AGENT_INBOUND_TOKEN", "internal-token")
     monkeypatch.setenv("MEDICAL_AGENT_OUTBOUND_TOKEN", "outbound-token")
     monkeypatch.setenv("MEDICAL_AGENT_PROVIDER", "deepseek")
     monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("MEDICAL_AGENT_DEEPSEEK_MODEL", "deepseek-chat")
 
-    with pytest.raises(NotImplementedError, match=r"56\.1"):
-        build_provider(Settings())
+    provider = build_provider(Settings())
+
+    assert isinstance(provider, DeepSeekProvider)
+    assert provider.name == "deepseek"
 
 
 def test_the_provider_enum_names_what_is_configured() -> None:

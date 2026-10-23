@@ -33,6 +33,10 @@ class ProviderResponse(BaseModel):
     latency_ms: int = Field(ge=0)
 
 
+class ProviderError(RuntimeError):
+    """The provider failed in a way the caller must handle, never guess around."""
+
+
 class Provider(Protocol):
     """An async text completion backend."""
 
@@ -40,4 +44,8 @@ class Provider(Protocol):
 
     async def invoke(self, request: ProviderRequest) -> ProviderResponse:
         """Return a completion. Implementations must not retry past their own deadline."""
+        ...
+
+    def invoke_now(self, request: ProviderRequest) -> ProviderResponse:
+        """The same call for callers that are already synchronous (the graph node)."""
         ...

@@ -20,6 +20,7 @@ from medical_agent.schemas.run import RunStartRequest
 from medical_agent.worker import AgentWorker, StaleExecution
 
 CAPABILITY = "capability-marker-4f1d9c2b"
+CLASSIFIER_ANSWER = '{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}'
 
 
 class RecordingProvider:
@@ -28,19 +29,13 @@ class RecordingProvider:
 
     async def invoke(self, request: ProviderRequest) -> ProviderResponse:
         self.calls += 1
-        return ProviderResponse(text="mock:classification", provider="mock",
+        return ProviderResponse(text=CLASSIFIER_ANSWER, provider="mock",
                                 model="mock-1", latency_ms=1)
 
+    def invoke_now(self, request: ProviderRequest) -> ProviderResponse:
+        import asyncio
 
-class FlakyProvider(RecordingProvider):
-    """Explodes on the first call, so a checkpoint can stop before classification."""
-
-    async def invoke(self, request: ProviderRequest) -> ProviderResponse:
-        self.calls += 1
-        if self.calls == 1:
-            raise RuntimeError("the provider exploded")
-        return ProviderResponse(text="mock:classification", provider="mock",
-                                model="mock-1", latency_ms=1)
+        return asyncio.run(self.invoke(request))
 
 
 class RecordingSubmit:
@@ -227,10 +222,25 @@ def test_a_failed_submission_after_taking_over_a_generation_retries_only_the_sub
     assert recovered["submitted_generation"] == 2
 
 
-def test_a_new_generation_resumes_a_failed_classification(checkpointer) -> None:
-    # generation 1 stops before the classification exists; generation 2 must run it, not
-    # declare the draft complete and submit a state that has no draft.
-    provider = FlakyProvider()
+def test_a_new_generation_resumes_a_failed_classification(
+    checkpointer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A provider failure no longer stops the graph (it escalates instead), so this failure
+    # is injected at the classifier node: what matters is that the checkpoint stops there,
+    # and that generation 2 runs the classification rather than declaring the draft complete.
+    from medical_agent.classification.classifier import Classifier
+
+    original = Classifier.classify
+    attempts = {"count": 0}
+
+    def failing_once(self, content: str):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("the classifier exploded")
+        return original(self, content)
+
+    monkeypatch.setattr(Classifier, "classify", failing_once)
+    provider = RecordingProvider()
     submit = RecordingSubmit()
     worker = AgentWorker(provider, checkpointer, submit)
 
@@ -238,7 +248,7 @@ def test_a_new_generation_resumes_a_failed_classification(checkpointer) -> None:
         worker.process(start_request(), credentials())
     recovered = worker.process(start_request(execution_generation=2), credentials())
 
-    assert provider.calls == 2, "the classification ran again under the new generation"
+    assert attempts["count"] == 2, "the classification ran again under the new generation"
     assert recovered["classification"] == "APPOINTMENT"
     assert recovered["draft"], "the draft exists before anything is submitted"
     assert [state["execution_generation"] for state in submit.submissions] == [2]

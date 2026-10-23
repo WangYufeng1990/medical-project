@@ -12,9 +12,9 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.nodes import classify_node, draft_node, submit_node, validate_node
 from medical_agent.graph.state import RunState
-from medical_agent.providers.base import Provider
 
 # The node the submission hangs off: re-entering the graph after it runs the submit node
 # again, so a repeated submission is checkpointed rather than performed outside the graph.
@@ -22,13 +22,13 @@ DRAFT_NODE = "draft_reply"
 
 
 def build_graph(
-    provider: Provider,
+    classifier: Classifier,
     submit_result: Callable[[RunState], None],
     checkpointer: BaseCheckpointSaver[Any],
 ) -> CompiledStateGraph:
     graph = StateGraph(RunState)
     graph.add_node("validate_content", validate_node)
-    graph.add_node("classify_message", classify_node(provider))
+    graph.add_node("classify_message", classify_node(classifier))
     graph.add_node(DRAFT_NODE, draft_node)
     graph.add_node("submit_result", submit_node(submit_result))
     graph.add_edge(START, "validate_content")
