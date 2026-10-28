@@ -3,9 +3,11 @@
 from collections.abc import Callable
 
 from medical_agent.classification.classifier import Classifier
+from medical_agent.drafting import build_draft, safe_fallback
 from medical_agent.graph.state import RunState
-from medical_agent.kb.citations import Citation, build_citations, describe, verify_citations
+from medical_agent.kb.citations import Citation, build_citations, verify_citations
 from medical_agent.kb.retrieval import Retriever
+from medical_agent.validation import contains_instructions, validate_draft
 
 
 class ValidationError(ValueError):
@@ -90,28 +92,35 @@ def retrieve_node(
 
 
 def draft_node(state: RunState) -> dict[str, object]:
-    # Every v1 draft is for staff review; a clinician-required message says so in the text
-    # rather than producing an answer that could be mistaken for clinical advice (56.4 and
-    # Round 57 enforce publication separately).
-    if state.get("requires_clinician"):
-        draft = (
-            "A member of the care team will review your message and respond. "
-            "If this is an emergency, call 911."
-        )
-    elif "evidence_missing" in state.get("flags", []):
-        draft = (
-            "I could not find a practice policy that answers this. "
-            "A member of the care team will review your message and respond."
-        )
-    else:
-        draft = (
-            f"Thank you for your message about {state['classification'].lower()}. "
-            "The care team will follow up."
-        )
-    citations = tuple(_citation_from(item) for item in state.get("citations", []))
-    if citations:
-        draft = f"{draft}\n\nSources: {describe(citations)}"
-    return {"draft": draft, "review_required": True}
+    """Build the draft from evidence, validate it, and fall back if anything is wrong."""
+    flags = list(state.get("flags", []))
+    evidence = list(state.get("evidence") or [])
+    citations = list(state.get("citations") or [])
+
+    # A chunk that tries to give the agent instructions is evidence of tampering, not a policy:
+    # it is dropped before drafting, and the fact that it was there stays on the record.
+    trusted = [chunk for chunk in evidence if not contains_instructions(str(chunk["text"]))]
+    if len(trusted) != len(evidence):
+        flags.append("untrusted_evidence")
+        allowed = {str(chunk["chunk_id"]) for chunk in trusted}
+        evidence = trusted
+        citations = [item for item in citations if str(item["chunk_id"]) in allowed]
+
+    working: RunState = {**state, "evidence": evidence, "citations": citations, "flags": flags}
+    draft = build_draft(working)
+    validation = validate_draft(draft, working)
+    if not validation.ok:
+        flags.append("draft_rejected")
+        draft = safe_fallback(working)
+        validation = validate_draft(draft, working)
+    return {
+        "draft": draft,
+        "review_required": True,
+        "evidence": evidence,
+        "citations": citations,
+        "flags": flags,
+        "validation": {"ok": validation.ok, "reasons": list(validation.reasons)},
+    }
 
 
 def _citation_from(item: dict[str, object]) -> Citation:

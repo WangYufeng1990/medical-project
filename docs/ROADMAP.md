@@ -5353,7 +5353,7 @@ executed); Docker images (`docker compose config` only, no daemon here); a real 
 (the adapter exists, no key or call in this environment); multi-instance workers (the lock is
 per-process, as the review scoped it); CI (workflow removed — local validation only).
 
-## Round 56 — Classification and versioned RAG (In progress: 56.1–56.3 Done, 56.4 Pending)
+## Round 56 — Classification and versioned RAG (Done: 56.1–56.4)
 
 **Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
 
@@ -5362,7 +5362,7 @@ per-process, as the review scoped it); CI (workflow removed — local validation
 | 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
 | 56.2 KB ingestion and release | P0 / **Done** (2026-10-23, tightened in the 56.3 review) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking whose title prefix counts toward the size limit, deterministic embedding baseline, version publish/withdraw with a (version, hash) approval snapshot | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
 | 56.3 Retrieval and citations | P1 / **Done** (2026-10-23, after review) | BM25 lexical baseline, hashing dense baseline, RRF hybrid, per-search diagnostics (both rankings, RRF k, documents, lexical support), server-built citations with hash verification, graph retrieval node with `evidence_missing` / `evidence_conflict` | test_retrieval.py (11) + test_citations.py (6): a policy question finds its policy, a question with no shared vocabulary finds nothing and is flagged, the dense baseline never adds an unmatched chunk, an exact tie between two documents is reported as a conflict, a withdrawn corpus retrieves nothing, and every citation matches a retrieved chunk's id and hash (see the 56.3 record) |
-| 56.4 Draft validation | P0 / Pending | Administrative answer drafts; policy support/content/size checks; clinical routing summaries | test_response_validation.py: fabricated references, unsupported claims and retrieved instructions cannot auto-publish; all v1 outputs remain pending review |
+| 56.4 Draft validation | P0 / **Done** (2026-10-28) | Cited administrative drafts from retrieved evidence; validation of citations, lexical support, size, safety notice, instructions in evidence and clinical routing; safe fallback with reasons recorded | test_response_validation.py (9): a real draft cites its policy and passes, a clinical question is a routing summary with no policy citation, and fabricated citations, unsupported claims, oversized drafts, a missing notice and a poisoned chunk are all refused (see the 56.4 record) |
 
 Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
 
@@ -5670,6 +5670,45 @@ original text.
 
 **Verification (actually run).** `pytest` → **159 passed**; `ruff` clean; `mypy --strict` clean (30
 source files). The dual-process test last passed on the previous commit (10.7 s); Java unchanged.
+
+### Round 56.4 — Draft validation (Done, 2026-10-28)
+
+**Baseline:** `522cfc66`, clean tree, **159 Python tests**. Implemented code-first, then tested.
+
+**What was built.**
+
+| Piece | Behaviour |
+|---|---|
+| `drafting.py` | An administrative draft quotes the first sentence of the best retrieved chunk and names it (`[chunk:<id>]`), then carries the fixed safety notice. A clinical question gets a routing summary (care team will respond; call 911 if emergency) and no policy citation; no evidence gives the "no policy found" draft. |
+| `validation.py` | Checks, as a list of reasons: draft too long (> 1 200) or too short, missing safety notice, fabricated citation (a `[chunk:…]` that is not among the retrieved citations), missing citation on an evidenced draft, unsupported claim (under 60% lexical overlap with the evidence), instructions in the retrieved text, a clinical question answered as an administrative one or carrying a policy citation, and instruction-like text in the draft itself. |
+| graph | The draft node drops a poisoned chunk before drafting, records `untrusted_evidence`, validates the draft, and on any reason falls back to the safe message, appends `draft_rejected`, and stores `validation: {ok, reasons}` in the checkpoint. Every path keeps `review_required: true`. |
+
+**"Supported" is lexical, and that is the limit.** The support check asks whether a sentence's content
+tokens overlap its cited evidence by 60%; it catches a sentence that drifts off the policy and does
+not catch a careful paraphrase that reverses meaning. Entailment is not implemented and is not
+claimed. The fixed sentences (routing summary, no-policy text, safety notice) are excluded from the
+check, because they are instructions to the reader rather than claims about a policy.
+
+**Tests (`test_response_validation.py`, 9).** A billing draft cites its chunk and passes with no
+reasons; a chest-pain message produces the routing summary with no citations and `ok`; a fabricated
+chunk id, an invented claim ("we accept cryptocurrency"), an oversized draft, a missing notice and a
+poisoned chunk are each refused, with the poisoned case also asserting the instruction text never
+reaches the draft; `contains_instructions` recognises the injection phrases it is meant to.
+
+**Verification (actually run).** `pytest` → **167 passed**; `ruff` clean; `mypy --strict` clean (32
+source files); the opt-in dual-process test passes (10.2 s). Java untouched (355 tests, 1 skipped from
+the last full run).
+
+**Limits.**
+- The draft is a deterministic template over one quoted sentence, not a generated answer: the
+  model is not asked to write, which is why validation has something traceable to check. A generated
+  draft would need the same validator plus its own evidence tests.
+- The validator's support test is lexical; see above.
+- The draft, citations and validation live in the Python checkpoint. Java still receives only the
+  provisional outcome string, so none of this is visible to staff yet — Round 57's review queue is
+  where they surface, together with the result contract that carries them.
+- The 150–200 manually checked evaluation cases are still not written; they remain an open
+  follow-up of Round 56, recorded rather than claimed.
 
 ## Round 57 — Staff review and safe publication (Pending)
 

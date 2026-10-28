@@ -26,6 +26,8 @@ class RunState(TypedDict, total=False):
     # Retrieved policy evidence, and the citations the server built from it (Round 56.3).
     evidence: list[dict[str, object]]
     citations: list[dict[str, object]]
+    # What the validator thought of the draft: {"ok": bool, "reasons": [...]}
+    validation: dict[str, object]
     draft: str
     # Set by the submit node: what a repeated dispatch uses to decide that this generation
     # already produced its draft (Round 55.4's "repeat execution does not create another").
