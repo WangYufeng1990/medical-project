@@ -3,7 +3,13 @@
 from collections.abc import Callable
 
 from medical_agent.classification.classifier import Classifier
-from medical_agent.drafting import build_draft, safe_fallback
+from medical_agent.drafting import (
+    POLICY_ANSWER,
+    SAFE_FALLBACK,
+    build_draft,
+    draft_kind,
+    safe_fallback,
+)
 from medical_agent.graph.state import RunState
 from medical_agent.kb.citations import Citation, build_citations, verify_citations
 from medical_agent.kb.retrieval import Retriever
@@ -91,8 +97,12 @@ def retrieve_node(
     return retrieve
 
 
+class DraftBlocked(RuntimeError):
+    """Even the safe fallback failed validation: nothing may be submitted."""
+
+
 def draft_node(state: RunState) -> dict[str, object]:
-    """Build the draft from evidence, validate it, and fall back if anything is wrong."""
+    """Build the draft for its kind, validate it, and block if the fallback is also unusable."""
     flags = list(state.get("flags", []))
     evidence = list(state.get("evidence") or [])
     citations = list(state.get("citations") or [])
@@ -106,21 +116,68 @@ def draft_node(state: RunState) -> dict[str, object]:
         evidence = trusted
         citations = [item for item in citations if str(item["chunk_id"]) in allowed]
 
-    working: RunState = {**state, "evidence": evidence, "citations": citations, "flags": flags}
-    draft = build_draft(working)
-    validation = validate_draft(draft, working)
-    if not validation.ok:
-        flags.append("draft_rejected")
-        draft = safe_fallback(working)
-        validation = validate_draft(draft, working)
-    return {
-        "draft": draft,
-        "review_required": True,
+    kind = draft_kind({**state, "evidence": evidence})
+    working: RunState = {
+        **state,
         "evidence": evidence,
         "citations": citations,
         "flags": flags,
-        "validation": {"ok": validation.ok, "reasons": list(validation.reasons)},
+        "kind": kind,
     }
+    draft = build_draft(working)
+    validation = validate_draft(draft, working, require_citation=kind == POLICY_ANSWER)
+
+    if validation.ok:
+        record = {"ok": True, "kind": kind, "rejected_reasons": [], "reasons": []}
+        adopted = _adopted(citations, draft) if kind == POLICY_ANSWER else []
+        return {**_draft_result(draft, working, adopted), "validation": record}
+
+    # The draft is not usable. Keep why, try the safe fallback, and refuse to continue if even
+    # that is invalid — an invalid message must not be submitted as if it were a draft.
+    rejected = list(validation.reasons)
+    flags.append("draft_rejected")
+    fallback = safe_fallback(working)
+    fallback_validation = validate_draft(fallback, working, require_citation=False)
+    if not fallback_validation.ok:
+        raise DraftBlocked(
+            "the safe fallback failed validation: " + ", ".join(fallback_validation.reasons)
+        )
+    record = {
+        "ok": True,
+        "kind": SAFE_FALLBACK,
+        "rejected_reasons": rejected,
+        "reasons": [],
+    }
+    return {
+        **_draft_result(fallback, working, []),
+        "validation": record,
+    }
+
+
+def _draft_result(
+    draft: str, state: RunState, adopted: list[dict[str, object]]
+) -> dict[str, object]:
+    return {
+        "draft": draft,
+        "review_required": True,
+        "evidence": state.get("evidence") or [],
+        "citations": state.get("citations") or [],
+        "adopted_citations": adopted,
+        # The flags added here (untrusted_evidence, draft_rejected) must reach the checkpoint,
+        # not just the working copy.
+        "flags": state.get("flags") or [],
+    }
+
+
+def _adopted(citations: list[dict[str, object]], draft: str) -> list[dict[str, object]]:
+    used = {chunk_id for chunk_id in _markers(draft)}
+    return [citation for citation in citations if str(citation["chunk_id"]) in used]
+
+
+def _markers(draft: str) -> tuple[str, ...]:
+    import re
+
+    return tuple(re.findall(r"\[chunk:([^\]]+)\]", draft))
 
 
 def _citation_from(item: dict[str, object]) -> Citation:
@@ -139,6 +196,9 @@ def submit_node(
     submit_result: Callable[[RunState], None],
 ) -> Callable[[RunState], dict[str, object]]:
     def submit(state: RunState) -> dict[str, object]:
+        validation = state.get("validation") or {}
+        if validation.get("ok") is False:
+            raise DraftBlocked("a draft that failed validation must not be submitted")
         submit_result(state)
         return {"submitted_generation": state["execution_generation"]}
 

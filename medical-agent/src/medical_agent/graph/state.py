@@ -23,10 +23,15 @@ class RunState(TypedDict, total=False):
     confidence: float
     requires_clinician: bool
     review_required: bool
+    # Which kind of draft the working state is producing (see medical_agent.drafting).
+    kind: str
     # Retrieved policy evidence, and the citations the server built from it (Round 56.3).
     evidence: list[dict[str, object]]
     citations: list[dict[str, object]]
-    # What the validator thought of the draft: {"ok": bool, "reasons": [...]}
+    # The citations the draft actually relies on (empty for routing and fallback drafts).
+    adopted_citations: list[dict[str, object]]
+    # What the validator thought of the draft:
+    # {"ok": bool, "kind": str, "rejected_reasons": [...], "reasons": [...]}
     validation: dict[str, object]
     draft: str
     # Set by the submit node: what a repeated dispatch uses to decide that this generation

@@ -5353,7 +5353,7 @@ executed); Docker images (`docker compose config` only, no daemon here); a real 
 (the adapter exists, no key or call in this environment); multi-instance workers (the lock is
 per-process, as the review scoped it); CI (workflow removed — local validation only).
 
-## Round 56 — Classification and versioned RAG (Done: 56.1–56.4)
+## Round 56 — Classification and versioned RAG (In progress: 56.1–56.4 Done, the 150–200-case evaluation set pending)
 
 **Goal:** evidence-backed drafts with abstention, still staff-only. **Estimate:** 36–56 hours. Depends on Round 55.
 
@@ -5362,7 +5362,7 @@ per-process, as the review scoped it); CI (workflow removed — local validation
 | 56.1 Classification and safety | P0 / **Done** (2026-10-23, after review) | Seven intents, three risk levels, multi-intent union with OTHER dropped, non-downgradable rules (14) matched on normalised text, clinical/emergency constraints from the final classification, fail-closed uncertainty via a strict answer envelope, DeepSeek adapter with bounded output/timeout, graph integration with review-only drafts | test_safety_routing.py (26) + test_deepseek_provider.py (6): typographic and line-break variants still hit a rule, a model-classified clinical question or emergency requires a clinician, malformed answers (including a non-array `intents`) escalate, the mock reports the specific intent, and the adapter's request shape, error masking and timeout are measured (see the 56.1 records) |
 | 56.2 KB ingestion and release | P0 / **Done** (2026-10-23, tightened in the 56.3 review) | Approved synthetic policy corpus (5 documents), manifest with per-document approval and SHA-256, title-aware chunking whose title prefix counts toward the size limit, deterministic embedding baseline, version publish/withdraw with a (version, hash) approval snapshot | test_kb_ingestion.py (10): repeated ingestion is idempotent, an unapproved or tampered document is unavailable, a file with no manifest entry is ignored, a withdrawn version cannot be published, withdrawing a document takes the active version out of service, and publishing a new version deactivates the old one (see the 56.2 record) |
 | 56.3 Retrieval and citations | P1 / **Done** (2026-10-23, after review) | BM25 lexical baseline, hashing dense baseline, RRF hybrid, per-search diagnostics (both rankings, RRF k, documents, lexical support), server-built citations with hash verification, graph retrieval node with `evidence_missing` / `evidence_conflict` | test_retrieval.py (11) + test_citations.py (6): a policy question finds its policy, a question with no shared vocabulary finds nothing and is flagged, the dense baseline never adds an unmatched chunk, an exact tie between two documents is reported as a conflict, a withdrawn corpus retrieves nothing, and every citation matches a retrieved chunk's id and hash (see the 56.3 record) |
-| 56.4 Draft validation | P0 / **Done** (2026-10-28) | Cited administrative drafts from retrieved evidence; validation of citations, lexical support, size, safety notice, instructions in evidence and clinical routing; safe fallback with reasons recorded | test_response_validation.py (9): a real draft cites its policy and passes, a clinical question is a routing summary with no policy citation, and fabricated citations, unsupported claims, oversized drafts, a missing notice and a poisoned chunk are all refused (see the 56.4 record) |
+| 56.4 Draft validation | P0 / **Done** (2026-10-28, after review) | Cited administrative drafts; per-citation support checks bound to the cited chunk; draft kinds (policy / routing / fallback) with separate rules; safe fallback with the original rejection reasons preserved and a hard block when the fallback is invalid | test_response_validation.py (9): a real draft cites its policy and passes, a clinical question is a routing summary with no policy citation, and fabricated citations, unsupported claims, oversized drafts, a missing notice and a poisoned chunk are all refused (see the 56.4 record) |
 
 Build the first 150–200 manually checked synthetic cases alongside this round, not afterward. Split tuning and held-out tests by scenario/template family. Initial chunk sizes are experimental, not an accuracy claim. Keep real-model failures and costs visible.
 
@@ -5709,6 +5709,46 @@ the last full run).
   where they surface, together with the result contract that carries them.
 - The 150–200 manually checked evaluation cases are still not written; they remain an open
   follow-up of Round 56, recorded rather than claimed.
+
+### Round 56.4 review fixes (2026-10-28)
+
+**1. P2 — the fallback could itself fail validation and still be submitted, and it overwrote why.**
+The node re-validated the fallback while the rejected draft's evidence was still attached, so the
+fallback failed `missing_citation`, and the submit node never consulted `validation.ok`. The draft
+now has a **kind** (`policy_answer`, `routing_summary`, `no_policy`, `safe_fallback`), and the kind
+decides the rules: only a policy answer requires a citation. The fallback is validated with
+`require_citation=False`, the original reasons are kept in `validation.rejected_reasons`, and if the
+fallback is *also* invalid the node raises `DraftBlocked` so nothing is submitted; the submit node
+carries the same guard. Tests: the original `missing_citation` survives the fallback, and an unusable
+fallback blocks the run.
+
+**2. P2 — support was checked against the whole retrieved set, not the cited chunk.** The citation
+marker now sits inside the sentence it supports, and the check compares that sentence with **only**
+the chunks it cites. Test: a billing claim citing the appointment policy is refused even though the
+billing chunk was also retrieved; the same claim citing billing passes.
+
+**3. P2 — short claims were skipped.** Sentences under four content tokens were exempt. They are now
+checked too: a short claim must appear verbatim in the chunk it cites, otherwise it is refused. Test:
+"We accept cryptocurrency" with a real citation is refused; "Payment plans are available" that the
+chunk contains passes.
+
+**4. P2 — the clinical summary kept the retrieved citation metadata.** The state now separates
+`citations` (what retrieval found, diagnostics and the fabrication whitelist) from
+`adopted_citations` (what the draft relies on). A routing summary and the safe fallback adopt none.
+Test: a chest-pain message that also matches a policy keeps `citations` as diagnostics and
+`adopted_citations == []`.
+
+**Also fixed in passing:** the draft node's own flags (`untrusted_evidence`, `draft_rejected`) were
+computed on a working copy and never written back to the checkpoint; `_draft_result` now returns them.
+That is why the poisoned-chunk test initially saw no `untrusted_evidence` flag.
+
+**Round 56 status.** The code for 56.1–56.4 is done, but the plan asks for 150–200 manually checked
+synthetic cases built alongside this round, and they are not written. Round 56 therefore stays **In
+progress** with that evaluation set as an independent acceptance task; 174 automated tests are not a
+substitute for it.
+
+**Verification (actually run).** `pytest` → **174 passed**; `ruff` clean; `mypy --strict` clean (32
+source files); the opt-in dual-process test passes (10.5 s). Java unchanged.
 
 ## Round 57 — Staff review and safe publication (Pending)
 
