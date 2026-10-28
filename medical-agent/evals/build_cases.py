@@ -8,6 +8,10 @@ deterministic and the JSONL is committed, so a change to an expectation is a rev
 
 "Manually checked" in this repository means authored and individually reviewed here; it does
 not claim external clinical review.
+
+Every case carries ``split: "dev"``: this set was used while the code was being built and fixed,
+so it is a deterministic regression set. A held-out split that was never run during development
+is an open item, and results from this file are not a generalisation claim.
 """
 from __future__ import annotations
 
@@ -19,7 +23,7 @@ CASES: list[dict] = []
 
 
 def case(case_id: str, family: str, kind: str, **payload: object) -> None:
-    CASES.append({"id": case_id, "family": family, "kind": kind, **payload})
+    CASES.append({"id": case_id, "family": family, "kind": kind, "split": "dev", **payload})
 
 
 def classify(case_id: str, message: str, *, answer: str | None, intents: list[str],
@@ -492,5 +496,17 @@ case("graph-third-billing-unsupported", "graph", "graph",
      expect={"kind": "policy_answer", "adopted_documents": ["billing-and-insurance"],
              "review_required": True, "validation_ok": True})
 
-OUT.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in CASES) + "\n")
-print(f"wrote {len(CASES)} cases to {OUT}")
+def write_cases(path: Path = OUT) -> int:
+    """Writes the built cases; only called from main, so importing has no file side effect."""
+    path.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in CASES) + "\n")
+    return len(CASES)
+
+
+def main() -> int:
+    count = write_cases()
+    print(f"wrote {count} cases to {OUT}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

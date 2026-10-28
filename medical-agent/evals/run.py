@@ -151,30 +151,37 @@ def check_citation(case: dict, retriever: Retriever) -> list[str]:
     citations = build_citations(result.hits)
     if not citations:
         return ["no citations"]
-    try:
-        if case["kind"] == "citation_valid":
+    forged: Citation | None = None
+    if case["kind"] == "citation_not_retrieved":
+        forged = Citation(chunk_id=case["chunk_id"], document_id="appointments",
+                          document_version=1, title="Forged", heading_path=("x",),
+                          content_hash="0" * 64)
+    elif case["kind"] == "citation_forged":
+        first = citations[0]
+        values = {
+            "chunk_id": first.chunk_id,
+            "document_id": first.document_id,
+            "document_version": first.document_version,
+            "title": first.title,
+            "heading_path": first.heading_path,
+            "content_hash": first.content_hash,
+        }
+        values[case["field"]] = case["value"]
+        forged = Citation(**values)  # type: ignore[arg-type]
+
+    if case["kind"] == "citation_valid":
+        try:
             verify_citations(citations, result.hits)
-            return []
-        if case["kind"] == "citation_not_retrieved":
-            forged = Citation(chunk_id=case["chunk_id"], document_id="appointments",
-                              document_version=1, title="Forged", heading_path=("x",),
-                              content_hash="0" * 64)
-            verify_citations((*citations, forged), result.hits)
-        else:
-            first = citations[0]
-            values = {
-                "chunk_id": first.chunk_id,
-                "document_id": first.document_id,
-                "document_version": first.document_version,
-                "title": first.title,
-                "heading_path": first.heading_path,
-                "content_hash": first.content_hash,
-            }
-            values[case["field"]] = case["value"]
-            verify_citations((Citation(**values),), result.hits)  # type: ignore[arg-type]
-        return ["accepted a forged citation"]
+        except CitationError as rejected:
+            # A validator that refuses the real citation is a failure, not a pass.
+            return [f"a valid citation was rejected: {rejected}"]
+        return []
+
+    try:
+        verify_citations((*citations, forged), result.hits)  # type: ignore[arg-type]
     except CitationError:
         return []
+    return ["accepted a forged citation"]
 
 
 def check_validate(case: dict, retriever: Retriever) -> list[str]:

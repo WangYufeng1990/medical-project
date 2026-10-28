@@ -5816,8 +5816,22 @@ source files); the opt-in dual-process test passes (11.2 s). Java unchanged.
 
 **Result: 156/156 pass**, run with `PYTHONPATH=src .venv/bin/python evals/run.py`. The runner is
 deterministic (mock or canned model answers), so a failure is about our code or our expectation. It
-is kept out of the unit suite on purpose; `tests/test_evals_dataset.py` guards that the committed
-JSONL is exactly what the generator produces, that ids are unique and every family is present.
+is kept out of the unit suite on purpose.
+
+**Evaluator defects found in review, fixed here.** Importing `build_cases` used to rewrite the JSONL,
+so the consistency guard read the file the import had just written and could not notice tampering;
+the write now lives in `main()` behind `if __name__ == "__main__"`, and the guard test proves a
+tampered and a truncated copy no longer match plus that importing leaves the file's hash unchanged.
+The citation family also treated *any* `CitationError` as a pass, so a validator that refuses every
+citation would have looked green; each kind now decides what an exception means, and
+`tests/test_evals_runner.py` drives the runner with a validator that accepts everything and one that
+refuses everything, requiring both to fail the right cases.
+
+**Split, stated plainly.** Every case carries `split: "dev"`. The set was used while the code was
+being built and fixed, so it is a **deterministic regression set**: 156/156 is evidence that the
+promised rules, retrieval plumbing, citations and validation still behave, and it is **not** a
+generalisation or accuracy claim. A held-out split that was never run during development is an open
+item, recorded rather than simulated.
 
 **What the evaluation found — three real defects, fixed here:**
 1. A quoted policy sentence kept the source's line break, so the validator saw a claim without its
