@@ -1,6 +1,7 @@
 package com.example.medical.module.chat.controller;
 
 import com.example.medical.common.result.Result;
+import com.example.medical.common.security.DoctorPatientScope;
 import com.example.medical.module.chat.dto.agent.ReviewItemVO;
 import com.example.medical.module.chat.service.AgentReviewService;
 import com.example.medical.security.LoginUser;
@@ -26,11 +27,13 @@ import java.util.List;
 public class AgentReviewController {
 
     private final AgentReviewService reviews;
+    private final DoctorPatientScope scope;
 
     @GetMapping
     public Result<List<ReviewItemVO>> queue(@AuthenticationPrincipal LoginUser user) {
-        boolean admin = user.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+        // ADMIN is the identity the scope helper resolves as unscoped; asking it here keeps the
+        // two from drifting apart (the token's scopes and the ROLE_* authorities differ).
+        boolean admin = scope.resolve() == null;
         return Result.ok(reviews.queue(user.getUserId(), admin));
     }
 

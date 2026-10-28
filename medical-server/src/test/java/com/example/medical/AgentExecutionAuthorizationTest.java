@@ -208,7 +208,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.runId(), dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isOk());
@@ -231,7 +231,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                resultBody(dispatched.generation() + 1)))
+                                resultBody(dispatched.runId(), dispatched.generation() + 1)))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isConflict());
@@ -305,7 +305,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.runId(), dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
@@ -325,7 +325,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.runId(), dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
@@ -349,10 +349,10 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
     }
 
     /** A complete result body for the Round 57.1 contract. */
-    private Map<String, Object> resultBody(long generation) {
+    private Map<String, Object> resultBody(long runId, long generation) {
         return Map.of(
                 "contract_version", "v1",
-                "run_id", 1,
+                "run_id", runId,
                 "generation", generation,
                 "intent", "BILLING",
                 "risk", "ROUTINE",

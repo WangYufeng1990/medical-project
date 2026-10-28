@@ -44,15 +44,17 @@ public class AgentRunResultRequest {
     @Pattern(regexp = "ROUTINE|URGENT|EMERGENCY", message = "unknown risk")
     private String risk;
 
-    private boolean requiresClinician;
+    /** Required: a missing flag must not silently read as "no clinician needed". */
+    @NotNull
+    private Boolean requiresClinician;
 
     @NotBlank
     @Size(max = 1500)
     private String draft;
 
-    @Valid
+    @NotNull
     @Size(max = 8)
-    private List<Citation> citations = new ArrayList<>();
+    private List<@Valid @NotNull Citation> citations = new ArrayList<>();
 
     @Valid
     @NotNull
@@ -77,8 +79,9 @@ public class AgentRunResultRequest {
         @Size(max = 200)
         private String title;
 
+        @NotNull
         @Size(max = 8)
-        private List<String> headingPath = new ArrayList<>();
+        private List<@NotBlank String> headingPath = new ArrayList<>();
 
         @NotBlank
         @Pattern(regexp = "[0-9a-f]{64}", message = "a citation needs its content hash")
@@ -88,16 +91,19 @@ public class AgentRunResultRequest {
     @Data
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static class Validation {
-        private boolean ok;
+        @NotNull
+        private Boolean ok;
 
         @NotBlank
         @Size(max = 32)
         private String kind;
 
+        @NotNull
         @Size(max = 8)
-        private List<String> reasons = new ArrayList<>();
+        private List<@NotNull String> reasons = new ArrayList<>();
 
+        @NotNull
         @Size(max = 8)
-        private List<String> rejectedReasons = new ArrayList<>();
+        private List<@NotNull String> rejectedReasons = new ArrayList<>();
     }
 }

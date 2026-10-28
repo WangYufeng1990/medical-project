@@ -53,16 +53,18 @@ public class AgentInternalController {
                                @Valid @RequestBody AgentRunResultRequest request) {
         serviceToken.require(token);
         AgentRun run = capabilities.verify(runId, capability);
+        if (!runId.equals(request.getRunId())) {
+            // A result has to describe the run it was submitted for; a mismatch is a wiring bug,
+            // not something to store under the capability's run.
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "run_id in the body does not match the path");
+        }
         if (!request.getGeneration().equals(run.getExecutionGeneration())) {
             throw new BusinessException(ResultCode.CONFLICT,
                     "result belongs to a previous execution generation");
         }
         requireActiveAccount(run);
-        if (!states.complete(runId, run.getExecutionGeneration())) {
-            throw new BusinessException(ResultCode.CONFLICT, "run is no longer accepting a result");
-        }
-        reviews.recordResult(run, request);
-        capabilities.revoke(runId);
+        reviews.acceptResult(runId, run.getExecutionGeneration(), request);
         return Result.ok();
     }
 

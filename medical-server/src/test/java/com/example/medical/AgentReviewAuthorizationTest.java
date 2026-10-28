@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
@@ -81,6 +82,9 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
 
     @Autowired
     private com.example.medical.module.chat.service.AgentRunService runs;
+
+    @MockitoSpyBean
+    private com.example.medical.module.chat.repository.AgentRunResultRepository resultRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -185,6 +189,55 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void anAdminSeesAndClaimsThreadsItIsNotPartOf() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].runId").value(dispatched.runId()))
+                .andExpect(jsonPath("$.data[0].patientId").value(100));
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.claimedBy").value(1));
+    }
+
+    @Test
+    void aBodyRunIdThatDoesNotMatchThePathIsRefused() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "contract_version", "v1",
+                                "run_id", dispatched.runId() + 1000,
+                                "generation", generation,
+                                "intent", "BILLING",
+                                "risk", "ROUTINE",
+                                "requires_clinician", false,
+                                "draft", "A balance can be paid in instalments.",
+                                "citations", List.of(),
+                                "validation", Map.of("ok", true, "kind", "policy_answer",
+                                        "reasons", List.of(), "rejected_reasons", List.of()))))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isBadRequest());
+
+        assertEquals("RUNNING", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
     void anAnsweredThreadLeavesTheQueue() throws Exception {
         Dispatched dispatched = dispatchedRun("My invoice looks wrong");
         result(dispatched, "BILLING");
@@ -196,7 +249,184 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.length()").value(0));
     }
 
+    @Test
+    void twoConcurrentClaimsByTheSameReviewerBothSucceedWithOneRow() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+        try {
+            var first = pool.submit(() -> claim(doctorToken, dispatched.runId(), barrier));
+            var second = pool.submit(() -> claim(doctorToken, dispatched.runId(), barrier));
+            assertEquals(200, first.get(30, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(200, second.get(30, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_claim WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
+    void twoReviewersRacingForTheSameRunProduceOneWinner() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+        try {
+            var first = pool.submit(() -> claim(doctorToken, dispatched.runId(), barrier));
+            var second = pool.submit(() -> claim(otherDoctorTokenForClaim(), dispatched.runId(), barrier));
+            java.util.List<Integer> statuses = java.util.List.of(
+                    first.get(30, java.util.concurrent.TimeUnit.SECONDS),
+                    second.get(30, java.util.concurrent.TimeUnit.SECONDS));
+            assertTrue(statuses.contains(200), "one reviewer must win: " + statuses);
+            // The other is either a forbidden scope (403) or a lost race (409).
+            assertTrue(statuses.contains(403) || statuses.contains(409),
+                    "the other reviewer must be refused: " + statuses);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private int claim(String token, long runId, java.util.concurrent.CyclicBarrier barrier)
+            throws Exception {
+        barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        return mockMvc.perform(post("/api/v1/agent/reviews/" + runId + "/claim")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private String otherDoctorTokenForClaim() throws Exception {
+        return login("doctor2", "doctor123");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
+
+    @Test
+    void aFailedResultSaveRollsBackTheCompletionAndCanBeRetried() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+        String url = "/api/v1/internal/agent/runs/" + dispatched.runId() + "/results";
+        java.util.Map<String, Object> body = body(dispatched.runId(), generation, List.of());
+
+        org.mockito.Mockito.doThrow(
+                        new org.springframework.dao.DataIntegrityViolationException("storage failed"))
+                .when(resultRepository).save(org.mockito.ArgumentMatchers.any(
+                        com.example.medical.module.chat.entity.AgentRunResult.class));
+        try {
+            postResult(url, body, dispatched.capability())
+                    .andExpect(status().is5xxServerError());
+        } finally {
+            org.mockito.Mockito.reset(resultRepository);
+        }
+
+        // The status change must have rolled back with the failed save, so the capability can
+        // still complete the run.
+        assertEquals("RUNNING", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+
+        postResult(url, body, dispatched.capability()).andExpect(status().isOk());
+
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
+    void theHttpEndpointRefusesUnvalidatedResultBodies() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+        String capability = dispatched.capability();
+        String url = "/api/v1/internal/agent/runs/" + dispatched.runId() + "/results";
+
+        // Each body is otherwise valid, so the 400 comes from the field under test.
+        long runId = dispatched.runId();
+        postResult(url, body(runId, generation, null), capability)
+                .andExpect(status().isBadRequest());                       // citations: null
+        postResult(url, body(runId, generation, java.util.Arrays.asList((Object) null)), capability)
+                .andExpect(status().isBadRequest());                       // citation element null
+        postResult(url, body(runId, generation, List.of(citation(null))), capability)
+                .andExpect(status().isBadRequest());                       // heading_path: null
+        postResult(url, body(runId, generation, List.of(citation(List.of("")))), capability)
+                .andExpect(status().isBadRequest());                       // blank heading
+
+        java.util.Map<String, Object> missingFlag = body(runId, generation, List.of());
+        missingFlag.remove("requires_clinician");
+        postResult(url, missingFlag, capability).andExpect(status().isBadRequest());
+
+        java.util.Map<String, Object> missingOk = body(runId, generation, List.of());
+        missingOk.put("validation", java.util.Map.of("kind", "policy_answer"));
+        postResult(url, missingOk, capability).andExpect(status().isBadRequest());
+
+        assertEquals("RUNNING", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
+    void anEmptyCitationListIsAcceptedForARoutingSummary() throws Exception {
+        Dispatched dispatched = dispatchedRun("I have chest pain");
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+        String url = "/api/v1/internal/agent/runs/" + dispatched.runId() + "/results";
+
+        postResult(url, body(dispatched.runId(), generation, List.of()), dispatched.capability())
+                .andExpect(status().isOk());
+
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions postResult(
+            String url, java.util.Map<String, Object> body, String capability) throws Exception {
+        return mockMvc.perform(post(url)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", capability));
+    }
+
+    private java.util.Map<String, Object> body(long runId, long generation, Object citations) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("contract_version", "v1");
+        body.put("run_id", runId);
+        body.put("generation", generation);
+        body.put("intent", "BILLING");
+        body.put("risk", "ROUTINE");
+        body.put("requires_clinician", false);
+        body.put("draft", "A balance can be paid in instalments.");
+        body.put("citations", citations);
+        body.put("validation", java.util.Map.of("ok", true, "kind", "policy_answer",
+                "reasons", List.of(), "rejected_reasons", List.of()));
+        return body;
+    }
+
+    private java.util.Map<String, Object> citation(List<String> headingPath) {
+        java.util.Map<String, Object> citation = new java.util.HashMap<>();
+        citation.put("chunk_id", "billing-and-insurance:1:002");
+        citation.put("document_id", "billing-and-insurance");
+        citation.put("document_version", 1L);
+        citation.put("title", "Billing and insurance policy");
+        citation.put("heading_path", headingPath);
+        citation.put("content_hash", "a".repeat(64));
+        return citation;
+    }
 
     private void seedOtherDoctor() {
         Integer existing = jdbc.queryForObject("SELECT COUNT(*) FROM sys_user WHERE id = ?",

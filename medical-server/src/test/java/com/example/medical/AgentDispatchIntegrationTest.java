@@ -261,7 +261,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
             long generation = jdbcTemplate.queryForObject(
                     "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
             agentInternal.result("test-inbound-token", dispatch.capability(), runId,
-                    resultBody(generation));
+                    resultBody(runId, generation));
         };
 
         agentRuns.dispatchDue();
@@ -280,7 +280,7 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
             long generation = jdbcTemplate.queryForObject(
                     "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
             agentInternal.result("test-inbound-token", dispatch.capability(), runId,
-                    resultBody(generation));
+                    resultBody(runId, generation));
         };
         abortFirstDispatch = true;
         ch.qos.logback.classic.Logger serviceLogger =
@@ -532,10 +532,13 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
     }
 
     /** The Round 57.1 result contract, minimal but complete. */
-    private com.example.medical.module.chat.dto.agent.AgentRunResultRequest resultBody(long generation) {
+    private com.example.medical.module.chat.dto.agent.AgentRunResultRequest resultBody(
+            long runId, long generation) {
         com.example.medical.module.chat.dto.agent.AgentRunResultRequest body =
                 new com.example.medical.module.chat.dto.agent.AgentRunResultRequest();
         body.setContractVersion("v1");
+        body.setRunId(runId);
+        body.setRequiresClinician(false);
         com.example.medical.module.chat.dto.agent.AgentRunResultRequest.Validation validation =
                 new com.example.medical.module.chat.dto.agent.AgentRunResultRequest.Validation();
         validation.setOk(true);

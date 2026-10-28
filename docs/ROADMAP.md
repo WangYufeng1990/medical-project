@@ -5852,13 +5852,13 @@ citations and validation, which is what Round 56 built.
 **Verification (actually run).** `evals/run.py` → **156/156**; `pytest` → **190 passed** (187 + the
 three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Java unchanged.
 
-## Round 57 — Staff review and safe publication (In progress: 57.1 Done, 57.2–57.3 Pending)
+## Round 57 — Staff review and safe publication (In progress: 57.1 in re-review, 57.2–57.3 Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 57.1 Review queue | P0 / **Done** (2026-10-28) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
+| 57.1 Review queue | P0 / **In progress** (2026-10-28; review fixes applied, awaiting re-review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
@@ -5885,6 +5885,48 @@ Use an atomic business transaction for review decision and message publication; 
 - The queue shows one item per thread (the last patient message); a thread with several unanswered messages shows only the latest. 57.2's approve flow and 57.3's freshness checks are what make that safe.
 - The claim is a row, not a lease: a claim held by an absent reviewer is not reclaimed yet (57.3's recovery work).
 - Approve/edit/reject and publication are 57.2; nothing in this slice writes to the patient's thread.
+
+### Round 57.1 review fixes (2026-10-28)
+
+**1. P1 — the completion and the result were not one transaction.** The endpoint completed the run,
+then saved the result in another transaction; a failure in between left `WAITING_REVIEW` with no
+result, a capability that no longer verifies (the state is not `RUNNING`) and a reconcile sweep that
+ignores it. `AgentReviewService.acceptResult` now performs the transition, the result write and the
+capability revocation in **one** short transaction. Test: a spy makes the result save throw; the
+endpoint answers 5xx, the run is still `RUNNING` with no result row, and the same capability can
+complete it afterwards.
+
+**2. P2 — ADMIN saw no threads it was not part of.** The queue enumerated every patient thread but
+then queried messages for the *reviewer's* id, so an admin who never spoke to the patient got
+nothing; claiming such a run also failed. Items are now built from the conversation's actual parties
+(staff and patient) and the reviewer id is used only for the claim flags; ADMIN detection goes
+through `DoctorPatientScope.resolve() == null`, the same rule the scope helper uses (the token's
+scopes and `ROLE_*` authorities differ, which is what made the first attempt silently treat an admin
+as a doctor). Test: an admin sees and claims a thread it is not part of.
+
+**3. P2 — a concurrent first claim returned 500.** The read-then-insert raced, and the unique key
+rejected the loser with an unhandled `DataIntegrityViolationException`. The insert now runs in its
+own `REQUIRES_NEW` transaction (`AgentReviewClaimWriter`); the loser catches the violation and reads
+the winner's row: same reviewer → idempotent success, another reviewer → 409. Tests: two concurrent
+claims by the same reviewer both succeed with one row; two reviewers racing produce one winner and
+one refusal.
+
+**4. P2 — the body's `run_id` was not bound to the path.** A capability for run A could submit a
+result claiming to belong to B and it was stored under A. The endpoint now requires
+`request.runId == runId` (400 otherwise). Test: path A with body B is refused and neither the state
+nor the result table changes.
+
+**5. P2 — the shared schema tests did not exercise the Java DTO's own validation.** The fixture test
+validates JSON against the schema with a hand-written validator; it says nothing about the Bean
+Validation on the real endpoint. `citations` (null vs empty), its elements, `heading_path` (null,
+blank elements), the required `requires_clinician` and `validation.ok` were tightened (boxed types so
+a missing boolean cannot default to false), and the test now posts each invalid body to the real
+endpoint: every one answers 400 and leaves the run `RUNNING` with no result; an empty citation list
+is accepted for a routing summary.
+
+**Verification (actually run).** `mvn clean verify` → **367 tests, 0 failures, 1 skipped**; the
+opt-in dual-process test passes (11.0 s); Python `pytest` → 204 passed, `ruff`/`mypy --strict` clean,
+`evals/run.py` 156/156.
 
 ## Round 58 — Read-only appointment tools (Pending)
 
