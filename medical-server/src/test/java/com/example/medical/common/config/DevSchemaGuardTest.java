@@ -88,6 +88,8 @@ class DevSchemaGuardTest {
         probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE agent_capability (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run_result (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_claim (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
                 + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
                 + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
@@ -122,6 +124,8 @@ class DevSchemaGuardTest {
         probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE agent_capability (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run_result (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_claim (id BIGINT NOT NULL PRIMARY KEY)");
         probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, sender_id BIGINT NOT NULL, "
                 + "sender_type VARCHAR(10) NOT NULL, receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
                 + "content TEXT NOT NULL, is_read TINYINT DEFAULT 0, client_message_id VARCHAR(100) DEFAULT NULL, "

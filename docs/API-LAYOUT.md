@@ -635,6 +635,21 @@ the result has been submitted to `POST /api/v1/internal/agent/runs/{runId}/resul
 service's outbound token and the same capability). A malformed body is 422 before any model
 work.
 
+### Staff review queue (Round 57.1)
+`GET /api/v1/agent/reviews` (ADMIN, DOCTOR) returns one item per thread where the patient spoke
+last: `messageId`, `patientId`, `runId`, `state`, `intent`, `risk`, `requiresClinician`, `draft`,
+`citations`, `validation`, `claimedBy`, `claimedByMe`, and — for a human-only item — `reason`
+(`NO_RUN` / `RUN_FAILED` / `RUN_PENDING` / `NO_RESULT`) with `draft: null`.
+
+`POST /api/v1/agent/reviews/{runId}/claim` takes the run for review: 200 for the claimant (repeat
+claims are idempotent), **409** when another reviewer holds it, **403** when the patient is outside
+the caller's scope. Both endpoints refuse a patient token with **403**.
+
+The result the worker submits at `POST /api/v1/internal/agent/runs/{runId}/results` is now the v1
+result contract: `contract_version`, `run_id`, `generation`, `intent`, `risk`, `requires_clinician`,
+`draft`, `citations[]` and `validation{ok,kind,reasons,rejected_reasons}` — see
+`contracts/agent/v1/run-result.request.schema.json`.
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 

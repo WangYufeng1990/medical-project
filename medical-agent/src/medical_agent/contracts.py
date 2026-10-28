@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from medical_agent.schemas.result import RunResultRequest
 from medical_agent.schemas.run import ErrorResponse, RunStartRequest, RunStatusResponse
 
-SCHEMA_MODELS: dict[str, type[RunStartRequest | RunStatusResponse | ErrorResponse]] = {
+SCHEMA_MODELS: dict[str, type[RunStartRequest | RunStatusResponse | ErrorResponse
+                         | RunResultRequest]] = {
     "run-start.request.schema.json": RunStartRequest,
     "run-status.response.schema.json": RunStatusResponse,
     "error.response.schema.json": ErrorResponse,
+    "run-result.request.schema.json": RunResultRequest,
 }
 
 

@@ -351,6 +351,39 @@ CREATE TABLE IF NOT EXISTS agent_capability (
     INDEX idx_agent_capability_digest (digest)
 );
 
+-- Round 57.1: the result a worker produced, and the reviewer who claimed it.
+CREATE TABLE IF NOT EXISTS agent_run_result (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    run_id BIGINT NOT NULL,
+    intent VARCHAR(32) NOT NULL,
+    risk VARCHAR(16) NOT NULL,
+    requires_clinician TINYINT NOT NULL DEFAULT 0,
+    draft TEXT NOT NULL,
+    validation_ok TINYINT NOT NULL DEFAULT 0,
+    validation_kind VARCHAR(32) NOT NULL,
+    validation_reasons TEXT,
+    rejected_reasons TEXT,
+    citations_json TEXT,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_run_result_run (run_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_review_claim (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    run_id BIGINT NOT NULL,
+    staff_id BIGINT NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_review_claim_run (run_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,

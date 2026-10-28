@@ -531,11 +531,20 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
                 "SELECT id FROM agent_run WHERE message_id = ?", Long.class, messageId);
     }
 
+    /** The Round 57.1 result contract, minimal but complete. */
     private com.example.medical.module.chat.dto.agent.AgentRunResultRequest resultBody(long generation) {
         com.example.medical.module.chat.dto.agent.AgentRunResultRequest body =
                 new com.example.medical.module.chat.dto.agent.AgentRunResultRequest();
+        body.setContractVersion("v1");
+        com.example.medical.module.chat.dto.agent.AgentRunResultRequest.Validation validation =
+                new com.example.medical.module.chat.dto.agent.AgentRunResultRequest.Validation();
+        validation.setOk(true);
+        validation.setKind("policy_answer");
         body.setGeneration(generation);
-        body.setOutcome("DRAFT_READY");
+        body.setIntent("BILLING");
+        body.setRisk("ROUTINE");
+        body.setDraft("A balance can be paid in instalments.");
+        body.setValidation(validation);
         return body;
     }
 

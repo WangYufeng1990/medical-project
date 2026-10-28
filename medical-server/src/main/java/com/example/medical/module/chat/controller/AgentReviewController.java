@@ -1,0 +1,42 @@
+package com.example.medical.module.chat.controller;
+
+import com.example.medical.common.result.Result;
+import com.example.medical.module.chat.dto.agent.ReviewItemVO;
+import com.example.medical.module.chat.service.AgentReviewService;
+import com.example.medical.security.LoginUser;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+/**
+ * The staff review queue (Round 57.1). A patient never reaches this controller: the role check
+ * refuses them, and the service additionally scopes every item to the reviewer's patients.
+ */
+@RestController
+@RequestMapping("/api/v1/agent/reviews")
+@PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")
+@RequiredArgsConstructor
+public class AgentReviewController {
+
+    private final AgentReviewService reviews;
+
+    @GetMapping
+    public Result<List<ReviewItemVO>> queue(@AuthenticationPrincipal LoginUser user) {
+        boolean admin = user.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+        return Result.ok(reviews.queue(user.getUserId(), admin));
+    }
+
+    @PostMapping("/{runId}/claim")
+    public Result<ReviewItemVO> claim(@AuthenticationPrincipal LoginUser user,
+                                      @PathVariable Long runId) {
+        return Result.ok(reviews.claim(user.getUserId(), runId));
+    }
+}

@@ -36,6 +36,14 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
                                             Pageable pageable);
 
     /**
+     * Every thread that involves one party type (Round 57.1: an ADMIN reviewing all patient
+     * threads). Newest activity first, with the same stable tie-break as the per-party listing.
+     */
+    @Query("SELECT c FROM ChatConversation c WHERE c.partyAType = :type OR c.partyBType = :type "
+            + "ORDER BY c.lastMessageTime DESC, c.id DESC")
+    Page<ChatConversation> findPageForType(@Param("type") String type, Pageable pageable);
+
+    /**
      * Creates the thread when it is missing and counts the message when it is not, in
      * one statement.
      * <p>

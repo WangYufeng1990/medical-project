@@ -1,0 +1,274 @@
+package com.example.medical;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MvcResult;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Round 57.1 — the review queue and who may read it.
+ * <p>
+ * A draft is patient data: a patient token must not read the queue at all, a doctor must not see a
+ * patient outside their scope, and one run is reviewed by one claimant. A message whose agent run
+ * produced nothing stays in the queue as a human-only item, because an AI failure must never take a
+ * question out of human hands.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestPropertySource(properties = {
+        "app.agent.enabled=true",
+        "app.agent.scheduling-enabled=false",
+        "app.agent.inbound-token=test-inbound-token",
+        "app.agent.outbound-token=test-outbound-token",
+        "app.agent.poll-interval-ms=3600000",
+        "app.agent.lease=120s",
+        "app.agent.request-timeout=10s",
+        "app.agent.deadline=30m",
+        "app.agent.capability-ttl=5m",
+})
+class AgentReviewAuthorizationTest extends IntegrationTestSupport {
+
+    private static final HttpServer AGENT_STUB;
+    private static final String BASE_URL;
+    private static final List<String> CAPABILITIES = new CopyOnWriteArrayList<>();
+    private static volatile int stubStatus = 202;
+
+    static {
+        try {
+            AGENT_STUB = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            AGENT_STUB.createContext("/internal/v1/runs", exchange -> {
+                CAPABILITIES.add(exchange.getRequestHeaders().getFirst("X-Agent-Capability"));
+                exchange.getRequestBody().readAllBytes();
+                exchange.sendResponseHeaders(stubStatus, -1);
+                exchange.close();
+            });
+            AGENT_STUB.start();
+            BASE_URL = "http://127.0.0.1:" + AGENT_STUB.getAddress().getPort();
+        } catch (IOException e) {
+            throw new IllegalStateException("could not start the agent stub", e);
+        }
+    }
+
+    @DynamicPropertySource
+    static void agentUrl(DynamicPropertyRegistry registry) {
+        registry.add("app.agent.base-url", () -> BASE_URL);
+    }
+
+    private static final long OTHER_DOCTOR_ID = 99L;
+
+    @Autowired
+    private com.example.medical.module.chat.service.AgentRunService runs;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    private String patientToken;
+    private String doctorToken;
+    private String otherDoctorToken;
+
+    @BeforeAll
+    void authenticate() throws Exception {
+        patientToken = patientLogin("patient1", "patient123");
+        doctorToken = login("doctor1", "doctor123");
+        seedOtherDoctor();
+        otherDoctorToken = login("doctor2", "doctor123");
+    }
+
+    @AfterAll
+    void stop() {
+        AGENT_STUB.stop(0);
+    }
+
+    @BeforeEach
+    void reset() {
+        stubStatus = 202;
+        CAPABILITIES.clear();
+        jdbc.update("DELETE FROM agent_review_claim");
+        jdbc.update("DELETE FROM message");
+        jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM agent_run_result");
+        jdbc.update("DELETE FROM agent_run");
+    }
+
+    // ── authorization ───────────────────────────────────────────────
+
+    @Test
+    void aPatientCannotReadTheReviewQueue() throws Exception {
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aDoctorOutsideThePatientsScopeNeitherSeesNorClaimsTheDraft() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + otherDoctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + otherDoctorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void theReviewingDoctorSeesTheDraftAndIsTheOnlyClaimant() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].runId").value(dispatched.runId()))
+                .andExpect(jsonPath("$.data[0].intent").value("BILLING"))
+                .andExpect(jsonPath("$.data[0].draft").value(
+                        org.hamcrest.Matchers.containsString("instalments")))
+                .andExpect(jsonPath("$.data[0].citations[0].documentId")
+                        .value("billing-and-insurance"))
+                .andExpect(jsonPath("$.data[0].requiresClinician").value(false));
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.claimedBy").value(2))
+                .andExpect(jsonPath("$.data.claimedByMe").value(true));
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + otherDoctorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anAgentFailureKeepsTheMessageAsAHumanOnlyItem() throws Exception {
+        stubStatus = 503;
+        Dispatched dispatched = dispatchedRun("Please help with my bill");
+        // The dispatch failed, so the run is not waiting for review; the message is still owed an
+        // answer and the queue must show it without a draft.
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].draft").doesNotExist())
+                .andExpect(jsonPath("$.data[0].reason").value("RUN_PENDING"));
+    }
+
+    @Test
+    void anAnsweredThreadLeavesTheQueue() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+        sendAsDoctor("We have corrected the invoice.");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────
+
+    private void seedOtherDoctor() {
+        Integer existing = jdbc.queryForObject("SELECT COUNT(*) FROM sys_user WHERE id = ?",
+                Integer.class, OTHER_DOCTOR_ID);
+        if (existing != null && existing > 0) return;
+        jdbc.update("INSERT INTO sys_user (id, username, password, real_name, status, is_deleted, "
+                        + "create_time, update_time, version) VALUES (?,?,?,?,1,0,CURRENT_TIMESTAMP,"
+                        + "CURRENT_TIMESTAMP,0)",
+                OTHER_DOCTOR_ID, "doctor2",
+                passwordEncoder.encode("doctor123"), "Dr. Other");
+        jdbc.update("INSERT INTO sys_user_role (user_id, role_id) VALUES (?,?)",
+                OTHER_DOCTOR_ID, 2L);
+    }
+
+    private Dispatched dispatchedRun(String content) throws Exception {
+        MvcResult sent = mockMvc.perform(post("/api/v1/patient/me/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("receiverId", 2, "content", content)))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long messageId = objectMapper.readTree(sent.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        runs.dispatchDue();
+        Long runId = jdbc.query("SELECT id FROM agent_run WHERE message_id = ?",
+                rs -> rs.next() ? rs.getLong(1) : null, messageId);
+        String capability = CAPABILITIES.isEmpty() ? null : CAPABILITIES.get(CAPABILITIES.size() - 1);
+        return new Dispatched(messageId, runId == null ? 0L : runId, capability);
+    }
+
+    /** Submits the result the worker would submit, so the run reaches WAITING_REVIEW. */
+    private void result(Dispatched dispatched, String intent) throws Exception {
+        assertNotNull(dispatched.runId());
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "contract_version", "v1",
+                                "run_id", dispatched.runId(),
+                                "generation", generation,
+                                "intent", intent,
+                                "risk", "ROUTINE",
+                                "requires_clinician", false,
+                                "draft", "A balance can be paid in instalments by agreement "
+                                        + "[chunk:billing-and-insurance:1:002].\n\n"
+                                        + "Prepared for staff review; not medical advice.",
+                                "citations", List.of(Map.of(
+                                        "chunk_id", "billing-and-insurance:1:002",
+                                        "document_id", "billing-and-insurance",
+                                        "document_version", 1,
+                                        "title", "Billing and insurance policy",
+                                        "heading_path", List.of("Payment plans"),
+                                        "content_hash", "a".repeat(64))),
+                                "validation", Map.of("ok", true, "kind", "policy_answer",
+                                        "reasons", List.of(), "rejected_reasons", List.of()))))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isOk());
+    }
+
+    private void sendAsDoctor(String content) throws Exception {
+        mockMvc.perform(post("/api/v1/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "receiverId", 100, "receiverType", "PATIENT",
+                                "content", content)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+    }
+
+    private record Dispatched(long messageId, long runId, String capability) { }
+}

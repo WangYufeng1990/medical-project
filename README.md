@@ -402,7 +402,10 @@ Round 56 adds an approved, versioned knowledge base under `medical-agent/kb/`: f
 practice-policy documents, a manifest that records who approved each one and its SHA-256, title-aware
 chunks with stable ids, a deterministic embedding baseline, and publish/withdraw with automatic
 deactivation when an approval is withdrawn. The corpus is synthetic on purpose — no third-party text
-and no patient data. A 156-case evaluation set (`medical-agent/evals/`) covers classification,
+and no patient data. Round 57.1 adds the staff review queue: the worker's result (draft, risk, citations, validation) is
+stored by Java and listed at `/api/v1/agent/reviews`, where a reviewer claims a run before acting on
+it; a message the agent could not draft stays in the queue as a human-only item. A 156-case
+evaluation set (`medical-agent/evals/`) covers classification,
 uncertainty, retrieval, citations, validation and the graph; run it with
 `PYTHONPATH=src .venv/bin/python evals/run.py`.
 

@@ -5852,17 +5852,39 @@ citations and validation, which is what Round 56 built.
 **Verification (actually run).** `evals/run.py` → **156/156**; `pytest` → **190 passed** (187 + the
 three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Java unchanged.
 
-## Round 57 — Staff review and safe publication (Pending)
+## Round 57 — Staff review and safe publication (In progress: 57.1 Done, 57.2–57.3 Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 57.1 Review queue | P0 / Pending | Queue/claim/risk/reason/draft/source UI; permit human-only entries without AI draft; original receiver/ADMIN assignment | AgentReviewAuthorizationTest: patients cannot read drafts; unauthorized staff cannot review; AI failure preserves human handling |
+| 57.1 Review queue | P0 / **Done** (2026-10-28) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
+
+### Round 57.1 — Review queue (Done, 2026-10-28)
+
+**What was built.**
+
+| Piece | Behaviour |
+|---|---|
+| Result contract (`contracts/agent/v1/run-result.request.schema.json`) | `contract_version`, `run_id`, `generation`, `intent`, `risk`, `requires_clinician`, `draft` (≤1500), up to 8 citations (chunk id, document, version, title, heading path, 64-hex content hash) and the validator's `{ok, kind, reasons, rejected_reasons}`. Pydantic owns it; Python fixtures and the Java fixture test read the same file |
+| Python submission | `java_client` now sends the whole result (the adopted citations only, so a routing summary carries none), derived from the graph state |
+| Java storage | `agent_run_result` (schema v8) written in the result endpoint, with `validation_reasons`/`rejected_reasons` and the citations stored as JSON in the queue's shape |
+| Review queue | `GET /api/v1/agent/reviews` lists, for each thread where the patient spoke last, an item with the draft, risk, citations and validation; when the run is not `WAITING_REVIEW` or has no result, the item is human-only with `reason` `NO_RUN` / `RUN_FAILED` / `RUN_PENDING` / `NO_RESULT` and `draft: null` |
+| Claim | `POST /api/v1/agent/reviews/{runId}/claim` is exclusive (`agent_review_claim`, unique per run); the same reviewer may re-claim, another gets 409, a doctor outside the scope gets 403 |
+| Authorization | `@PreAuthorize("hasAnyRole('ADMIN','DOCTOR')")` on the controller and `DoctorPatientScope.requireAccess`/`permits` per item, so a patient is refused and a doctor sees only their own patients; ADMIN (unscoped) sees all patient threads |
+
+**Tests (`AgentReviewAuthorizationTest`, 5).** A patient token gets 403; a second doctor with no relationship to patient 100 sees an empty queue and gets 403 on claim; the reviewing doctor sees the run with its draft, `BILLING` intent and the billing citation, claims it, may re-claim, and the other doctor is refused; a staff reply removes the thread from the queue; and a dispatch that fails (503) leaves the message in the queue with `draft: null` and `RUN_PENDING` — the AI failure does not take the question out of human hands.
+
+**Verification (actually run).** `mvn clean verify` → **360 tests, 0 failures, 1 skipped**; the opt-in dual-process test passes (11.0 s) with the new result payload; Python `pytest` → **204 passed**, `ruff` and `mypy --strict` clean (33 source files), `evals/run.py` → 156/156.
+
+**Limits.**
+- The queue shows one item per thread (the last patient message); a thread with several unanswered messages shows only the latest. 57.2's approve flow and 57.3's freshness checks are what make that safe.
+- The claim is a row, not a lease: a claim held by an absent reviewer is not reclaimed yet (57.3's recovery work).
+- Approve/edit/reject and publication are 57.2; nothing in this slice writes to the patient's thread.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

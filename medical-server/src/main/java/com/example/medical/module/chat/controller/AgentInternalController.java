@@ -10,6 +10,7 @@ import com.example.medical.module.chat.agent.AgentServiceToken;
 import com.example.medical.module.chat.dto.agent.AgentRunContextVO;
 import com.example.medical.module.chat.dto.agent.AgentRunResultRequest;
 import com.example.medical.module.chat.entity.AgentRun;
+import com.example.medical.module.chat.service.AgentReviewService;
 import com.example.medical.module.chat.service.AgentRunStateStore;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class AgentInternalController {
     private final PatientPortalAccountState patientAccounts;
     private final PatientLookup patients;
     private final AgentRunStateStore states;
+    private final AgentReviewService reviews;
 
     @GetMapping("/runs/{runId}")
     public Result<AgentRunContextVO> run(@RequestHeader(value = "X-Agent-Service-Token", required = false) String token,
@@ -59,6 +61,7 @@ public class AgentInternalController {
         if (!states.complete(runId, run.getExecutionGeneration())) {
             throw new BusinessException(ResultCode.CONFLICT, "run is no longer accepting a result");
         }
+        reviews.recordResult(run, request);
         capabilities.revoke(runId);
         return Result.ok();
     }

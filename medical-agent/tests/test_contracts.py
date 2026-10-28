@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from medical_agent.contracts import SCHEMA_MODELS, dumps, schema_documents
+from medical_agent.schemas.result import RunResultRequest
 from medical_agent.schemas.run import (
     CONTRACT_VERSION,
     ErrorResponse,
@@ -28,6 +29,7 @@ MODELS = {
     "run-start": RunStartRequest,
     "run-status": RunStatusResponse,
     "error": ErrorResponse,
+    "run-result": RunResultRequest,
 }
 
 

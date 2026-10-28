@@ -1,0 +1,16 @@
+{
+  "contract_version": "v1",
+  "run_id": 41,
+  "generation": 1,
+  "intent": "NOT_AN_INTENT",
+  "risk": "ROUTINE",
+  "requires_clinician": false,
+  "draft": "A balance can be paid in instalments [chunk:billing-and-insurance:1:002].\n\nPrepared for staff review; not medical advice.",
+  "citations": [],
+  "validation": {
+    "ok": true,
+    "kind": "policy_answer",
+    "reasons": [],
+    "rejected_reasons": []
+  }
+}

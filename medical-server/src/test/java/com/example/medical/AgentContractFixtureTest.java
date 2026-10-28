@@ -50,7 +50,7 @@ class AgentContractFixtureTest {
     private static final Set<String> SUPPORTED_KEYWORDS = Set.of(
             "$defs", "$ref", "anyOf", "type", "required", "additionalProperties",
             "enum", "const", "minimum", "exclusiveMinimum", "maximum", "exclusiveMaximum",
-            "minLength", "maxLength", "format",
+            "minLength", "maxLength", "format", "pattern", "items", "maxItems", "minItems",
             // structural/annotation keywords: they carry no assertion of their own
             "properties", "title", "description", "default");
 
@@ -284,8 +284,43 @@ class AgentContractFixtureTest {
         if (value.isTextual()) {
             violations.addAll(checkText(value.asText(), schema, where));
         }
+        if (value.isTextual()) {
+            violations.addAll(checkPattern(value.asText(), schema, where));
+        }
+        if (value.isArray()) {
+            violations.addAll(checkArray(value, schema, root, where));
+        }
         if (value.isObject()) {
             violations.addAll(checkObject(value, schema, root, where));
+        }
+        return violations;
+    }
+
+    /** JSON Schema's pattern is a partial (find) match in the dialects these contracts use. */
+    private List<String> checkPattern(String text, JsonNode schema, String where) {
+        List<String> violations = new ArrayList<>();
+        if (schema.has("pattern")
+                && !java.util.regex.Pattern.compile(schema.path("pattern").asText())
+                .matcher(text).find()) {
+            violations.add(where + ": does not match " + schema.path("pattern").asText());
+        }
+        return violations;
+    }
+
+    private List<String> checkArray(JsonNode value, JsonNode schema, JsonNode root, String where) {
+        List<String> violations = new ArrayList<>();
+        if (schema.has("minItems") && value.size() < schema.path("minItems").asInt()) {
+            violations.add(where + ": fewer than " + schema.path("minItems") + " items");
+        }
+        if (schema.has("maxItems") && value.size() > schema.path("maxItems").asInt()) {
+            violations.add(where + ": more than " + schema.path("maxItems") + " items");
+        }
+        if (schema.has("items")) {
+            JsonNode itemSchema = schema.path("items");
+            for (int index = 0; index < value.size(); index++) {
+                violations.addAll(validate(value.get(index), itemSchema, root,
+                        where + "[" + index + "]"));
+            }
         }
         return violations;
     }

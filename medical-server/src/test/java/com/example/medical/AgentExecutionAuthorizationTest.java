@@ -208,8 +208,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isOk());
@@ -231,8 +230,8 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "generation", dispatched.generation() + 1, "outcome", "DRAFT_READY")))
+                        .content(objectMapper.writeValueAsString(
+                                resultBody(dispatched.generation() + 1)))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isConflict());
@@ -306,8 +305,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
@@ -327,8 +325,7 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "generation", dispatched.generation(), "outcome", "DRAFT_READY")))
+                        .content(objectMapper.writeValueAsString(resultBody(dispatched.generation())))
                         .header("X-Agent-Service-Token", INBOUND_TOKEN)
                         .header("X-Agent-Capability", dispatched.capability()))
                 .andExpect(status().isForbidden());
@@ -349,6 +346,28 @@ class AgentExecutionAuthorizationTest extends IntegrationTestSupport {
 
         assertFalse(written, "the UPDATE must refuse a lease that expired after the check");
         assertEquals("RUNNING", runState(dispatched.runId()));
+    }
+
+    /** A complete result body for the Round 57.1 contract. */
+    private Map<String, Object> resultBody(long generation) {
+        return Map.of(
+                "contract_version", "v1",
+                "run_id", 1,
+                "generation", generation,
+                "intent", "BILLING",
+                "risk", "ROUTINE",
+                "requires_clinician", false,
+                "draft", "A balance can be paid in instalments [chunk:billing-and-insurance:1:002].\n\n"
+                        + "Prepared for staff review; not medical advice.",
+                "citations", List.of(Map.of(
+                        "chunk_id", "billing-and-insurance:1:002",
+                        "document_id", "billing-and-insurance",
+                        "document_version", 1,
+                        "title", "Billing and insurance policy",
+                        "heading_path", List.of("Payment plans"),
+                        "content_hash", "a".repeat(64))),
+                "validation", Map.of("ok", true, "kind", "policy_answer",
+                        "reasons", List.of(), "rejected_reasons", List.of()));
     }
 
     // ── helpers ─────────────────────────────────────────────────────

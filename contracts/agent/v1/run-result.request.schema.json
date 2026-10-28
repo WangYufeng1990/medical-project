@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "CitationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 80,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "document_id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_version": {
+          "exclusiveMinimum": 0,
+          "title": "Document Version",
+          "type": "integer"
+        },
+        "heading_path": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Heading Path",
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "document_version",
+        "title",
+        "heading_path",
+        "content_hash"
+      ],
+      "title": "CitationPayload",
+      "type": "object"
+    },
+    "Intent": {
+      "enum": [
+        "APPOINTMENT",
+        "PRESCRIPTION_REFILL",
+        "BILLING",
+        "LAB_RESULTS",
+        "CLINICAL_QUESTION",
+        "ADMINISTRATIVE_REQUEST",
+        "OTHER"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "RiskLevel": {
+      "enum": [
+        "ROUTINE",
+        "URGENT",
+        "EMERGENCY"
+      ],
+      "title": "RiskLevel",
+      "type": "string"
+    },
+    "ValidationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "rejected_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Rejected Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ok",
+        "kind",
+        "reasons",
+        "rejected_reasons"
+      ],
+      "title": "ValidationPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The result a worker submits for one generation of one run.",
+  "properties": {
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/CitationPayload"
+      },
+      "maxItems": 8,
+      "title": "Citations",
+      "type": "array"
+    },
+    "contract_version": {
+      "const": "v1",
+      "default": "v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "draft": {
+      "maxLength": 1500,
+      "minLength": 1,
+      "title": "Draft",
+      "type": "string"
+    },
+    "generation": {
+      "exclusiveMinimum": 0,
+      "title": "Generation",
+      "type": "integer"
+    },
+    "intent": {
+      "$ref": "#/$defs/Intent"
+    },
+    "requires_clinician": {
+      "title": "Requires Clinician",
+      "type": "boolean"
+    },
+    "risk": {
+      "$ref": "#/$defs/RiskLevel"
+    },
+    "run_id": {
+      "exclusiveMinimum": 0,
+      "title": "Run Id",
+      "type": "integer"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationPayload"
+    }
+  },
+  "required": [
+    "run_id",
+    "generation",
+    "intent",
+    "risk",
+    "requires_clinician",
+    "draft",
+    "citations",
+    "validation"
+  ],
+  "title": "RunResultRequest",
+  "type": "object"
+}
