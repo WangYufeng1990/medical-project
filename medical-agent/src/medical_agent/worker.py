@@ -27,7 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from medical_agent.classification.classifier import Classifier
-from medical_agent.graph.builder import DRAFT_NODE, build_graph
+from medical_agent.graph.builder import DRAFT_NODE, RETRIEVE_NODE, SUBMIT_NODE, build_graph
 from medical_agent.graph.state import RunState
 from medical_agent.java_client import (
     CallCredentials,
@@ -38,6 +38,11 @@ from medical_agent.java_client import (
 from medical_agent.kb.retrieval import Retriever
 from medical_agent.providers.base import Provider
 from medical_agent.schemas.run import RunStartRequest
+
+
+def _validated(values: dict[str, Any]) -> bool:
+    validation = values.get("validation")
+    return isinstance(validation, dict) and validation.get("ok") is True
 
 
 class StaleExecution(RuntimeError):
@@ -98,7 +103,9 @@ class AgentWorker:
             if recorded < request.execution_generation:
                 return self._take_over(request, credentials, values, snapshot.next)
             if snapshot.next:
-                return self._resume_locked(request.run_id, credentials)
+                return self._resume_or_revalidate(
+                    request.run_id, request.execution_generation, values, snapshot.next, credentials
+                )
             if not values.get("draft"):
                 # Nothing computed and nothing pending: recompute rather than pretend.
                 pass
@@ -138,15 +145,19 @@ class AgentWorker:
         """A newer generation continues the checkpoint where it actually stopped."""
         generation = request.execution_generation
         if values.get("draft") and not pending:
-            # The computation finished; only the submission is outstanding.
-            self._schedule_submission(request.run_id, generation)
+            # The computation finished; only the submission is outstanding - unless this
+            # checkpoint predates the validator, in which case drafting and validation run again.
+            if _validated(values):
+                self._schedule_submission(request.run_id, generation)
+            else:
+                self._reenter_at_retrieval(request.run_id, generation)
             return self._resume_locked(request.run_id, credentials)
         if pending:
             # Validation, classification or drafting is still to do: adopt the generation and
             # let the checkpoint's pending node run, rather than declaring the draft complete.
-            self._graph.update_state(self._config(request.run_id),
-                                     {"execution_generation": generation})
-            return self._resume_locked(request.run_id, credentials)
+            return self._resume_or_revalidate(
+                request.run_id, generation, values, pending, credentials
+            )
         # No draft and nothing pending: there is no computed work to keep, so the graph is
         # started again under the new generation.
         token = use_credentials(credentials)
@@ -167,6 +178,35 @@ class AgentWorker:
             )
         finally:
             reset_credentials(token)
+
+    def _resume_or_revalidate(
+        self,
+        run_id: int,
+        generation: int,
+        values: dict[str, Any],
+        pending: tuple[str, ...],
+        credentials: CallCredentials,
+    ) -> RunState:
+        """Resume the pending work, re-entering drafting when the checkpoint was never validated."""
+        if pending == (SUBMIT_NODE,):
+            # Adopt the generation but keep submission as the next step; re-entering at the
+            # draft node is what keeps the pending submit intact. A checkpoint that was never
+            # validated goes back through drafting instead.
+            if _validated(values):
+                self._schedule_submission(run_id, generation)
+            else:
+                self._reenter_at_retrieval(run_id, generation)
+        else:
+            self._graph.update_state(self._config(run_id), {"execution_generation": generation})
+        return self._resume_locked(run_id, credentials)
+
+    def _reenter_at_retrieval(self, run_id: int, generation: int) -> None:
+        """A checkpoint from before validation existed: draft and validate it again."""
+        self._graph.update_state(
+            self._config(run_id),
+            {"execution_generation": generation},
+            as_node=RETRIEVE_NODE,
+        )
 
     def _schedule_submission(self, run_id: int, generation: int) -> None:
         """Re-enter the graph at the draft node, so the next step is the submit node."""

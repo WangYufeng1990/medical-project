@@ -23,6 +23,10 @@ from medical_agent.graph.nodes import (
 from medical_agent.graph.state import RunState
 from medical_agent.kb.retrieval import Retriever
 
+# The nodes a resumed run may need to re-enter (see the worker's legacy-checkpoint path).
+RETRIEVE_NODE = "retrieve_evidence"
+SUBMIT_NODE = "submit_result"
+
 # The node the submission hangs off: re-entering the graph after it runs the submit node
 # again, so a repeated submission is checkpointed rather than performed outside the graph.
 DRAFT_NODE = "draft_reply"

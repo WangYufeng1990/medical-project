@@ -5750,6 +5750,38 @@ substitute for it.
 **Verification (actually run).** `pytest` → **174 passed**; `ruff` clean; `mypy --strict` clean (32
 source files); the opt-in dual-process test passes (10.5 s). Java unchanged.
 
+### Round 56.4 review fixes (second pass, 2026-10-28)
+
+**1. P2 — the safety-notice prefix bypassed every check.** `_claims()` skipped any sentence that
+*started* with "Prepared for staff", so `Prepared for staff review; We accept cryptocurrency
+[chunk:invented:9:9].` was never examined: a fabricated claim and a fabricated citation in one
+sentence. Only an **exact** fixed sentence is exempt now, and citation validity is checked over the
+whole draft rather than only inside extracted claims, so the marker is caught wherever it sits.
+Tests: the payload is refused as `fabricated_citation` plus an unsupported/unexpected claim; the
+real notice still passes.
+
+**2. P2 — the submit guard let missing or partial validation through.** It blocked only
+`ok is False`, so no record, `None`, `{}` and `{"ok": null}` all reached the submit function - and a
+checkpoint written before the validator existed could resume straight to submission. The guard now
+requires an explicit `ok is True`. A legacy checkpoint stopped at submission is **re-entered at the
+retrieval node** so drafting and validation run again, rather than being submitted or blocked
+forever. Tests: five malformed records are refused and a passing one submits; a legacy checkpoint
+resumes, validates and submits exactly once.
+
+**3. P2 — whitespace variants hid a known injection phrase.** `contains_instructions` matched literal
+spaces, so `Ignore\u00a0previous\u00a0instructions` was not detected. The check now runs on a
+whitespace-normalised copy (the original text stays untouched for evidence and audit) and the regex
+matches the normalised form. Tests: NBSP, newline and repeated-space variants are detected, and a
+chunk poisoned with NBSP is dropped as `untrusted_evidence` and never reaches the draft.
+
+**Regression found while fixing (2):** adopting a new generation for a checkpoint whose submission is
+pending must keep that submission next. `update_state(..., as_node=DRAFT_NODE)` does that; a plain
+`update_state` recomputed the next tasks and silently dropped the pending submit. Both the unit
+`[1, 2, 2]` case and the HTTP retry case caught it.
+
+**Verification (actually run).** `pytest` → **186 passed**; `ruff` clean; `mypy --strict` clean (32
+source files); the opt-in dual-process test passes (10.4 s). Java unchanged.
+
 ## Round 57 — Staff review and safe publication (Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.

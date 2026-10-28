@@ -196,9 +196,12 @@ def submit_node(
     submit_result: Callable[[RunState], None],
 ) -> Callable[[RunState], dict[str, object]]:
     def submit(state: RunState) -> dict[str, object]:
-        validation = state.get("validation") or {}
-        if validation.get("ok") is False:
-            raise DraftBlocked("a draft that failed validation must not be submitted")
+        validation = state.get("validation")
+        # Only an explicit ok=True passes. A missing, null, empty or partial record means the
+        # draft was not validated by this build (an old checkpoint, for example), and a draft
+        # nobody validated must not be submitted.
+        if not isinstance(validation, dict) or validation.get("ok") is not True:
+            raise DraftBlocked("a draft without a passing validation must not be submitted")
         submit_result(state)
         return {"submitted_generation": state["execution_generation"]}
 

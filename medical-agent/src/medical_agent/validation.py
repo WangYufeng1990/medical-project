@@ -56,8 +56,13 @@ class Validation:
 
 
 def contains_instructions(text: str) -> bool:
-    """Retrieved text that tries to give the agent orders rather than a policy."""
-    return bool(_INSTRUCTION.search(text))
+    """Retrieved text that tries to give the agent orders rather than a policy.
+
+    The check runs on a whitespace-normalised copy: an instruction written with a non-breaking
+    space or a line break is the same instruction, and the original text stays untouched for the
+    evidence and the audit trail.
+    """
+    return bool(_INSTRUCTION.search(" ".join(text.split())))
 
 
 def cited_chunk_ids(draft: str) -> tuple[str, ...]:
@@ -80,13 +85,15 @@ def validate_draft(draft: str, state: RunState, require_citation: bool) -> Valid
     if any(contains_instructions(str(chunk["text"])) for chunk in evidence):
         reasons.append("untrusted_evidence")
 
+    # Every marker in the draft must be legitimate, whoever wrote it and wherever it sits.
+    for chunk_id in _MARKER.findall(draft):
+        if chunk_id not in known:
+            reasons.append(f"fabricated_citation:{chunk_id}")
+        elif chunk_id not in texts:
+            reasons.append(f"citation_without_evidence:{chunk_id}")
+
     for sentence in _claims(draft):
         identifiers = _MARKER.findall(sentence)
-        for chunk_id in identifiers:
-            if chunk_id not in known:
-                reasons.append(f"fabricated_citation:{chunk_id}")
-            elif chunk_id not in texts:
-                reasons.append(f"citation_without_evidence:{chunk_id}")
         if require_citation:
             if not identifiers:
                 reasons.append(f"missing_citation:{sentence[:40]}")
@@ -130,7 +137,9 @@ def _claims(draft: str) -> list[str]:
     claims: list[str] = []
     for match in _SENTENCE.finditer(draft):
         sentence = match.group(0).strip()
-        if not sentence or sentence in _FIXED or sentence.startswith("Prepared for staff"):
+        # Only an exact fixed sentence is exempt. A sentence that merely starts like the safety
+        # notice is a claim like any other and must be checked.
+        if not sentence or sentence in _FIXED:
             continue
         claims.append(sentence)
     return claims
