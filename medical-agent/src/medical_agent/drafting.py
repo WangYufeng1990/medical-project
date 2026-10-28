@@ -67,7 +67,9 @@ def safe_fallback(state: RunState) -> str:
 
 
 def _first_sentence(text: str) -> str:
-    body = text.split("\n", 1)[-1].strip()
+    # The draft is a message, not a copy of the source layout: collapse the line breaks so the
+    # quoted sentence stays one sentence for the validator.
+    body = " ".join(text.split("\n", 1)[-1].split())
     for separator in (". ", "? ", "! "):
         cut = body.find(separator)
         if cut != -1:

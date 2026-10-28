@@ -50,7 +50,7 @@ RULES: tuple[SafetyRule, ...] = (
     _rule("emergency:bleeding", RiskLevel.EMERGENCY, None,
           r"severe bleeding|bleeding heavily|won'?t stop bleeding"),
     _rule("emergency:self_harm", RiskLevel.EMERGENCY, None,
-          r"suicidal|kill myself|end my life|overdose|took too many pills"),
+          r"suicidal|kill myself|end(ing)? my life|overdose|took too many pills"),
     _rule("emergency:seizure", RiskLevel.EMERGENCY, None,
           r"\bseizure\b|\bunconscious\b|\bpassed out\b"),
     _rule("urgent:infant_fever", RiskLevel.URGENT, None,

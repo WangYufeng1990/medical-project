@@ -40,8 +40,21 @@ _STOPWORDS = frozenset(
 
 
 def tokenize(text: str) -> list[str]:
-    """Content tokens: lowercase words without the small set that carries no topic."""
-    return [token for token in _TOKEN.findall(text.lower()) if token not in _STOPWORDS]
+    """Content tokens: lowercase, stemmed, without the small set that carries no topic.
+
+    The stem is a suffix strip, not a linguistic stemmer: it makes "book"/"booked" and
+    "record"/"records" the same token, which is enough for this baseline and stays deterministic.
+    """
+    return [
+        _stem(token) for token in _TOKEN.findall(text.lower()) if token not in _STOPWORDS
+    ]
+
+
+def _stem(token: str) -> str:
+    for suffix in ("ing", "ed", "es", "s"):
+        if token.endswith(suffix) and len(token) > len(suffix) + 2:
+            return token[: -len(suffix)]
+    return token
 
 
 @dataclass(frozen=True)

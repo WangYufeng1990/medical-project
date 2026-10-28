@@ -402,7 +402,9 @@ Round 56 adds an approved, versioned knowledge base under `medical-agent/kb/`: f
 practice-policy documents, a manifest that records who approved each one and its SHA-256, title-aware
 chunks with stable ids, a deterministic embedding baseline, and publish/withdraw with automatic
 deactivation when an approval is withdrawn. The corpus is synthetic on purpose — no third-party text
-and no patient data.
+and no patient data. A 156-case evaluation set (`medical-agent/evals/`) covers classification,
+uncertainty, retrieval, citations, validation and the graph; run it with
+`PYTHONPATH=src .venv/bin/python evals/run.py`.
 
 Round 55.4 gives the service the intake it was missing: `POST /internal/v1/runs` authenticates
 with that inbound token, requires the per-attempt capability, runs a small LangGraph graph
