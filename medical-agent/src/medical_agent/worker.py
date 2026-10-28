@@ -27,7 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from medical_agent.classification.classifier import Classifier
-from medical_agent.graph.builder import DRAFT_NODE, RETRIEVE_NODE, SUBMIT_NODE, build_graph
+from medical_agent.graph.builder import CLASSIFY_NODE, DRAFT_NODE, SUBMIT_NODE, build_graph
 from medical_agent.graph.state import RunState
 from medical_agent.java_client import (
     CallCredentials,
@@ -201,11 +201,16 @@ class AgentWorker:
         return self._resume_locked(run_id, credentials)
 
     def _reenter_at_retrieval(self, run_id: int, generation: int) -> None:
-        """A checkpoint from before validation existed: draft and validate it again."""
+        """A checkpoint from before validation existed: retrieve, draft and validate again.
+
+        Scheduling from the classification node makes ``retrieve_evidence`` the next step. Using
+        the retrieval node itself would mark it complete and go straight to drafting, which
+        would draft from stale (or no) evidence without the current approval check.
+        """
         self._graph.update_state(
             self._config(run_id),
             {"execution_generation": generation},
-            as_node=RETRIEVE_NODE,
+            as_node=CLASSIFY_NODE,
         )
 
     def _schedule_submission(self, run_id: int, generation: int) -> None:

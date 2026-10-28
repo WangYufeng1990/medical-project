@@ -371,40 +371,93 @@ def test_a_whitespace_poisoned_chunk_never_reaches_the_draft(tmp_path: Path) -> 
     assert state["review_required"] is True
 
 
+def _legacy_checkpoint(
+    worker: AgentWorker, run_id: int, content: str, evidence: list[dict], citations: list[dict]
+) -> None:
+    worker._graph.update_state(  # type: ignore[attr-defined]
+        {"configurable": {"thread_id": f"run-{run_id}"}},
+        {
+            "run_id": run_id, "message_id": run_id * 10, "patient_id": 100,
+            "conversation_revision": 2, "execution_generation": 1, "content": content,
+            "classification": "BILLING", "intents": ["BILLING"], "risk": "ROUTINE",
+            "flags": [], "confidence": 0.9, "requires_clinician": False,
+            "evidence": evidence, "citations": citations, "adopted_citations": [],
+            "draft": "An unvalidated draft.",
+        },
+        as_node="draft_reply",
+    )
+
+
+def _request(run_id: int, content: str) -> RunStartRequest:
+    return RunStartRequest(run_id=run_id, message_id=run_id * 10, patient_id=100,
+                           conversation_revision=2, execution_generation=1, content=content,
+                           request_id=f"req-legacy-{run_id}")
+
+
 def test_a_legacy_checkpoint_at_submission_is_revalidated_before_submitting(tmp_path: Path) -> None:
     # A checkpoint from before the validator existed: the draft exists, submission is pending,
-    # and there is no validation record. Resuming must draft and validate again, not submit.
+    # and no validation record. Resuming must retrieve with the current corpus, draft and
+    # validate again - and it must not call the model again (classification is reuse).
+    knowledge = KnowledgeBase(CORPUS / "manifest.json")
+    version = knowledge.ingest()
+    knowledge.publish(version.id)
+    retriever = Retriever(knowledge.chunks())
+    provider = _CountingProvider()
+    submissions: list[dict] = []
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'legacy.sqlite'}") as checkpointer:
+        worker = AgentWorker(provider, checkpointer, submissions.append, retriever=retriever)
+        _legacy_checkpoint(worker, 71, "Where do I send my bill payment?", [], [])
+        state = worker.process(_request(71, "Where do I send my bill payment?"), credentials())
+
+    assert provider.calls == 0, "the saved classification must be reused, not recomputed"
+    assert state["evidence"], "retrieval must actually run on the resume"
+    assert {chunk["document_id"] for chunk in state["evidence"]} <= {
+        "appointments", "prescription-refills", "billing-and-insurance", "lab-results",
+        "privacy-and-consent",
+    }
+    assert state["adopted_citations"], "and the draft must cite the current policy"
+    assert state["adopted_citations"][0]["document_id"] == "billing-and-insurance"
+    assert state["validation"]["ok"] is True
+    assert len(submissions) == 1, "exactly one submission"
+
+
+def test_a_legacy_checkpoint_with_retired_evidence_is_replaced(tmp_path: Path) -> None:
     knowledge = KnowledgeBase(CORPUS / "manifest.json")
     version = knowledge.ingest()
     knowledge.publish(version.id)
     retriever = Retriever(knowledge.chunks())
     submissions: list[dict] = []
-    path = tmp_path / "legacy.sqlite"
+    retired = [{
+        "chunk_id": "retired-policy:1:000", "document_id": "retired-policy",
+        "text": "Retired policy — old\nPay by cheque only.", "score": 0.5,
+    }]
+    retired_citation = [{
+        "chunk_id": "retired-policy:1:000", "document_id": "retired-policy",
+        "document_version": 1, "title": "Retired policy", "heading_path": ["old"],
+        "content_hash": "0" * 64,
+    }]
 
-    with open_checkpointer(f"sqlite://{path}") as checkpointer:
+    with open_checkpointer(f"sqlite://{tmp_path / 'retired.sqlite'}") as checkpointer:
         worker = AgentWorker(StubProvider(), checkpointer, submissions.append, retriever=retriever)
-        config = {"configurable": {"thread_id": "run-71"}}
-        # Build the legacy state directly: everything drafted, nothing validated.
-        worker._graph.update_state(  # type: ignore[attr-defined]
-            config,
-            {
-                "run_id": 71, "message_id": 710, "patient_id": 100,
-                "conversation_revision": 2, "execution_generation": 1,
-                "content": "Where do I send my bill payment?",
-                "classification": "BILLING", "intents": ["BILLING"], "risk": "ROUTINE",
-                "flags": [], "confidence": 0.9, "requires_clinician": False,
-                "evidence": [], "citations": [], "adopted_citations": [],
-                "draft": "An unvalidated draft.",
-            },
-            as_node="draft_reply",
-        )
-        state = worker.process(
-            RunStartRequest(run_id=71, message_id=710, patient_id=100, conversation_revision=2,
-                            execution_generation=1, content="Where do I send my bill payment?",
-                            request_id="req-legacy-71"),
-            credentials(),
-        )
+        _legacy_checkpoint(worker, 72, "Where do I send my bill payment?",
+                           retired, retired_citation)
+        state = worker.process(_request(72, "Where do I send my bill payment?"), credentials())
 
-    assert state["validation"]["ok"] is True, "the resumed run must validate the draft"
-    assert len(submissions) == 1, "and submit exactly once"
-    assert "stop their medication" not in state["draft"]
+    assert all(chunk["document_id"] != "retired-policy" for chunk in state["evidence"])
+    assert all(citation["document_id"] != "retired-policy" for citation in state["citations"])
+    assert all(citation["document_id"] != "retired-policy"
+               for citation in state["adopted_citations"])
+    assert "retired" not in state["draft"].lower()
+    assert state["validation"]["ok"] is True
+
+
+class _CountingProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def invoke_now(self, request):  # type: ignore[no-untyped-def]
+        self.calls += 1
+        return ProviderResponse(
+            text='{"intents": ["BILLING"], "risk": "ROUTINE", "confidence": 0.9}',
+            provider="stub", model="stub-1", latency_ms=0)

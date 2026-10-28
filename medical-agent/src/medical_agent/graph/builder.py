@@ -24,6 +24,9 @@ from medical_agent.graph.state import RunState
 from medical_agent.kb.retrieval import Retriever
 
 # The nodes a resumed run may need to re-enter (see the worker's legacy-checkpoint path).
+# Scheduling *from* a node's predecessor makes that node run; scheduling from the node itself
+# would declare it finished and skip it.
+CLASSIFY_NODE = "classify_message"
 RETRIEVE_NODE = "retrieve_evidence"
 SUBMIT_NODE = "submit_result"
 

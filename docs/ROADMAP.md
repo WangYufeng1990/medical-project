@@ -5782,6 +5782,24 @@ pending must keep that submission next. `update_state(..., as_node=DRAFT_NODE)` 
 **Verification (actually run).** `pytest` → **186 passed**; `ruff` clean; `mypy --strict` clean (32
 source files); the opt-in dual-process test passes (10.4 s). Java unchanged.
 
+### Round 56.4 review fixes (third pass, 2026-10-28)
+
+**P2 — "re-enter at the retrieval node" actually skipped retrieval.** `update_state(..., as_node=
+RETRIEVE_NODE)` marks that node *finished*, so the graph went straight to drafting: a legacy
+checkpoint with no evidence produced the no-policy reply even when the corpus held the policy, and a
+checkpoint holding a withdrawn chunk drafted from it without the current approval check. The resume
+now schedules from the classification node, which makes `retrieve_evidence` the **next** step, keeps
+the saved classification (no extra model call) and replaces stale evidence with what the current
+corpus returns.
+
+Tests: a legacy checkpoint with empty evidence resumes, retrieves, adopts the current billing chunk
+(`adopted_citations[0].document_id == "billing-and-insurance"`), validates and submits once, with the
+provider call count at **zero**; a legacy checkpoint holding `retired-policy` evidence is replaced -
+no retired document survives in `evidence`, `citations`, `adopted_citations` or the draft.
+
+**Verification (actually run).** `pytest` → **187 passed**; `ruff` clean; `mypy --strict` clean (32
+source files); the opt-in dual-process test passes (11.2 s). Java unchanged.
+
 ## Round 57 — Staff review and safe publication (Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
