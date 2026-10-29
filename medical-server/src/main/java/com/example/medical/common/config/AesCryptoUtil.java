@@ -213,6 +213,25 @@ public class AesCryptoUtil {
      * (Review III C2). Unversioned data is tried against PREVIOUS_KEY first
      * (if rotation is active), then CURRENT_KEY.
      */
+    /**
+     * Whether a stored value is versioned ciphertext (Round 57.2 review). The backfill needs to
+     * tell "written before this column was encrypted" from "already migrated", and a second pass
+     * must not encrypt a value twice. A plaintext draft or reason is prose, not hex with a version
+     * byte, so this is a property check, not a guess based on decryption failure.
+     */
+    public static boolean isCiphertext(String value) {
+        if (value == null || value.isEmpty() || value.length() % 2 != 0) return false;
+        byte[] bytes;
+        try {
+            bytes = hexToBytes(value);
+        } catch (RuntimeException notHex) {
+            return false;
+        }
+        // GCM_TAG_LENGTH is in bits; the tag occupies 16 bytes.
+        return bytes.length >= GCM_IV_LENGTH + (GCM_TAG_LENGTH / 8) + 1
+                && bytes[0] == VERSION_CURRENT;
+    }
+
     public static String decrypt(String cipherHex) {
         if (cipherHex == null) return null;
         try {

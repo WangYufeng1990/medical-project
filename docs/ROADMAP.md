@@ -5859,7 +5859,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
-| 57.2 Approve/edit/reject | P0 / **In progress** (2026-10-29; review fixes applied, awaiting re-review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
+| 57.2 Approve/edit/reject | P0 / **In progress** (2026-10-29; encryption fixes applied, awaiting re-review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
@@ -6017,6 +6017,41 @@ staff line is stripped: `{}` and a resubmitted identical body are `edited: false
 
 **Verification (actually run).** `mvn clean verify` → **379 tests, 0 failures, 1 skipped**; the
 opt-in dual-process test passes (11.4 s before these changes; the Python side is untouched).
+
+### Round 57.2 review fixes, second round (2026-10-29)
+
+**1. P1 — existing plaintext was not migrated.** Adding the converters made the previous `draft`,
+`final_text` and `reason` values read as ciphertext, i.e. `[DECRYPT_FAILED]`, and the new-DB tests
+could not see it. `AgentTextEncryptionBackfill` runs at startup and encrypts non-ciphertext values in
+those three columns through raw SQL (JPA would encrypt on the way in). `AesCryptoUtil.isCiphertext`
+decides by shape — hex, at least IV+tag+version bytes, version byte 0x01 — not by "decryption
+failed", so a second start migrates nothing. Test: plaintext rows inserted through raw SQL return the
+failure placeholder through the converter, the backfill restores the original text, the raw value no
+longer contains it, and a second pass migrates 0 rows.
+
+**2. P1 — the new encrypted columns were missing from key rotation.** `agent_run_result.draft`,
+`agent_review_decision.final_text` and `agent_review_decision.reason` were absent from
+`KeyRotationService.ENCRYPTED_COLUMNS`, so a rotation could report success while those values still
+depended on the old key. They are added, and `EncryptedColumnCoverageTest` scans every `@Entity` for
+`@Convert(AesAttributeConverter)` fields and fails when any `table.column` is missing from the
+rotation list (it asserts the scan found more than 30 columns, so a broken scan cannot pass
+vacuously).
+
+**3. P2 — the v11 type change never ran.** The guard only executed a step's DDL when the column was
+missing, so an existing `reason VARCHAR(500)` skipped the ALTER and v11 was recorded anyway. Steps
+now carry a `retype` flag: those are verified by **capacity** (a CLOB/TEXT or length ≥ 4000) and the
+ALTER runs only when the column is too narrow; `stepApplied` requires the wide type before the
+version is recorded. Test: a probe database at v10 with `reason VARCHAR(500)` is upgraded, a
+1058-character value (the measured ciphertext of 500 ASCII characters) is stored and read back, and
+v11 is recorded; the live schema is TEXT, and a 500-character rejection reason is accepted and
+decrypted through the converter.
+
+**Verification (actually run).** `mvn clean verify` → **383 tests, 0 failures, 1 skipped**.
+
+**Limits.** The v10→v11 type change is exercised on a probe database (the real migration path for an
+existing database); the H2 ALTER syntax is dev-guard-only, and MySQL applies `schema.sql` by hand as
+the guard's message says. The backfill covers exactly the three columns this slice added — it is not
+a general plaintext sweep.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

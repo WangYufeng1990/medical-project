@@ -78,6 +78,12 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private com.example.medical.module.chat.service.AgentTextEncryptionBackfill backfill;
+
+    private final com.example.medical.common.config.AesAttributeConverter converter =
+            new com.example.medical.common.config.AesAttributeConverter();
+
     private String patientToken;
     private String doctorToken;
 
@@ -352,6 +358,56 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
         assertFalse(storedFinal.contains(marker), "the final text must be ciphertext");
         assertTrue(com.example.medical.common.config.AesCryptoUtil.decrypt(storedFinal)
                 .contains(marker));
+    }
+
+    @Test
+    void plaintextRowsFromBeforeEncryptionAreMigratedOnce() {
+        jdbc.update("INSERT INTO agent_run_result (id, run_id, intent, risk, requires_clinician, "
+                        + "draft, validation_ok, validation_kind) "
+                        + "VALUES (900, 901, 'BILLING', 'ROUTINE', 0, 'Legacy plaintext draft', 1, "
+                        + "'policy_answer')");
+        jdbc.update("INSERT INTO agent_review_decision (id, run_id, decision, final_text, reason, "
+                        + "actor_id, edited) VALUES (900, 901, 'REJECTED', NULL, 'Legacy reason', 2, 0)");
+
+        // Before the backfill the converter returns the failure placeholder, which is the bug.
+        assertEquals("[DECRYPT_FAILED]", converter.convertToEntityAttribute("Legacy plaintext draft"));
+
+        assertEquals(2, backfill.encryptColumn("agent_run_result", "draft")
+                + backfill.encryptColumn("agent_review_decision", "reason"));
+
+        // The entity path returns the original text again, and the raw row is no longer plaintext.
+        assertEquals("Legacy plaintext draft", converter.convertToEntityAttribute(
+                jdbc.queryForObject("SELECT draft FROM agent_run_result WHERE id = 900", String.class)));
+        assertEquals("Legacy reason", converter.convertToEntityAttribute(
+                jdbc.queryForObject("SELECT reason FROM agent_review_decision WHERE id = 900",
+                        String.class)));
+        assertFalse(jdbc.queryForObject("SELECT draft FROM agent_run_result WHERE id = 900",
+                String.class).contains("Legacy"));
+        assertFalse(jdbc.queryForObject("SELECT reason FROM agent_review_decision WHERE id = 900",
+                String.class).contains("Legacy"));
+
+        // A second pass must not encrypt twice.
+        assertEquals(0, backfill.encryptColumn("agent_run_result", "draft")
+                + backfill.encryptColumn("agent_review_decision", "reason"));
+        assertEquals("Legacy plaintext draft", converter.convertToEntityAttribute(
+                jdbc.queryForObject("SELECT draft FROM agent_run_result WHERE id = 900", String.class)));
+    }
+
+    @Test
+    void aFiveHundredCharacterRejectionReasonIsEncryptedAndReadable() throws Exception {
+        Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
+        String reason = "a".repeat(500);
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", reason)))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        assertEquals(reason, converter.convertToEntityAttribute(jdbc.queryForObject(
+                "SELECT reason FROM agent_review_decision WHERE run_id = ?", String.class,
+                dispatched.runId())));
     }
 
     // ── helpers ─────────────────────────────────────────────────────

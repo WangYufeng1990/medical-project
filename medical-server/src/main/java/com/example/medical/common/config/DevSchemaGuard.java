@@ -77,9 +77,13 @@ public class DevSchemaGuard implements CommandLineRunner {
             new UpgradeStep(8, "agent_run_result", null, null, null, null),
             new UpgradeStep(9, "agent_review_claim", null, null, null, null),
             new UpgradeStep(10, "agent_review_decision", null, null, null, null),
-            // v11: the reason is encrypted now, so it needs room for ciphertext.
+            // v11: the reason is encrypted now, so it needs room for ciphertext. This is a type
+            // change on a column that already exists, so it is checked by capacity, not existence:
+            // the old model would have skipped the DDL because the column was there and recorded
+            // the version anyway (Round 57.2 review).
             new UpgradeStep(11, "agent_review_decision", "reason",
-                    "ALTER TABLE agent_review_decision ALTER COLUMN reason SET DATA TYPE TEXT", null, null));
+                    "ALTER TABLE agent_review_decision ALTER COLUMN reason SET DATA TYPE TEXT",
+                    null, null, true));
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;
@@ -171,7 +175,14 @@ public class DevSchemaGuard implements CommandLineRunner {
      * two are never applied as one all-or-nothing group.
      */
     private void applyMissingParts(UpgradeStep step) {
-        if (step.column() != null && step.columnDdl() != null && !columnExists(step.table(), step.column())) {
+        if (step.retype()) {
+            // The column exists, so "missing" is a capacity question: a VARCHAR(500) cannot hold
+            // the ciphertext of a 500-character reason.
+            if (columnExists(step.table(), step.column()) && !columnIsWide(step.table(), step.column())) {
+                jdbcTemplate.execute(step.columnDdl());
+            }
+        } else if (step.column() != null && step.columnDdl() != null
+                && !columnExists(step.table(), step.column())) {
             jdbcTemplate.execute(step.columnDdl());
         }
         if (step.index() != null && step.indexDdl() != null && !indexExists(step.table(), step.index())) {
@@ -182,7 +193,31 @@ public class DevSchemaGuard implements CommandLineRunner {
     private boolean stepApplied(UpgradeStep step) {
         return tableExists(step.table())
                 && (step.column() == null || columnExists(step.table(), step.column()))
+                && (!step.retype() || columnIsWide(step.table(), step.column()))
                 && (step.index() == null || indexExists(step.table(), step.index()));
+    }
+
+    /**
+     * Whether the column can hold ciphertext: a character large object, or a length of at least
+     * 4000. H2's TEXT is a CLOB; the length of a CLOB is not reported, hence the type check.
+     */
+    private boolean columnIsWide(String table, String column) {
+        try {
+            return Boolean.TRUE.equals(jdbcTemplate.query(
+                    "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
+                            + "WHERE TABLE_SCHEMA = CURRENT_SCHEMA() AND UPPER(TABLE_NAME) = UPPER(?) "
+                            + "AND UPPER(COLUMN_NAME) = UPPER(?)",
+                    rs -> {
+                        if (!rs.next()) return Boolean.FALSE;
+                        String type = rs.getString(1) == null ? "" : rs.getString(1).toUpperCase();
+                        long length = rs.getLong(2);
+                        return type.contains("CLOB") || type.contains("TEXT")
+                                || type.contains("LARGEOBJECT") || length >= 4000;
+                    }, table, column));
+        } catch (RuntimeException unreadable) {
+            log.warn("could not read the type of {}.{}", table, column, unreadable);
+            return false;
+        }
     }
 
     private void record(int version) {
@@ -266,7 +301,14 @@ public class DevSchemaGuard implements CommandLineRunner {
 
     /** One upgrade: the version it produces, what it needs, and the DDL for each part. */
     private record UpgradeStep(int version, String table, String column, String columnDdl,
-                               String index, String indexDdl) {
+                               String index, String indexDdl, boolean retype) {
+
+        /** Add-column steps keep the six-argument form. */
+        UpgradeStep(int version, String table, String column, String columnDdl, String index,
+                    String indexDdl) {
+            this(version, table, column, columnDdl, index, indexDdl, false);
+        }
+
 
         String describe() {
             StringBuilder what = new StringBuilder("table '" + table + "'");

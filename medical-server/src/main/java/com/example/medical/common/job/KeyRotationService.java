@@ -57,6 +57,9 @@ public class KeyRotationService {
             new TableColumn("sys_user", "state_license_number"),
             new TableColumn("sys_user", "dea_number"),
             new TableColumn("message", "content"),
+            new TableColumn("agent_run_result", "draft"),
+            new TableColumn("agent_review_decision", "final_text"),
+            new TableColumn("agent_review_decision", "reason"),
             new TableColumn("bill", "insurance_claim_number"),
             new TableColumn("prescription", "diagnosis"),
             new TableColumn("prescription", "icd10_codes"),
@@ -285,6 +288,19 @@ public class KeyRotationService {
     }
 
     // ── types ──
+
+    /**
+     * The rotation list, as {@code table.column}, for the guard test that failed to exist before
+     * Round 57.2: a column encrypted by a converter but missing here would keep working until the
+     * old key is removed, and then silently stop being readable.
+     */
+    public static java.util.Set<String> encryptedColumnNames() {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (TableColumn column : ENCRYPTED_COLUMNS) {
+            names.add(column.table() + "." + column.column());
+        }
+        return names;
+    }
 
     record TableColumn(String table, String column) {}
     record RowData(long id, String ciphertext) {}

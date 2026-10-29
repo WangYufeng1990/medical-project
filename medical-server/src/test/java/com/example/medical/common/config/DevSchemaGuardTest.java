@@ -114,6 +114,40 @@ class DevSchemaGuardTest {
     }
 
     @Test
+    void retypesAnExistingColumnSoCiphertextFits() {
+        // A v10 database whose reason column is VARCHAR(500): the encrypted form of a 500-character
+        // reason is longer than that, so v11 has to change the type, not just record itself.
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:retype-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate probe = new JdbcTemplate(dataSource);
+        probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, "
+                + "version INT NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                + "PRIMARY KEY (id))");
+        probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_capability (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run_result (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_claim (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_decision (id BIGINT NOT NULL PRIMARY KEY, "
+                + "reason VARCHAR(500))");
+        probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, "
+                + "sender_id BIGINT NOT NULL, sender_type VARCHAR(10) NOT NULL, "
+                + "receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
+                + "PRIMARY KEY (id))");
+        probe.update("INSERT INTO schema_version (version) VALUES (10)");
+
+        new DevSchemaGuard(probe, "jdbc:h2:mem:retype-upgrade").run();
+
+        // The reviewer's measurement: 500 ASCII characters encrypt to 1058 characters.
+        String wide = "a".repeat(1058);
+        probe.update("INSERT INTO agent_review_decision (id, reason) VALUES (1, ?)", wide);
+        assertEquals(wide, probe.queryForObject(
+                "SELECT reason FROM agent_review_decision WHERE id = 1", String.class));
+        assertEquals(11, probe.queryForObject(
+                "SELECT MAX(version) FROM schema_version", Integer.class));
+    }
+
+    @Test
     void finishesAPartiallyAppliedStep() {
         // An upgrade interrupted after the column was added leaves the version at 4
         // with no index. The next start must create the index, not re-add the column.
