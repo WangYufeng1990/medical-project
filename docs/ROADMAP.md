@@ -5852,13 +5852,13 @@ citations and validation, which is what Round 56 built.
 **Verification (actually run).** `evals/run.py` → **156/156**; `pytest` → **190 passed** (187 + the
 three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Java unchanged.
 
-## Round 57 — Staff review and safe publication (In progress: 57.1 in re-review, 57.2–57.3 Pending)
+## Round 57 — Staff review and safe publication (In progress: 57.1 Done, 57.2–57.3 Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 57.1 Review queue | P0 / **In progress** (2026-10-29; second review round applied, awaiting re-review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
+| 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
@@ -5944,8 +5944,8 @@ a successful claim answers with the path's `runId`.
 `reasons` and `rejectedReasons` were initialised to empty lists, so a body that omitted them passed
 Bean Validation (only an explicit null was refused) while the shared schema and the Python model
 require them. The initialisers are gone: omission and `[]` are now distinguishable, and the endpoint
-tests omit each of the four in turn — every one is 400 with the run unchanged and no result row,
-while explicit `[]` remains valid.
+tests omit each of the four **separately** (citations, heading_path, reasons, rejected_reasons) —
+each one alone is 400 with the run unchanged and no result row, while explicit `[]` remains valid.
 
 **3. Race test tightened.** The two-reviewer race used a doctor without the patient in scope, so a
 403 satisfied it. It now races doctor1 against ADMIN — two reviewers who are both allowed — and
@@ -5955,6 +5955,19 @@ two racers.
 **Verification (actually run).** `mvn clean verify` → **369 tests, 0 failures, 1 skipped**; the
 opt-in dual-process test passes (11.0 s); Python `pytest` → 204 passed, `ruff` and `mypy --strict`
 clean (33 source files), evaluation set 156/156.
+
+### Round 57.1 acceptance (2026-10-29)
+
+Accepted after review. The reviewer's isolated probes confirmed: a claim whose target has been
+answered or replaced is refused with no claim row written; a successful claim answers for the run in
+the path; concurrent claims by the same reviewer both succeed with one row; two legitimate reviewers
+produce one success and one conflict; and the four required collections no longer default to an empty
+list. One non-blocking test refinement was applied afterwards: the two validation lists are now
+omitted in separate requests, so each `@NotNull` is locked by its own case.
+
+**Handed to 57.3.** Claim-time freshness is not publication-time freshness. 57.3 must re-check the
+conversation and result versions **inside** the approve-and-publish transaction, because a message
+can arrive between the claim and the approval; nothing in 57.1 substitutes for that check.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

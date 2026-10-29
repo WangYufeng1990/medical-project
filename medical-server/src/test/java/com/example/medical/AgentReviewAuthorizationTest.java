@@ -423,8 +423,14 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
                 .andExpect(status().isBadRequest());
 
         java.util.Map<String, Object> noReasons = body(runId, generation, List.of());
-        noReasons.put("validation", java.util.Map.of("ok", true, "kind", "policy_answer"));
+        noReasons.put("validation", java.util.Map.of("ok", true, "kind", "policy_answer",
+                "rejected_reasons", List.of()));
         postResult(url, noReasons, capability).andExpect(status().isBadRequest());
+
+        java.util.Map<String, Object> noRejected = body(runId, generation, List.of());
+        noRejected.put("validation", java.util.Map.of("ok", true, "kind", "policy_answer",
+                "reasons", List.of()));
+        postResult(url, noRejected, capability).andExpect(status().isBadRequest());
 
         assertEquals("RUNNING", jdbc.queryForObject(
                 "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
