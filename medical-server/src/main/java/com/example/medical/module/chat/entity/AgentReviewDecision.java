@@ -1,7 +1,9 @@
 package com.example.medical.module.chat.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.Data;
@@ -28,10 +30,14 @@ public class AgentReviewDecision extends BaseEntity {
     @Column(name = "decision", length = 16)
     private String decision;
 
+    // The published reply is patient data: it is encrypted at rest like message.content, so the
+    // decision table cannot become a plaintext copy of the thread (Round 57.2 review).
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "final_text", columnDefinition = "TEXT")
     private String finalText;
 
-    @Column(name = "reason", length = 500)
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "reason", columnDefinition = "TEXT")
     private String reason;
 
     @Column(name = "actor_id")

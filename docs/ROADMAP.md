@@ -5859,7 +5859,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
-| 57.2 Approve/edit/reject | P0 / **Done** (2026-10-29) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
+| 57.2 Approve/edit/reject | P0 / **In progress** (2026-10-29; review fixes applied, awaiting re-review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
@@ -5988,6 +5988,35 @@ can arrive between the claim and the approval; nothing in 57.1 substitutes for t
 - Publishing does **not** re-check freshness: a message can arrive between claim and approval and the reply still attaches to the thread. 57.3 must re-check the conversation inside the approve transaction; this slice deliberately does not claim it.
 - The reply is attributed to the thread's clinician, not the approving ADMIN; the human who decided is recorded in `agent_review_decision.actor_id`. 57.3/57.4 should surface that attribution in the audit view.
 - Approve/reject are not exposed in the UI yet.
+
+### Round 57.2 review fixes (2026-10-29)
+
+**1. P1 — a decision could bypass the claim.** `approve`/`reject` checked the patient scope and the
+run state but not `agent_review_claim`, so a colleague with the patient in scope could decide over
+the head of the reviewer who had taken the run — exactly what 57.1's exclusive claim promised to
+prevent. Both decision paths now require a claim owned by the caller: no claim is a 409 ("claim the
+run before deciding"), another reviewer's claim is a 409, and the claimant proceeds. Tests: an
+unclaimed run cannot be approved; a doctor claims and ADMIN's approve **and** reject are both 409
+with the state, decision table and thread unchanged; the claimant then approves successfully. The
+existing six tests claim first.
+
+**2. P2 — the decision table kept plaintext patient text.** The published reply was encrypted in
+`message.content` and then stored verbatim in `agent_review_decision.final_text`; the rejection
+reason was plain too. Both now use the existing `AesAttributeConverter`, and the stored draft in
+`agent_run_result` — the same class of data — was encrypted as well. `agent_review_decision.reason`
+is `TEXT` so ciphertext fits; schema v11 widens an already-created column (the dev guard runs
+`ALTER COLUMN … SET DATA TYPE`, and MySQL users apply the schema by hand as the guard states). Test:
+a synthetic marker in the rejection reason and in an approved edit is absent from the raw SQL value
+and is returned by the decryptor, i.e. the entity/API round-trip still works.
+
+**3. P2 — an unedited approval was recorded as an edit.** `edited` compared the patient-visible text
+with the original draft, so the notice handling alone (staff line stripped, patient notice appended)
+made every approval an edit. It now compares the human-supplied text with the draft body after the
+staff line is stripped: `{}` and a resubmitted identical body are `edited: false`, a changed body is
+`true`. Tests cover both directions.
+
+**Verification (actually run).** `mvn clean verify` → **379 tests, 0 failures, 1 skipped**; the
+opt-in dual-process test passes (11.4 s before these changes; the Python side is untouched).
 
 ## Round 58 — Read-only appointment tools (Pending)
 

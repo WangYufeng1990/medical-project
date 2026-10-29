@@ -1,7 +1,9 @@
 package com.example.medical.module.chat.entity;
 
 import com.example.medical.common.base.BaseEntity;
+import com.example.medical.common.config.AesAttributeConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.Data;
@@ -34,6 +36,8 @@ public class AgentRunResult extends BaseEntity {
     @Column(name = "requires_clinician")
     private Boolean requiresClinician;
 
+    // Same rule as the decision text: the draft contains patient content, so it is encrypted.
+    @Convert(converter = AesAttributeConverter.class)
     @Column(name = "draft", columnDefinition = "TEXT")
     private String draft;
 

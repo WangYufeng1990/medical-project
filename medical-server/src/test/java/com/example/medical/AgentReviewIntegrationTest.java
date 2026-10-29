@@ -106,6 +106,7 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Test
     void anApprovedDraftIsPublishedOnceAndRecordsTheDraftAndTheSender() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
 
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -127,8 +128,10 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
         assertEquals(2L, ((Number) decision.get("actor_id")).longValue());
         assertNotNull(decision.get("published_message_id"));
         // The staff-facing line must not reach the patient, and the patient-facing one must.
-        assertFalse(((String) decision.get("final_text")).contains("Prepared for staff review"));
-        assertTrue(((String) decision.get("final_text")).contains("Nothing sent here is medical advice until a clinician has reviewed it"));
+        String finalText = com.example.medical.common.config.AesCryptoUtil.decrypt(
+                (String) decision.get("final_text"));
+        assertFalse(finalText.contains("Prepared for staff review"));
+        assertTrue(finalText.contains("Nothing sent here is medical advice until a clinician has reviewed it"));
 
         assertEquals(1, countStaffMessages(100));
         assertEquals(1, jdbc.queryForObject(
@@ -139,6 +142,7 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Test
     void theEditedTextIsWhatThePatientReceives() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
         String edit = "Thanks for flagging this - the billing office will call you today.";
 
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
@@ -153,14 +157,15 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
         assertFalse(published.contains("Prepared for staff review"));
         assertTrue(published.contains("Nothing sent here is medical advice until a clinician has reviewed it"));
         // The original draft is still there for the record.
-        assertTrue(jdbc.queryForObject(
+        assertTrue(com.example.medical.common.config.AesCryptoUtil.decrypt(jdbc.queryForObject(
                 "SELECT draft FROM agent_run_result WHERE run_id = ?", String.class,
-                dispatched.runId()).contains("instalments"));
+                dispatched.runId())).contains("instalments"));
     }
 
     @Test
     void concurrentApprovalsPublishExactlyOneReply() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
         java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
         List<Integer> statuses;
@@ -183,6 +188,7 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Test
     void aRejectedDraftStaysActionableForAHuman() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
 
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/reject")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -218,6 +224,7 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Test
     void aDecisionOnARunThatIsNotWaitingIsRefused() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/reject")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("reason", "no")))
@@ -235,12 +242,116 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     @Test
     void aPatientCannotDecide() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
 
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}")
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anUnclaimedRunCannotBeDecided() throws Exception {
+        Dispatched dispatched = ready("My invoice looks wrong");
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict());
+
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(0, countStaffMessages(100));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_decision WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
+    void aColleagueCannotDecideOverTheClaimant() throws Exception {
+        Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "no")))
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isConflict());
+
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));
+        assertEquals(0, countStaffMessages(100));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_decision WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+
+        // The claimant still can.
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void approvingWithoutAChangeIsNotAnEdit() throws Exception {
+        Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.edited").value(false));
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT edited FROM agent_review_decision WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
+    void theDecisionTableDoesNotStorePatientTextInTheClear() throws Exception {
+        Dispatched dispatched = ready("My invoice looks wrong");
+        claim(dispatched.runId());
+        String marker = "Zxqv-sensitive-marker";
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("reason", marker + " needs a human")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        String storedReason = jdbc.queryForObject(
+                "SELECT reason FROM agent_review_decision WHERE run_id = ?", String.class,
+                dispatched.runId());
+        assertFalse(storedReason.contains(marker), "the stored reason must be ciphertext");
+        assertTrue(com.example.medical.common.config.AesCryptoUtil.decrypt(storedReason)
+                .contains(marker));
+
+        // And the approved text is encrypted too.
+        Dispatched second = ready("My invoice looks wrong");
+        claim(second.runId());
+        mockMvc.perform(post("/api/v1/agent/reviews/" + second.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("finalText", marker + " will call you")))
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+        String storedFinal = jdbc.queryForObject(
+                "SELECT final_text FROM agent_review_decision WHERE run_id = ?", String.class,
+                second.runId());
+        assertFalse(storedFinal.contains(marker), "the final text must be ciphertext");
+        assertTrue(com.example.medical.common.config.AesCryptoUtil.decrypt(storedFinal)
+                .contains(marker));
     }
 
     // ── helpers ─────────────────────────────────────────────────────
@@ -269,6 +380,13 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
         return jdbc.queryForObject(
                 "SELECT COUNT(*) FROM message WHERE receiver_id = ? AND sender_type = 'STAFF'",
                 Integer.class, patientId);
+    }
+
+    /** Claims the run as the reviewing doctor, which every decision now requires. */
+    private void claim(long runId) throws Exception {
+        mockMvc.perform(post("/api/v1/agent/reviews/" + runId + "/claim")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
     }
 
     private Dispatched ready(String content) throws Exception {

@@ -390,7 +390,7 @@ CREATE TABLE IF NOT EXISTS agent_review_decision (
     run_id BIGINT NOT NULL,
     decision VARCHAR(16) NOT NULL,
     final_text TEXT,
-    reason VARCHAR(500),
+    reason TEXT,
     actor_id BIGINT NOT NULL,
     published_message_id BIGINT,
     edited TINYINT NOT NULL DEFAULT 0,

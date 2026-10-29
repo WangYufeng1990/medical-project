@@ -135,6 +135,7 @@ public class AgentReviewService {
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
         scope.requireAccess(run.getPatientId());
         requireWaitingForReview(run);
+        requireClaimedBy(runId, reviewerId);
 
         AgentRunResult result = results.findByRunId(runId)
                 .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
@@ -147,8 +148,11 @@ public class AgentReviewService {
         if (base == null || base.isBlank()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "the approved text is empty");
         }
+        // "Edited" is about the human's text, not about the fixed notice handling: approving {} and
+        // submitting the draft body unchanged are both unedited (Round 57.2 review).
+        boolean edited = finalText != null
+                && !finalText.strip().equals(stripStaffNotice(result.getDraft()));
         String content = withPatientNotice(base);
-        boolean edited = !content.equals(result.getDraft());
 
         com.example.medical.module.chat.dto.MessageVO published = chat.deliverAs(
                 new Party(ChatService.STAFF, staffId), patientId, ChatService.PATIENT, content,
@@ -187,6 +191,7 @@ public class AgentReviewService {
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
         scope.requireAccess(run.getPatientId());
         requireWaitingForReview(run);
+        requireClaimedBy(runId, reviewerId);
 
         run.setState(AgentRunState.REJECTED.name());
         runs.save(run);
@@ -206,6 +211,21 @@ public class AgentReviewService {
         return vo;
     }
 
+    /**
+     * The claim is the reviewer's ownership of the decision (Round 57.2 review): without it any
+     * colleague with the patient in scope could decide over the head of the person who took the
+     * run, which is exactly what 57.1's exclusive claim promised to prevent.
+     */
+    private void requireClaimedBy(Long runId, Long reviewerId) {
+        AgentReviewClaim claim = claims.findByRunId(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "claim the run before deciding"));
+        if (!claim.getStaffId().equals(reviewerId)) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "run is claimed by another reviewer");
+        }
+    }
+
     private void requireWaitingForReview(AgentRun run) {
         if (!AgentRunState.WAITING_REVIEW.name().equals(run.getState())) {
             throw new BusinessException(ResultCode.CONFLICT, "run is not waiting for review");
@@ -214,12 +234,17 @@ public class AgentReviewService {
 
     /** The staff line is stripped and the patient-facing notice is ensured exactly once. */
     private String withPatientNotice(String text) {
-        String body = text.strip();
-        if (body.endsWith(STAFF_NOTICE)) {
-            body = body.substring(0, body.length() - STAFF_NOTICE.length()).strip();
-        }
+        String body = stripStaffNotice(text);
         if (!body.contains(SafetyNoticeService.RESPONSE_NOTICE)) {
             return body + "\n\n" + SafetyNoticeService.RESPONSE_NOTICE;
+        }
+        return body;
+    }
+
+    private static String stripStaffNotice(String text) {
+        String body = text == null ? "" : text.strip();
+        if (body.endsWith(STAFF_NOTICE)) {
+            body = body.substring(0, body.length() - STAFF_NOTICE.length()).strip();
         }
         return body;
     }
