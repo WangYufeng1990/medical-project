@@ -13,7 +13,11 @@ public enum AgentRunState {
     COMPLETED,
     FAILED,
     CANCELLED,
-    SUPERSEDED;
+    SUPERSEDED,
+    /** A reviewer approved the draft and the reply was published (Round 57.2). */
+    PUBLISHED,
+    /** A reviewer refused the draft; the patient's message is still owed an answer by hand. */
+    REJECTED;
 
     /** The names the contract uses, for assertions and error messages. */
     public static boolean isKnown(String value) {

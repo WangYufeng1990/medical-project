@@ -384,6 +384,24 @@ CREATE TABLE IF NOT EXISTS agent_review_claim (
     UNIQUE KEY uk_agent_review_claim_run (run_id)
 );
 
+-- Round 57.2: one reviewer decision per run, with the text that was published.
+CREATE TABLE IF NOT EXISTS agent_review_decision (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    run_id BIGINT NOT NULL,
+    decision VARCHAR(16) NOT NULL,
+    final_text TEXT,
+    reason VARCHAR(500),
+    actor_id BIGINT NOT NULL,
+    published_message_id BIGINT,
+    edited TINYINT NOT NULL DEFAULT 0,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_review_decision_run (run_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,

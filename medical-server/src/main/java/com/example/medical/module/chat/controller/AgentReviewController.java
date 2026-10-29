@@ -2,13 +2,18 @@ package com.example.medical.module.chat.controller;
 
 import com.example.medical.common.result.Result;
 import com.example.medical.common.security.DoctorPatientScope;
+import com.example.medical.module.chat.dto.agent.ApproveReviewRequest;
+import com.example.medical.module.chat.dto.agent.RejectReviewRequest;
+import com.example.medical.module.chat.dto.agent.ReviewDecisionVO;
 import com.example.medical.module.chat.dto.agent.ReviewItemVO;
 import com.example.medical.module.chat.service.AgentReviewService;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,5 +46,19 @@ public class AgentReviewController {
     public Result<ReviewItemVO> claim(@AuthenticationPrincipal LoginUser user,
                                       @PathVariable Long runId) {
         return Result.ok(reviews.claim(user.getUserId(), runId));
+    }
+
+    @PostMapping("/{runId}/approve")
+    public Result<ReviewDecisionVO> approve(@AuthenticationPrincipal LoginUser user,
+                                            @PathVariable Long runId,
+                                            @Valid @RequestBody ApproveReviewRequest request) {
+        return Result.ok(reviews.approve(user.getUserId(), runId, request.getFinalText()));
+    }
+
+    @PostMapping("/{runId}/reject")
+    public Result<ReviewDecisionVO> reject(@AuthenticationPrincipal LoginUser user,
+                                           @PathVariable Long runId,
+                                           @Valid @RequestBody RejectReviewRequest request) {
+        return Result.ok(reviews.reject(user.getUserId(), runId, request.getReason()));
     }
 }

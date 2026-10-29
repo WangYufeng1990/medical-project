@@ -5852,14 +5852,14 @@ citations and validation, which is what Round 56 built.
 **Verification (actually run).** `evals/run.py` → **156/156**; `pytest` → **190 passed** (187 + the
 three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Java unchanged.
 
-## Round 57 — Staff review and safe publication (In progress: 57.1 Done, 57.2–57.3 Pending)
+## Round 57 — Staff review and safe publication (In progress: 57.1–57.2 Done, 57.3 Pending)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
-| 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
+| 57.2 Approve/edit/reject | P0 / **Done** (2026-10-29) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
@@ -5968,6 +5968,26 @@ omitted in separate requests, so each `@NotNull` is locked by its own case.
 **Handed to 57.3.** Claim-time freshness is not publication-time freshness. 57.3 must re-check the
 conversation and result versions **inside** the approve-and-publish transaction, because a message
 can arrive between the claim and the approval; nothing in 57.1 substitutes for that check.
+
+### Round 57.2 — Approve, edit, reject and publish (Done, 2026-10-29)
+
+**What was built.**
+
+| Piece | Behaviour |
+|---|---|
+| `POST /api/v1/agent/reviews/{runId}/approve` | `{finalText?}`. One transaction: `SELECT … FOR UPDATE` on the run, state → `PUBLISHED`, decision row (actor, original draft kept in `agent_run_result`, final text, `edited`, published message id), and the reply delivered into the existing thread by the clinician who owns it. A second approval blocks on the lock and is then refused with 409, so one reply is published |
+| `POST /api/v1/agent/reviews/{runId}/reject` | `{reason}` (required, ≤500). State → `REJECTED`, decision row with the actor and reason, **no message**. The thread still ends with the patient's message, so the queue shows it as a human-only item with `reason: REJECTED` and no draft |
+| Patient-facing text | The draft's staff line (`Prepared for staff review; not medical advice.`) is stripped and the fixed `RESPONSE_NOTICE` is appended unless already present; `noticeAppended` reports whether it had to be added |
+| Storage | `agent_review_decision` (schema v10, unique per run): decision, final text, reason, actor, published message id, edited flag |
+
+**Tests (`AgentReviewIntegrationTest`, 6).** Approval publishes once and records actor + both texts, with the staff line absent from the published message; an edit is what the patient receives while the original draft remains; two concurrent approvals yield 200 and 409 with exactly one staff message and one decision row; a rejected draft leaves the queue item as `REJECTED` with no draft and a manual reply then clears it; approving an already-rejected run is 409; a patient token is 403.
+
+**Verification (actually run).** `mvn clean verify` → **375 tests, 0 failures, 1 skipped**.
+
+**Limits / hand-off to 57.3.**
+- Publishing does **not** re-check freshness: a message can arrive between claim and approval and the reply still attaches to the thread. 57.3 must re-check the conversation inside the approve transaction; this slice deliberately does not claim it.
+- The reply is attributed to the thread's clinician, not the approving ADMIN; the human who decided is recorded in `agent_review_decision.actor_id`. 57.3/57.4 should surface that attribution in the audit view.
+- Approve/reject are not exposed in the UI yet.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

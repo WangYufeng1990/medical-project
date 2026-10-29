@@ -650,6 +650,16 @@ result contract: `contract_version`, `run_id`, `generation`, `intent`, `risk`, `
 `draft`, `citations[]` and `validation{ok,kind,reasons,rejected_reasons}` — see
 `contracts/agent/v1/run-result.request.schema.json`.
 
+### Review decisions (Round 57.2)
+`POST /api/v1/agent/reviews/{runId}/approve` (ADMIN, DOCTOR) with `{"finalText": "..."}` (optional)
+publishes the reply in one transaction: **200** with `{runId, decision, actorId, publishedMessageId,
+finalText, edited, noticeAppended}`; **409** when the run is not `WAITING_REVIEW` (including a lost
+concurrent approval); **403** outside the caller's scope or for a patient token.
+
+`POST /api/v1/agent/reviews/{runId}/reject` with `{"reason": "..."}` (required) marks the draft
+refused and publishes nothing; the patient's message stays in the queue as a human-only item with
+`reason: REJECTED`.
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 

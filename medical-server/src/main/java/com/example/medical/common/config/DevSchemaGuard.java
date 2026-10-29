@@ -48,7 +48,7 @@ import java.util.Locale;
 public class DevSchemaGuard implements CommandLineRunner {
 
     /** Baseline for the current sql/schema.sql. Bump on every schema change. */
-    public static final int SCHEMA_VERSION = 9;
+    public static final int SCHEMA_VERSION = 10;
 
     /**
      * The upgrades this build can apply to an older database, in order. A step names
@@ -75,7 +75,8 @@ public class DevSchemaGuard implements CommandLineRunner {
             new UpgradeStep(7, "agent_capability", null, null, null, null),
             // v8/v9: the review result and its claim, both tables the script creates.
             new UpgradeStep(8, "agent_run_result", null, null, null, null),
-            new UpgradeStep(9, "agent_review_claim", null, null, null, null));
+            new UpgradeStep(9, "agent_review_claim", null, null, null, null),
+            new UpgradeStep(10, "agent_review_decision", null, null, null, null));
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;

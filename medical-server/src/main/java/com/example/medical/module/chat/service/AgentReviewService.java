@@ -7,11 +7,14 @@ import com.example.medical.module.chat.dto.agent.AgentRunResultRequest;
 import com.example.medical.module.chat.dto.agent.ReviewItemVO;
 import com.example.medical.module.chat.entity.AgentReviewClaim;
 import com.example.medical.module.chat.entity.AgentRun;
+import com.example.medical.module.chat.entity.AgentReviewDecision;
 import com.example.medical.module.chat.entity.AgentRunResult;
+import com.example.medical.module.chat.dto.agent.ReviewDecisionVO;
 import com.example.medical.module.chat.entity.AgentRunState;
 import com.example.medical.module.chat.entity.ChatConversation;
 import com.example.medical.module.chat.entity.Message;
 import com.example.medical.module.chat.repository.AgentReviewClaimRepository;
+import com.example.medical.module.chat.repository.AgentReviewDecisionRepository;
 import com.example.medical.module.chat.repository.AgentRunRepository;
 import com.example.medical.module.chat.agent.AgentCapabilityService;
 import com.example.medical.module.chat.service.AgentRunStateStore;
@@ -45,10 +48,15 @@ public class AgentReviewService {
 
     private static final int MAX_THREADS = 200;
 
+    /** The staff-facing line the Python draft ends with; a patient must not receive it. */
+    static final String STAFF_NOTICE = "Prepared for staff review; not medical advice.";
+
     private final AgentRunResultRepository results;
     private final AgentRunStateStore states;
     private final AgentCapabilityService capabilities;
     private final AgentReviewClaimRepository claims;
+    private final AgentReviewDecisionRepository decisions;
+    private final ChatService chat;
     private final AgentReviewClaimWriter claimWriter;
     private final AgentRunRepository runs;
     private final ChatConversationRepository conversations;
@@ -111,6 +119,119 @@ public class AgentReviewService {
             if (item != null) items.add(item);
         }
         return items;
+    }
+
+    /**
+     * Approves a draft and publishes the reply into the patient's thread (Round 57.2).
+     * <p>
+     * One transaction: the row is locked, the state moves to PUBLISHED, the decision keeps the
+     * original draft and the final text, and the message is delivered. A second approval blocks on
+     * the lock, then sees a state that is no longer WAITING_REVIEW and is refused, so the patient
+     * receives exactly one reply.
+     */
+    @Transactional
+    public ReviewDecisionVO approve(Long reviewerId, Long runId, String finalText) {
+        AgentRun run = runs.findByIdForUpdate(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
+        scope.requireAccess(run.getPatientId());
+        requireWaitingForReview(run);
+
+        AgentRunResult result = results.findByRunId(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "run has no stored result to approve"));
+        ChatConversation thread = threadOf(run);
+        Long staffId = staffOf(thread);
+        Long patientId = patientOf(thread);
+
+        String base = finalText == null ? result.getDraft() : finalText;
+        if (base == null || base.isBlank()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "the approved text is empty");
+        }
+        String content = withPatientNotice(base);
+        boolean edited = !content.equals(result.getDraft());
+
+        com.example.medical.module.chat.dto.MessageVO published = chat.deliverAs(
+                new Party(ChatService.STAFF, staffId), patientId, ChatService.PATIENT, content,
+                "agent-review-" + runId);
+
+        run.setState(AgentRunState.PUBLISHED.name());
+        runs.save(run);
+
+        AgentReviewDecision decision = new AgentReviewDecision();
+        decision.setRunId(runId);
+        decision.setDecision("APPROVED");
+        decision.setFinalText(content);
+        decision.setActorId(reviewerId);
+        decision.setPublishedMessageId(published.getId());
+        decision.setEdited(edited);
+        decisions.save(decision);
+
+        ReviewDecisionVO vo = new ReviewDecisionVO();
+        vo.setRunId(runId);
+        vo.setDecision("APPROVED");
+        vo.setActorId(reviewerId);
+        vo.setPublishedMessageId(published.getId());
+        vo.setFinalText(content);
+        vo.setEdited(edited);
+        vo.setNoticeAppended(!base.contains(SafetyNoticeService.RESPONSE_NOTICE));
+        return vo;
+    }
+
+    /**
+     * Refuses a draft (Round 57.2). The patient's message is deliberately left unanswered and stays
+     * in the queue as a human-only item: a refused draft must not look like a handled request.
+     */
+    @Transactional
+    public ReviewDecisionVO reject(Long reviewerId, Long runId, String reason) {
+        AgentRun run = runs.findByIdForUpdate(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
+        scope.requireAccess(run.getPatientId());
+        requireWaitingForReview(run);
+
+        run.setState(AgentRunState.REJECTED.name());
+        runs.save(run);
+
+        AgentReviewDecision decision = new AgentReviewDecision();
+        decision.setRunId(runId);
+        decision.setDecision("REJECTED");
+        decision.setReason(reason);
+        decision.setActorId(reviewerId);
+        decision.setEdited(false);
+        decisions.save(decision);
+
+        ReviewDecisionVO vo = new ReviewDecisionVO();
+        vo.setRunId(runId);
+        vo.setDecision("REJECTED");
+        vo.setActorId(reviewerId);
+        return vo;
+    }
+
+    private void requireWaitingForReview(AgentRun run) {
+        if (!AgentRunState.WAITING_REVIEW.name().equals(run.getState())) {
+            throw new BusinessException(ResultCode.CONFLICT, "run is not waiting for review");
+        }
+    }
+
+    /** The staff line is stripped and the patient-facing notice is ensured exactly once. */
+    private String withPatientNotice(String text) {
+        String body = text.strip();
+        if (body.endsWith(STAFF_NOTICE)) {
+            body = body.substring(0, body.length() - STAFF_NOTICE.length()).strip();
+        }
+        if (!body.contains(SafetyNoticeService.RESPONSE_NOTICE)) {
+            return body + "\n\n" + SafetyNoticeService.RESPONSE_NOTICE;
+        }
+        return body;
+    }
+
+    private ChatConversation threadOf(AgentRun run) {
+        Message message = messages.findById(run.getMessageId())
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "the run's message no longer exists"));
+        return conversations.findByPair(message.getSenderType(), message.getSenderId(),
+                        message.getReceiverType(), message.getReceiverId())
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "the conversation for this run no longer exists"));
     }
 
     /**
@@ -196,6 +317,9 @@ public class AgentReviewService {
         item.setState(run.getState());
         AgentRunResult result = results.findByRunId(run.getId()).orElse(null);
         if (!AgentRunState.WAITING_REVIEW.name().equals(run.getState())) {
+            if (AgentRunState.REJECTED.name().equals(run.getState())) {
+                return humanOnly(item, "REJECTED", reviewerId);
+            }
             return humanOnly(item, AgentRunState.FAILED.name().equals(run.getState())
                     ? "RUN_FAILED" : "RUN_PENDING", reviewerId);
         }

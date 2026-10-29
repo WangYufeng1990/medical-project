@@ -93,7 +93,16 @@ public class ChatService {
     }
 
     private MessageVO deliver(Long receiverId, String receiverType, String content, String clientMessageId) {
-        Party sender = currentParty();
+        return deliverAs(currentParty(), receiverId, receiverType, content, clientMessageId);
+    }
+
+    /**
+     * Delivers a message as an explicit party (Round 57.2: an approved agent draft is published
+     * into the thread by the clinician who owns it, while the approving human is recorded in the
+     * decision row).
+     */
+    public MessageVO deliverAs(Party sender, Long receiverId, String receiverType, String content,
+                               String clientMessageId) {
         Party receiver = new Party(receiverType, receiverId);
         requirePermittedConversation(sender, receiver);
 

@@ -2,7 +2,9 @@ package com.example.medical.module.chat.repository;
 
 import com.example.medical.module.chat.entity.AgentRun;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,15 @@ import java.util.Optional;
  * won.
  */
 public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
+
+    /**
+     * The row a reviewer is deciding on, locked for the transaction: two concurrent approvals must
+     * not both publish, and the lock is what serialises them (Round 57.2).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT r FROM AgentRun r WHERE r.id = :id")
+    java.util.Optional<AgentRun> findByIdForUpdate(@org.springframework.data.repository.query.Param("id")
+                                                          Long id);
 
     Optional<AgentRun> findByMessageId(Long messageId);
 
