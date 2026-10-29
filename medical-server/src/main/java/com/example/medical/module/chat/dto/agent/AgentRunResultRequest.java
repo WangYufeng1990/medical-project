@@ -10,7 +10,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -54,7 +53,7 @@ public class AgentRunResultRequest {
 
     @NotNull
     @Size(max = 8)
-    private List<@Valid @NotNull Citation> citations = new ArrayList<>();
+    private List<@Valid @NotNull Citation> citations;
 
     @Valid
     @NotNull
@@ -81,7 +80,7 @@ public class AgentRunResultRequest {
 
         @NotNull
         @Size(max = 8)
-        private List<@NotBlank String> headingPath = new ArrayList<>();
+        private List<@NotBlank String> headingPath;
 
         @NotBlank
         @Pattern(regexp = "[0-9a-f]{64}", message = "a citation needs its content hash")
@@ -100,10 +99,10 @@ public class AgentRunResultRequest {
 
         @NotNull
         @Size(max = 8)
-        private List<@NotNull String> reasons = new ArrayList<>();
+        private List<@NotNull String> reasons;
 
         @NotNull
         @Size(max = 8)
-        private List<@NotNull String> rejectedReasons = new ArrayList<>();
+        private List<@NotNull String> rejectedReasons;
     }
 }

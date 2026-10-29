@@ -5858,7 +5858,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 57.1 Review queue | P0 / **In progress** (2026-10-28; review fixes applied, awaiting re-review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
+| 57.1 Review queue | P0 / **In progress** (2026-10-29; second review round applied, awaiting re-review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / Pending | Explicit approve-and-send; record original/final text and actor; reject does not close the patient's unresolved request | AgentReviewIntegrationTest: concurrent approval publishes once; edited content is the published content; rejected draft remains actionable manually |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
@@ -5927,6 +5927,34 @@ is accepted for a routing summary.
 **Verification (actually run).** `mvn clean verify` → **367 tests, 0 failures, 1 skipped**; the
 opt-in dual-process test passes (11.0 s); Python `pytest` → 204 passed, `ruff`/`mypy --strict` clean,
 `evals/run.py` 156/156.
+
+### Round 57.1 review fixes, second round (2026-10-29)
+
+**1. P2 — a claim could answer with another run, and could leave a row behind after failing.**
+The claim inserted its row first and then built the response from the thread's *latest* message, so
+with a waiting A and a newer patient message B the endpoint claimed A but answered with B; if the
+doctor had already replied it answered 409 while the claim row stayed. The target is now checked
+before anything is written: the item is built for the run, and unless that item exists **and** its
+`runId` equals the path the request is refused with 409 and no row is inserted; the response is the
+item for the requested run, with the claim flags set from the row that was written. Tests: claim A
+after the patient sends B → 409 and no claim row; claim after a staff reply → 409 and no claim row;
+a successful claim answers with the path's `runId`.
+
+**2. P2 — a missing required collection was accepted as an empty one.** `citations`, `headingPath`,
+`reasons` and `rejectedReasons` were initialised to empty lists, so a body that omitted them passed
+Bean Validation (only an explicit null was refused) while the shared schema and the Python model
+require them. The initialisers are gone: omission and `[]` are now distinguishable, and the endpoint
+tests omit each of the four in turn — every one is 400 with the run unchanged and no result row,
+while explicit `[]` remains valid.
+
+**3. Race test tightened.** The two-reviewer race used a doctor without the patient in scope, so a
+403 satisfied it. It now races doctor1 against ADMIN — two reviewers who are both allowed — and
+requires exactly `[200, 409]`, a single claim row, and that row's `staff_id` belongs to one of the
+two racers.
+
+**Verification (actually run).** `mvn clean verify` → **369 tests, 0 failures, 1 skipped**; the
+opt-in dual-process test passes (11.0 s); Python `pytest` → 204 passed, `ruff` and `mypy --strict`
+clean (33 source files), evaluation set 156/156.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

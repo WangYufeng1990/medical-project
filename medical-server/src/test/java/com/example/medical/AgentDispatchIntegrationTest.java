@@ -543,10 +543,13 @@ class AgentDispatchIntegrationTest extends IntegrationTestSupport {
                 new com.example.medical.module.chat.dto.agent.AgentRunResultRequest.Validation();
         validation.setOk(true);
         validation.setKind("policy_answer");
+        validation.setReasons(List.of());
+        validation.setRejectedReasons(List.of());
         body.setGeneration(generation);
         body.setIntent("BILLING");
         body.setRisk("ROUTINE");
         body.setDraft("A balance can be paid in instalments.");
+        body.setCitations(List.of());
         body.setValidation(validation);
         return body;
     }

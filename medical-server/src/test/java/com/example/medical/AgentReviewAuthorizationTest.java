@@ -163,6 +163,7 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
         mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.runId").value(dispatched.runId()))
                 .andExpect(jsonPath("$.data.claimedBy").value(2))
                 .andExpect(jsonPath("$.data.claimedByMe").value(true));
 
@@ -269,24 +270,66 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void twoReviewersRacingForTheSameRunProduceOneWinner() throws Exception {
+    void twoLegitimateReviewersRacingProduceExactlyOneWinner() throws Exception {
         Dispatched dispatched = dispatchedRun("My invoice looks wrong");
         result(dispatched, "BILLING");
+        String adminToken = login("admin", "admin123");
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
         java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+        java.util.List<Integer> statuses;
         try {
             var first = pool.submit(() -> claim(doctorToken, dispatched.runId(), barrier));
-            var second = pool.submit(() -> claim(otherDoctorTokenForClaim(), dispatched.runId(), barrier));
-            java.util.List<Integer> statuses = java.util.List.of(
+            var second = pool.submit(() -> claim(adminToken, dispatched.runId(), barrier));
+            statuses = java.util.List.of(
                     first.get(30, java.util.concurrent.TimeUnit.SECONDS),
                     second.get(30, java.util.concurrent.TimeUnit.SECONDS));
-            assertTrue(statuses.contains(200), "one reviewer must win: " + statuses);
-            // The other is either a forbidden scope (403) or a lost race (409).
-            assertTrue(statuses.contains(403) || statuses.contains(409),
-                    "the other reviewer must be refused: " + statuses);
         } finally {
             pool.shutdownNow();
         }
+        assertEquals(java.util.List.of(200, 409), statuses.stream().sorted().toList(),
+                "both reviewers are in scope, so exactly one wins and the other is a conflict");
+        long winner = jdbc.queryForObject(
+                "SELECT staff_id FROM agent_review_claim WHERE run_id = ?", Long.class,
+                dispatched.runId());
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_claim WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+        assertTrue(winner == 1L || winner == 2L, "the claim must belong to one of the racers");
+    }
+
+    @Test
+    void claimingARunThatIsNoLongerTheLatestMessageIsRefusedWithoutAClaim() throws Exception {
+        Dispatched first = dispatchedRun("My invoice looks wrong");
+        result(first, "BILLING");
+        // The patient writes again: the waiting run is now history, even though its result is
+        // still there, so a claim must be refused and must not leave a row behind.
+        mockMvc.perform(post("/api/v1/patient/me/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "receiverId", 2, "content", "Also, I moved house.")))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + first.runId() + "/claim")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_claim WHERE run_id = ?", Integer.class,
+                first.runId()));
+    }
+
+    @Test
+    void claimingAfterAStaffReplyIsRefusedWithoutAClaim() throws Exception {
+        Dispatched dispatched = dispatchedRun("My invoice looks wrong");
+        result(dispatched, "BILLING");
+        sendAsDoctor("We have corrected the invoice.");
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + dispatched.runId() + "/claim")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_claim WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
     }
 
     private int claim(String token, long runId, java.util.concurrent.CyclicBarrier barrier)
@@ -367,6 +410,21 @@ class AgentReviewAuthorizationTest extends IntegrationTestSupport {
         java.util.Map<String, Object> missingOk = body(runId, generation, List.of());
         missingOk.put("validation", java.util.Map.of("kind", "policy_answer"));
         postResult(url, missingOk, capability).andExpect(status().isBadRequest());
+
+        java.util.Map<String, Object> missingCitations = body(runId, generation, List.of());
+        missingCitations.remove("citations");
+        postResult(url, missingCitations, capability).andExpect(status().isBadRequest());
+
+        java.util.Map<String, Object> missingHeading = body(runId, generation,
+                List.of(citation(List.of())));
+        java.util.Map<String, Object> headingless = new java.util.HashMap<>(citation(List.of()));
+        headingless.remove("heading_path");
+        postResult(url, body(runId, generation, List.of(headingless)), capability)
+                .andExpect(status().isBadRequest());
+
+        java.util.Map<String, Object> noReasons = body(runId, generation, List.of());
+        noReasons.put("validation", java.util.Map.of("ok", true, "kind", "policy_answer"));
+        postResult(url, noReasons, capability).andExpect(status().isBadRequest());
 
         assertEquals("RUNNING", jdbc.queryForObject(
                 "SELECT state FROM agent_run WHERE id = ?", String.class, dispatched.runId()));

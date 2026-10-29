@@ -124,6 +124,13 @@ public class AgentReviewService {
         if (!AgentRunState.WAITING_REVIEW.name().equals(run.getState())) {
             throw new BusinessException(ResultCode.CONFLICT, "run is not waiting for review");
         }
+        // The target has to still be the thread's unanswered message: a newer patient message or
+        // a staff reply means this run is history, and a claim insert must not happen at all.
+        ReviewItemVO item = itemForClaim(run, staffId);
+        if (item == null || !runId.equals(item.getRunId())) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "run is no longer the patient's latest unanswered message");
+        }
         try {
             // A separate short transaction: a lost race rolls back only the insert, and the
             // caller can then read the winner's row instead of failing with a 500.
@@ -137,10 +144,8 @@ public class AgentReviewService {
         if (!claim.getStaffId().equals(staffId)) {
             throw new BusinessException(ResultCode.CONFLICT, "run is claimed by another reviewer");
         }
-        ReviewItemVO item = itemForClaim(run, staffId);
-        if (item == null) {
-            throw new BusinessException(ResultCode.CONFLICT, "run is no longer in the queue");
-        }
+        item.setClaimedBy(claim.getStaffId());
+        item.setClaimedByMe(true);
         return item;
     }
 
@@ -257,6 +262,10 @@ public class AgentReviewService {
         validation.setReasons(splitLines(result.getValidationReasons()));
         validation.setRejectedReasons(splitLines(result.getRejectedReasons()));
         return validation;
+    }
+
+    private static String join(List<String> values) {
+        return values == null ? "" : String.join("\n", values);
     }
 
     private static List<String> splitLines(String value) {
