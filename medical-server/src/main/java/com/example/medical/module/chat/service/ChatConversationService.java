@@ -34,6 +34,22 @@ public class ChatConversationService {
      * A message created earlier can be recorded later, and it must not rewind the
      * thread — the failure this pair of statements exists to prevent.
      */
+    /**
+     * Makes the thread exist and locks it (Round 57.3 review): the send path takes this before it
+     * stamps or inserts the message, so message ids, times and the thread pointer agree with the
+     * order in which writers held the lock. The idempotent upsert keeps two concurrent first
+     * messages from both inserting.
+     */
+    @Transactional
+    public void lockThread(Party sender, Party receiver) {
+        Party first = canonicalFirst(sender, receiver);
+        Party second = first.equals(sender) ? receiver : sender;
+        conversationRepository.ensureThread(first.type(), first.id(), second.type(), second.id());
+        conversationRepository.lockByPair(first.type(), first.id(), second.type(), second.id())
+                .orElseThrow(() -> new IllegalStateException(
+                        "the conversation was not created for " + first + " and " + second));
+    }
+
     @Transactional
     public void recordMessage(Party sender, Party receiver, Long messageId, LocalDateTime time) {
         Party first = canonicalFirst(sender, receiver);

@@ -77,6 +77,9 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
     private String patientToken;
     private String doctorToken;
 
@@ -229,6 +232,73 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             assertEquals("SUPERSEDED", state);
             assertEquals(1, countStaffMessages());
         }
+    }
+
+    @Test
+    void aPatientMessageWaitsForTheThreadLockAndStillBecomesTheLastWord() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+
+        // Hold the thread lock as an approval would, in a separate transaction.
+        java.util.concurrent.CountDownLatch locked = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread holder = new Thread(() -> transactionTemplate.executeWithoutResult(status -> {
+            jdbc.queryForObject("SELECT id FROM chat_conversation WHERE "
+                    + "((party_a_type = 'STAFF' AND party_a_id = 2 AND party_b_type = 'PATIENT' "
+                    + "AND party_b_id = 100) OR (party_a_type = 'PATIENT' AND party_a_id = 100 "
+                    + "AND party_b_type = 'STAFF' AND party_b_id = 2)) FOR UPDATE", Long.class);
+            locked.countDown();
+            try {
+                release.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        holder.start();
+        assertTrue(locked.await(10, java.util.concurrent.TimeUnit.SECONDS));
+        int before = countAllMessages();
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var sending = pool.submit(() -> mockMvc.perform(post("/api/v1/patient/me/messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "receiverId", 2, "content", "One more thing about my bill.")))
+                            .header("Authorization", "Bearer " + patientToken))
+                    .andReturn().getResponse().getStatus());
+
+            // While the lock is held the send must not have created its message yet.
+            Thread.sleep(300);
+            assertEquals(before, countAllMessages(),
+                    "a message must not be inserted before the thread lock is acquired");
+
+            release.countDown();
+            assertEquals(200, sending.get(30, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+            holder.join(10_000);
+        }
+
+        // The patient's message is the conversation's last word again, and the draft's own message
+        // is no longer the latest, so the thread is pending review rather than answered.
+        Long lastMessageId = jdbc.queryForObject("SELECT MAX(id) FROM message", Long.class);
+        String lastSender = jdbc.queryForObject(
+                "SELECT sender_type FROM message WHERE id = ?", String.class, lastMessageId);
+        assertEquals("PATIENT", lastSender, "the blocked send must be the thread's last word");
+        assertTrue(lastMessageId > ready.messageId());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.data[0].messageId").value(lastMessageId))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.data[0].draft").doesNotExist());
+    }
+
+    private int countAllMessages() {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM message", Integer.class);
     }
 
     // ── helpers ─────────────────────────────────────────────────────

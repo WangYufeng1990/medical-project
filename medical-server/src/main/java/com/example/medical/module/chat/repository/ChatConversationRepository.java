@@ -4,6 +4,7 @@ import com.example.medical.module.chat.entity.ChatConversation;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -53,6 +54,27 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     @Query("SELECT c FROM ChatConversation c WHERE c.partyAType = :type OR c.partyBType = :type "
             + "ORDER BY c.lastMessageTime DESC, c.id DESC")
     Page<ChatConversation> findPageForType(@Param("type") String type, Pageable pageable);
+
+    /**
+     * Creates the thread when it is missing, without counting a message (Round 57.3 review). The
+     * send path calls this and then locks the row <em>before</em> it creates the message, so a
+     * concurrently publishing reply cannot take a later message id and commit first.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "INSERT INTO chat_conversation (party_a_type, party_a_id, party_b_type, party_b_id, "
+            + "last_message_id, last_message_time, message_count, revision, create_time, update_time, "
+            + "is_deleted, version) VALUES (:typeA, :idA, :typeB, :idB, NULL, "
+            + "CURRENT_TIMESTAMP, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0) "
+            + "ON DUPLICATE KEY UPDATE is_deleted = 0", nativeQuery = true)
+    int ensureThread(@Param("typeA") String typeA, @Param("idA") Long idA,
+                     @Param("typeB") String typeB, @Param("idB") Long idB);
+
+    /** The canonical pair's row, locked for the rest of the transaction. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ChatConversation c WHERE c.partyAType = :typeA AND c.partyAId = :idA "
+            + "AND c.partyBType = :typeB AND c.partyBId = :idB")
+    Optional<ChatConversation> lockByPair(@Param("typeA") String typeA, @Param("idA") Long idA,
+                                          @Param("typeB") String typeB, @Param("idB") Long idB);
 
     /**
      * Creates the thread when it is missing and counts the message when it is not, in

@@ -5860,7 +5860,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / **Done** (2026-10-30, after review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
-| 57.3 Freshness and recovery | P0 / **In progress** (2026-10-30; lock protocol applied, recovery/audit gaps open) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
+| 57.3 Freshness and recovery | P0 / **In progress** (2026-10-30; send-path lock order fixed, recovery/audit gaps open) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
 
@@ -6128,6 +6128,37 @@ message) and never with a server error.
   Python restart test against a published run.
 - The durable review-action events the round calls for (decisions **and** denied/failed actions) are
   not implemented yet; the decision table records approvals/rejections, not the denials.
+
+### Round 57.3 review fixes, second round (2026-10-30)
+
+**P1 — the send path created the message before taking the thread lock.** The order was: stamp the
+time, insert the message (which allocates the id), and only then lock the conversation through
+`recordMessage`. So a patient message could take an earlier id and time, wait on the lock while an
+approval published a reply with a later id, and then complete — at which point the forward-only
+pointer refused to move back, leaving the thread pointing at the staff reply while the patient's
+newer question looked answered and disappeared from the queue.
+
+`ChatService.deliverAs` now calls `ChatConversationService.lockThread(sender, receiver)` before it
+stamps the time or inserts anything: an idempotent `ensureThread` upsert keeps two concurrent first
+messages from both inserting (and un-deletes a thread), then `lockByPair` takes the row lock, which
+is held to commit. Message id, timestamp and the thread pointer therefore follow the order in which
+writers held the lock. The idempotency check on the client message id still runs before the lock, so
+a retried send does not lock or insert again.
+
+Test: a separate transaction holds the conversation row lock; a patient send is started and, while
+the lock is held, **no message row exists** (proving the insert waits for the lock); after release the
+send returns 200, the patient message is the newest one, and the review queue shows it as a
+human-only pending item rather than an answered thread. Run three times in isolation and two full
+`clean verify` runs, all green.
+
+**Wording corrected.** The race summary from the previous record said "200 and 200"; the test allows
+the send to be 200 and the approval to be 200 or 409 (a manual reply winning makes the draft stale).
+
+**Verification (actually run).** `mvn clean verify` → **393 tests, 0 failures, 1 skipped** (twice).
+
+**Still open.** Recovery semantics (a 403/409 is not proof of completion; needs a bound run+generation
+receipt or terminal-state query, plus a real Python restart test against a published run) and durable
+review-action events for decisions **and** denied/failed actions.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

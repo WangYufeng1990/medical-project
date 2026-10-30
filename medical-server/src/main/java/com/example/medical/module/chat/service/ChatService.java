@@ -112,6 +112,11 @@ public class ChatService {
             if (stored.isPresent()) return sameMessageOrConflict(stored.get(), receiver, content);
         }
 
+        // The thread lock comes before the message exists: a reply that is being published
+        // concurrently must not take a later id, commit first, and leave this message rewinding the
+        // thread pointer (Round 57.3 review). Idempotent duplicates above return before this point.
+        chatConversationService.lockThread(sender, receiver);
+
         Message msg = new Message();
         msg.setSenderId(sender.id());
         msg.setSenderType(sender.type());
