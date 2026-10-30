@@ -248,8 +248,6 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     @Test
     void aPatientMessageWaitsForTheThreadLockAndStillBecomesTheLastWord() throws Exception {
         Ready ready = ready("My invoice looks wrong");
-        // A step-level probe on the concrete service: the patient's send must reach the lock
-        // before anything is inserted.
         org.mockito.Mockito.doAnswer(invocation -> {
             com.example.medical.module.chat.service.Party sender = invocation.getArgument(0);
             if ("PATIENT".equals(sender.type())) patientLockAttempts.incrementAndGet();
@@ -257,17 +255,31 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
         }).when(conversationService).lockThread(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
 
+        java.util.concurrent.CountDownLatch locked = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch patientBlocked = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch published = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicLong replyId =
+                new java.util.concurrent.atomic.AtomicLong(-1);
         Thread holder = new Thread(() -> transactionTemplate.executeWithoutResult(status -> {
             jdbc.queryForObject("SELECT id FROM chat_conversation WHERE "
                     + "((party_a_type = 'STAFF' AND party_a_id = 2 AND party_b_type = 'PATIENT' "
                     + "AND party_b_id = 100) OR (party_a_type = 'PATIENT' AND party_a_id = 100 "
                     + "AND party_b_type = 'STAFF' AND party_b_id = 2)) FOR UPDATE", Long.class);
-            // The reply is published inside the holder's transaction, exactly as an approval
-            // would, while the lock is still held.
-            chatService.deliverAs(new com.example.medical.module.chat.service.Party("STAFF", 2L),
-                    100L, "PATIENT", "A reply that is published first.", null);
+            locked.countDown();
+            try {
+                // Only after the patient's request is blocked do we publish the reply, so the
+                // reply is inserted while the patient's send is waiting: with a correct order the
+                // patient's message gets the higher id, with insert-before-lock it gets the lower
+                // one and the forward-only pointer refuses it.
+                patientBlocked.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            com.example.medical.module.chat.dto.MessageVO reply = chatService.deliverAs(
+                    new com.example.medical.module.chat.service.Party("STAFF", 2L), 100L,
+                    "PATIENT", "A reply that is published first.", null);
+            replyId.set(reply.getId());
             published.countDown();
             try {
                 release.await(20, java.util.concurrent.TimeUnit.SECONDS);
@@ -276,7 +288,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             }
         }));
         holder.start();
-        assertTrue(published.await(10, java.util.concurrent.TimeUnit.SECONDS));
+        assertTrue(locked.await(10, java.util.concurrent.TimeUnit.SECONDS));
 
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
@@ -287,14 +299,14 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                             .header("Authorization", "Bearer " + patientToken))
                     .andReturn().getResponse().getStatus());
 
-            // A row count from another connection cannot see an uncommitted insert; the probe is
-            // the step itself. The send must have reached lockThread while the lock was held.
-            for (int waited = 0; waited < 100 && patientLockAttempts.get() == 0; waited++) {
+            // The send must reach the lock and stop there; only then does the reply get published.
+            for (int waited = 0; waited < 150 && patientLockAttempts.get() == 0; waited++) {
                 Thread.sleep(20);
             }
             assertTrue(patientLockAttempts.get() > 0,
                     "the send must reach the thread lock before inserting its message");
-
+            patientBlocked.countDown();
+            assertTrue(published.await(10, java.util.concurrent.TimeUnit.SECONDS));
             release.countDown();
             assertEquals(200, sending.get(30, java.util.concurrent.TimeUnit.SECONDS));
         } finally {
@@ -303,8 +315,6 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             holder.join(10_000);
         }
 
-        // The reply was published first and committed; the patient's message then becomes the
-        // thread's last word, so the pointer must move to it and the queue must show it pending.
         Long lastMessageId = jdbc.queryForObject(
                 "SELECT last_message_id FROM chat_conversation WHERE "
                         + "((party_a_type = 'STAFF' AND party_a_id = 2 AND party_b_type = 'PATIENT' "
@@ -314,6 +324,10 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
         assertEquals("PATIENT", jdbc.queryForObject(
                 "SELECT sender_type FROM message WHERE id = ?", String.class, lastMessageId));
         assertTrue(lastMessageId > ready.messageId());
+        // The insert really happened after the lock: the reply was inserted while the send was
+        // waiting, so a later insert must take the higher id.
+        assertTrue(lastMessageId > replyId.get(),
+                "the patient's message must be inserted after the reply, i.e. after the lock");
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .get("/api/v1/agent/reviews")

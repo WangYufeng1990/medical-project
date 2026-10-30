@@ -6191,6 +6191,19 @@ of 7 and the full suite passes.
 run+generation receipt or a terminal-state query, plus a real Python restart test) and durable
 review-action events for decisions **and** denied/failed actions.
 
+### Round 57.3 test hardening (2026-10-30)
+
+The interleaving test published the reply before the patient request started, so a variant that kept
+`lockThread` but moved it **after** `saveAndFlush` still passed: the patient's insert then got the
+higher id and the pointer moved to it anyway. The test now holds the lock first, waits until the
+send has **reached the lock and is blocked**, and only then publishes the reply (inside the holder's
+transaction) and releases. It also asserts the patient's message id is higher than the reply's, which
+is only true when the insert happens after the lock.
+
+Red check (actually run): with `lockThread` moved after `saveAndFlush`, the test fails with
+`expected: <PATIENT> but was: <STAFF>` — the original pointer bug, not just the probe. Restored, the
+class passes 7 of 7 and `mvn clean verify` passes 394 tests (1 skipped).
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
