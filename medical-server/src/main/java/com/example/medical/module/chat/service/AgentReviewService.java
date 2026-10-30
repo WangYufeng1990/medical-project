@@ -25,6 +25,7 @@ import com.example.medical.module.chat.repository.MessageRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -54,6 +55,7 @@ public class AgentReviewService {
     private final AgentRunResultRepository results;
     private final AgentRunStateStore states;
     private final AgentCapabilityService capabilities;
+    private final EntityManager entityManager;
     private final AgentReviewClaimRepository claims;
     private final AgentReviewDecisionRepository decisions;
     private final ChatService chat;
@@ -131,16 +133,31 @@ public class AgentReviewService {
      */
     @Transactional
     public ReviewDecisionVO approve(Long reviewerId, Long runId, String finalText) {
-        AgentRun run = runs.findByIdForUpdate(runId)
+        AgentRun run = runs.findById(runId)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
         scope.requireAccess(run.getPatientId());
+
+        // Lock order is conversation, then run, and every write path uses it (Round 57.3 review).
+        // Taking the conversation lock first is what closes the window between "the run's message is
+        // still the latest" and the delivery: a message either commits before this lock is acquired
+        // (and the freshness check below fails) or waits until the publication commits.
+        ChatConversation thread = threadOf(run);
+        // Detach first: a managed instance would be returned from the persistence context and the
+        // FOR UPDATE would not reach the database, i.e. no lock would be taken.
+        entityManager.detach(thread);
+        entityManager.detach(run);
+        conversations.findByIdForUpdate(thread.getId())
+                .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
+                        "the conversation for this run no longer exists"));
+        run = runs.findByIdForUpdate(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
+
         requireWaitingForReview(run);
         requireClaimedBy(runId, reviewerId);
 
         AgentRunResult result = results.findByRunId(runId)
                 .orElseThrow(() -> new BusinessException(ResultCode.CONFLICT,
                         "run has no stored result to approve"));
-        ChatConversation thread = threadOf(run);
         Long staffId = staffOf(thread);
         Long patientId = patientOf(thread);
         requireLatestMessage(run, staffId, patientId);
@@ -190,9 +207,15 @@ public class AgentReviewService {
      */
     @Transactional
     public ReviewDecisionVO reject(Long reviewerId, Long runId, String reason) {
-        AgentRun run = runs.findByIdForUpdate(runId)
+        AgentRun run = runs.findById(runId)
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
         scope.requireAccess(run.getPatientId());
+        ChatConversation thread = threadOf(run);
+        entityManager.detach(thread);
+        entityManager.detach(run);
+        conversations.findByIdForUpdate(thread.getId());
+        run = runs.findByIdForUpdate(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "run not found"));
         requireWaitingForReview(run);
         requireClaimedBy(runId, reviewerId);
 

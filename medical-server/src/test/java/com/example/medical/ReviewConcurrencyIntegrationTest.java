@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -158,6 +159,78 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                 "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId()));
     }
 
+    @Test
+    void aHumanReplyOnlySupersedesThatConversationsDraft() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+        claim(ready.runId());
+
+        // A different clinician (the admin, id 1) answers the patient in their own thread.
+        adminSends("Your statement is on its way.");
+
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_claim WHERE run_id = ?", Integer.class,
+                ready.runId()));
+
+        // The draft's own clinician answers: now it is superseded.
+        doctorSends("We are checking your invoice.");
+        assertEquals("SUPERSEDED", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId()));
+        // One reply in each thread.
+        assertEquals(2, countStaffMessages());
+    }
+
+    @Test
+    void anApprovalRacingAManualReplyDoesNotDeadlock() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+        claim(ready.runId());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+        int approveStatus;
+        int sendStatus;
+        try {
+            var approving = pool.submit(() -> {
+                barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                return mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}")
+                                .header("Authorization", "Bearer " + doctorToken))
+                        .andReturn().getResponse().getStatus();
+            });
+            var sending = pool.submit(() -> {
+                barrier.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                return mockMvc.perform(post("/api/v1/messages")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(Map.of(
+                                        "receiverId", 100, "receiverType", "PATIENT",
+                                        "content", "A human answer.")))
+                                .header("Authorization", "Bearer " + doctorToken))
+                        .andReturn().getResponse().getStatus();
+            });
+            approveStatus = approving.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            sendStatus = sending.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // The lock order is conversation then run on both paths, so one completes first and the
+        // other observes its effect; neither may fail with a server error.
+        assertEquals(200, sendStatus);
+        String state = jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId());
+        if (approveStatus == 200) {
+            // Approval won the lock: it published, then the manual reply was stored as well.
+            assertEquals("PUBLISHED", state);
+            assertEquals(2, countStaffMessages());
+        } else {
+            // The manual reply won: the draft is stale and approving it is a conflict.
+            assertEquals(409, approveStatus);
+            assertEquals("SUPERSEDED", state);
+            assertEquals(1, countStaffMessages());
+        }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     private record Ready(long messageId, long runId, String capability, long generation) { }
@@ -174,6 +247,17 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                         .content(objectMapper.writeValueAsString(
                                 Map.of("receiverId", 2, "content", content)))
                         .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+    }
+
+    private void adminSends(String content) throws Exception {
+        String adminToken = login("admin", "admin123");
+        mockMvc.perform(post("/api/v1/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "receiverId", 100, "receiverType", "PATIENT",
+                                "content", content)))
+                        .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
     }
 

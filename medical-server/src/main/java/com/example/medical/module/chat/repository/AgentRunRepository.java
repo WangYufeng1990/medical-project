@@ -24,13 +24,21 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
      * The row a reviewer is deciding on, locked for the transaction: two concurrent approvals must
      * not both publish, and the lock is what serialises them (Round 57.2).
      */
-    /** A human reply makes every waiting draft for that patient stale (Round 57.3). */
+    /**
+     * Marks the waiting drafts that belong to one conversation as superseded (Round 57.3). Scoped
+     * by the typed pair: a reply from one clinician must not discard another clinician's drafts for
+     * the same patient.
+     */
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("UPDATE AgentRun r SET r.state = :to "
-            + "WHERE r.state = :from AND r.patientId = :patientId")
-    int supersedeWaiting(@org.springframework.data.repository.query.Param("patientId") Long patientId,
-                         @org.springframework.data.repository.query.Param("from") String from,
-                         @org.springframework.data.repository.query.Param("to") String to);
+            + "WHERE r.state = :from AND r.messageId IN ("
+            + "SELECT m.id FROM Message m WHERE m.senderType = 'PATIENT' AND m.senderId = :patientId "
+            + "AND m.receiverType = 'STAFF' AND m.receiverId = :staffId)")
+    int supersedeWaitingForThread(
+            @org.springframework.data.repository.query.Param("patientId") Long patientId,
+            @org.springframework.data.repository.query.Param("staffId") Long staffId,
+            @org.springframework.data.repository.query.Param("from") String from,
+            @org.springframework.data.repository.query.Param("to") String to);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT r FROM AgentRun r WHERE r.id = :id")

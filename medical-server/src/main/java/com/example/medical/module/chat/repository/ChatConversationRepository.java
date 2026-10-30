@@ -9,9 +9,20 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 
 public interface ChatConversationRepository extends JpaRepository<ChatConversation, Long> {
+
+    /**
+     * Row lock on the thread (Round 57.3 review). Every path that appends to a conversation or
+     * publishes into it takes this lock first, which is what gives "check the latest message, then
+     * publish" a defined order: a message either commits before the check or waits for it.
+     */
+    @org.springframework.data.jpa.repository.Lock(LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM ChatConversation c WHERE c.id = :id")
+    Optional<ChatConversation> findByIdForUpdate(
+            @org.springframework.data.repository.query.Param("id") Long id);
 
     /**
      * The thread between two parties, whichever order the pair is given in. The

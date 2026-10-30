@@ -5860,7 +5860,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / **Done** (2026-10-30, after review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
-| 57.3 Freshness and recovery | P0 / **In progress** (2026-10-30; core checks done, awaiting review) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
+| 57.3 Freshness and recovery | P0 / **In progress** (2026-10-30; lock protocol applied, recovery/audit gaps open) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
 
@@ -6096,6 +6096,38 @@ on login, which is how it surfaced in the full run).
 **Not yet done in this slice.**
 - The Python side still surfaces a refused replay as a failed dispatch (a 500 to the dispatcher); nothing is republished, but the status is not "already done". Whether a 409 should be terminal for the worker is a decision left for the review, since the same status also means "stale generation" for a retry that *must* be re-dispatched.
 - The recover-after-publication path is proved at the result endpoint, not by restarting a real Python process against a published run; the worker's checkpoint resume is covered by 56.4's tests for the pending-submit case, not for a Java-side publication.
+
+### Round 57.3 review fixes (2026-10-30)
+
+**1. P1 — a window remained between the freshness check and the delivery.** `requireLatestMessage`
+was an ordinary read, so a patient message could commit after it and the stale draft still publish.
+Every write path now takes the **conversation row lock first, then the run lock**: `approve`/`reject`
+detach the entities (a managed instance would be served from the persistence context and `FOR UPDATE`
+would never reach the database), lock the conversation, lock the run, and only then check freshness
+and publish. A patient message either commits before the lock is taken — the check fails with 409 —
+or waits until the publication commits. Sending a message goes through the same conversation row, so
+it participates in the same order.
+
+**2. P2 — a reply discarded other clinicians' drafts.** `supersedeWaiting` was scoped by patient id,
+so doctor A's reply marked doctor B's separate thread `SUPERSEDED`. The update now matches the typed
+pair (patient → this staff member) through the messages of that conversation. Test: A's reply leaves
+B's run `WAITING_REVIEW` with its claim intact, and B's own reply supersedes it.
+
+**3. P2 — the lock order was inverted between approval and manual sending.** Approval took the run
+lock first and the send path took the conversation first, which allowed a cycle. Both now take the
+conversation first. Test: a real two-thread H2 race between approving and sending finishes with 200
+and 200 (approval wins → `PUBLISHED`, two messages; send wins → approval 409, `SUPERSEDED`, one
+message) and never with a server error.
+
+**Verification (actually run).** `mvn clean verify` → **392 tests, 0 failures, 1 skipped**.
+
+**Still open (recorded, not claimed).**
+- Recovery must not treat every 403/409 as completion: the capability check answers 403 for a
+  non-`RUNNING` run, so HTTP status alone cannot distinguish "accepted/published" from "stale
+  generation". Recovery needs a bound run+generation receipt or a terminal-state query, plus a real
+  Python restart test against a published run.
+- The durable review-action events the round calls for (decisions **and** denied/failed actions) are
+  not implemented yet; the decision table records approvals/rejections, not the denials.
 
 ## Round 58 — Read-only appointment tools (Pending)
 

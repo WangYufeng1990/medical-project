@@ -136,8 +136,9 @@ public class ChatService {
         if (PATIENT.equals(sender.type())) {
             agentRunService.recordForMessage(msg, sender.id());
         } else if (PATIENT.equals(receiver.type())) {
-            // A human answer ends the review: the waiting draft is stale from here on (57.3).
-            agentRunService.supersedeWaitingFor(receiver.id());
+            // A human answer ends the review for this conversation only: another clinician's
+            // thread with the same patient is untouched (57.3 review).
+            agentRunService.supersedeWaitingFor(receiver.id(), sender.id());
         }
         MessageVO vo = MessageVO.fromEntity(msg);
         notifyAfterCommit(new NewMessageEvent(sender.id(), sender.type(),
