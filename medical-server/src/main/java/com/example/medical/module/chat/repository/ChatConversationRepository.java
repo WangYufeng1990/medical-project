@@ -64,7 +64,7 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     @Query(value = "INSERT INTO chat_conversation (party_a_type, party_a_id, party_b_type, party_b_id, "
             + "last_message_id, last_message_time, message_count, revision, create_time, update_time, "
             + "is_deleted, version) VALUES (:typeA, :idA, :typeB, :idB, NULL, "
-            + "CURRENT_TIMESTAMP, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0) "
+            + "TIMESTAMP '1970-01-01 00:00:00', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0) "
             + "ON DUPLICATE KEY UPDATE is_deleted = 0", nativeQuery = true)
     int ensureThread(@Param("typeA") String typeA, @Param("idA") Long idA,
                      @Param("typeB") String typeB, @Param("idB") Long idB);
@@ -108,7 +108,7 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     @Query(value = "UPDATE chat_conversation SET last_message_id = :messageId, last_message_time = :time "
             + "WHERE party_a_type = :typeA AND party_a_id = :idA "
             + "AND party_b_type = :typeB AND party_b_id = :idB AND is_deleted = 0 "
-            + "AND (last_message_time < :time "
+            + "AND (last_message_id IS NULL OR last_message_time < :time "
             + "OR (last_message_time = :time AND COALESCE(last_message_id, 0) < :messageId))",
             nativeQuery = true)
     int advanceLastMessage(@Param("typeA") String typeA, @Param("idA") Long idA,

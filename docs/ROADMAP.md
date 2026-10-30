@@ -6160,6 +6160,37 @@ the send to be 200 and the approval to be 200 or 409 (a manual reply winning mak
 receipt or terminal-state query, plus a real Python restart test against a published run) and durable
 review-action events for decisions **and** denied/failed actions.
 
+### Round 57.3 review fixes, third round (2026-10-30)
+
+**1. P2 — the placeholder thread could swallow the first message's pointer.** `ensureThread` created
+the row with `last_message_time = CURRENT_TIMESTAMP` (fractional seconds in H2) and a null pointer,
+while message times are truncated to whole seconds; the forward-only update then refused the first
+message and `last_message_id` stayed null until a later message advanced it. The check now treats a
+null pointer as "initialise" (`last_message_id IS NULL OR …`), and the placeholder uses a sentinel
+epoch time. Test: a thread placeholder is forced five seconds into the future, then the first message
+is sent through the API — the pointer becomes that message, its time equals the message's stored
+time, and count/revision are 1.
+
+**2. P2 — the previous test could not tell insert-first from lock-first.** A row count from another
+connection cannot see an uncommitted insert, so "count unchanged" held for both implementations, and
+the test never checked the real thread pointer. The test now:
+- probes the step: a Mockito spy on the concrete `ChatConversationService` records that the patient
+  send **reached `lockThread`** while the lock was held;
+- publishes a reply **inside the holder's transaction** (as an approval would) before releasing, so
+  the reply commits first;
+- after the send completes, asserts `chat_conversation.last_message_id` points at the patient's
+  message and the review queue lists that message as a human-only pending item.
+
+Red check (actually run): with the pre-insert `lockThread` call temporarily removed, the test fails
+with "the send must reach the thread lock before inserting its message". Restored, the class passes 7
+of 7 and the full suite passes.
+
+**Verification (actually run).** `mvn clean verify` → **394 tests, 0 failures, 1 skipped**.
+
+**Still open.** Recovery semantics (a 403/409 is not proof of completion; needs a bound
+run+generation receipt or a terminal-state query, plus a real Python restart test) and durable
+review-action events for decisions **and** denied/failed actions.
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.

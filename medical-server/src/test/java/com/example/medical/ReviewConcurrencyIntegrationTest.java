@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -78,7 +79,16 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     private JdbcTemplate jdbc;
 
     @Autowired
+    private com.example.medical.module.chat.service.ChatService chatService;
+
+    @Autowired
     private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private com.example.medical.module.chat.service.ChatConversationService conversationService;
+
+    private final java.util.concurrent.atomic.AtomicInteger patientLockAttempts =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private String patientToken;
     private String doctorToken;
@@ -96,6 +106,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 
     @BeforeEach
     void reset() {
+        patientLockAttempts.set(0);
         CAPABILITIES.clear();
         jdbc.update("DELETE FROM agent_review_decision");
         jdbc.update("DELETE FROM agent_review_claim");
@@ -237,16 +248,27 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     @Test
     void aPatientMessageWaitsForTheThreadLockAndStillBecomesTheLastWord() throws Exception {
         Ready ready = ready("My invoice looks wrong");
+        // A step-level probe on the concrete service: the patient's send must reach the lock
+        // before anything is inserted.
+        org.mockito.Mockito.doAnswer(invocation -> {
+            com.example.medical.module.chat.service.Party sender = invocation.getArgument(0);
+            if ("PATIENT".equals(sender.type())) patientLockAttempts.incrementAndGet();
+            return invocation.callRealMethod();
+        }).when(conversationService).lockThread(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
 
-        // Hold the thread lock as an approval would, in a separate transaction.
-        java.util.concurrent.CountDownLatch locked = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch published = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         Thread holder = new Thread(() -> transactionTemplate.executeWithoutResult(status -> {
             jdbc.queryForObject("SELECT id FROM chat_conversation WHERE "
                     + "((party_a_type = 'STAFF' AND party_a_id = 2 AND party_b_type = 'PATIENT' "
                     + "AND party_b_id = 100) OR (party_a_type = 'PATIENT' AND party_a_id = 100 "
                     + "AND party_b_type = 'STAFF' AND party_b_id = 2)) FOR UPDATE", Long.class);
-            locked.countDown();
+            // The reply is published inside the holder's transaction, exactly as an approval
+            // would, while the lock is still held.
+            chatService.deliverAs(new com.example.medical.module.chat.service.Party("STAFF", 2L),
+                    100L, "PATIENT", "A reply that is published first.", null);
+            published.countDown();
             try {
                 release.await(20, java.util.concurrent.TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -254,8 +276,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             }
         }));
         holder.start();
-        assertTrue(locked.await(10, java.util.concurrent.TimeUnit.SECONDS));
-        int before = countAllMessages();
+        assertTrue(published.await(10, java.util.concurrent.TimeUnit.SECONDS));
 
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
@@ -266,10 +287,13 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                             .header("Authorization", "Bearer " + patientToken))
                     .andReturn().getResponse().getStatus());
 
-            // While the lock is held the send must not have created its message yet.
-            Thread.sleep(300);
-            assertEquals(before, countAllMessages(),
-                    "a message must not be inserted before the thread lock is acquired");
+            // A row count from another connection cannot see an uncommitted insert; the probe is
+            // the step itself. The send must have reached lockThread while the lock was held.
+            for (int waited = 0; waited < 100 && patientLockAttempts.get() == 0; waited++) {
+                Thread.sleep(20);
+            }
+            assertTrue(patientLockAttempts.get() > 0,
+                    "the send must reach the thread lock before inserting its message");
 
             release.countDown();
             assertEquals(200, sending.get(30, java.util.concurrent.TimeUnit.SECONDS));
@@ -279,12 +303,16 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             holder.join(10_000);
         }
 
-        // The patient's message is the conversation's last word again, and the draft's own message
-        // is no longer the latest, so the thread is pending review rather than answered.
-        Long lastMessageId = jdbc.queryForObject("SELECT MAX(id) FROM message", Long.class);
-        String lastSender = jdbc.queryForObject(
-                "SELECT sender_type FROM message WHERE id = ?", String.class, lastMessageId);
-        assertEquals("PATIENT", lastSender, "the blocked send must be the thread's last word");
+        // The reply was published first and committed; the patient's message then becomes the
+        // thread's last word, so the pointer must move to it and the queue must show it pending.
+        Long lastMessageId = jdbc.queryForObject(
+                "SELECT last_message_id FROM chat_conversation WHERE "
+                        + "((party_a_type = 'STAFF' AND party_a_id = 2 AND party_b_type = 'PATIENT' "
+                        + "AND party_b_id = 100) OR (party_a_type = 'PATIENT' AND party_a_id = 100 "
+                        + "AND party_b_type = 'STAFF' AND party_b_id = 2))", Long.class);
+        assertNotNull(lastMessageId, "the thread pointer must not stay empty");
+        assertEquals("PATIENT", jdbc.queryForObject(
+                "SELECT sender_type FROM message WHERE id = ?", String.class, lastMessageId));
         assertTrue(lastMessageId > ready.messageId());
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
@@ -295,6 +323,46 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                         .jsonPath("$.data[0].messageId").value(lastMessageId))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
                         .jsonPath("$.data[0].draft").doesNotExist());
+    }
+
+    @Test
+    void theFirstMessageInitialisesThePointerEvenWhenThePlaceholderIsLater() throws Exception {
+        // A placeholder thread whose time is later than the truncated message time would defeat
+        // the forward-only rule, leaving last_message_id NULL. The first real message must
+        // initialise the pointer directly.
+        jdbc.update("INSERT INTO chat_conversation (party_a_type, party_a_id, party_b_type, "
+                + "party_b_id, last_message_id, last_message_time, message_count, revision, "
+                + "create_time, update_time, is_deleted, version) VALUES ('PATIENT', 100, 'STAFF', 2, "
+                + "NULL, DATEADD('SECOND', 5, CURRENT_TIMESTAMP), 0, 0, CURRENT_TIMESTAMP, "
+                + "CURRENT_TIMESTAMP, 0, 0)");
+        jdbc.update("DELETE FROM message");
+        jdbc.update("DELETE FROM agent_run");
+        jdbc.update("DELETE FROM agent_run_result");
+
+        // A fresh pair through the API: the first message must own the pointer, count and revision.
+        mockMvc.perform(post("/api/v1/patient/me/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("receiverId", 2, "content", "First message of the thread.")))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk());
+
+        Long messageId = jdbc.queryForObject(
+                "SELECT last_message_id FROM chat_conversation WHERE party_a_type = 'PATIENT' "
+                        + "AND party_a_id = 100 AND party_b_type = 'STAFF' AND party_b_id = 2",
+                Long.class);
+        assertNotNull(messageId, "the first message must initialise last_message_id");
+        assertEquals(messageId, jdbc.queryForObject(
+                "SELECT id FROM message WHERE sender_type = 'PATIENT'", Long.class));
+        assertEquals(jdbc.queryForObject("SELECT last_message_time FROM chat_conversation "
+                        + "WHERE party_a_type = 'PATIENT' AND party_a_id = 100",
+                java.sql.Timestamp.class),
+                jdbc.queryForObject("SELECT create_time FROM message WHERE id = ?",
+                        java.sql.Timestamp.class, messageId));
+        assertEquals(1, jdbc.queryForObject("SELECT message_count FROM chat_conversation "
+                + "WHERE party_a_type = 'PATIENT' AND party_a_id = 100", Integer.class));
+        assertEquals(1L, jdbc.queryForObject("SELECT revision FROM chat_conversation "
+                + "WHERE party_a_type = 'PATIENT' AND party_a_id = 100", Long.class));
     }
 
     private int countAllMessages() {
