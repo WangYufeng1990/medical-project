@@ -135,6 +135,9 @@ public class ChatService {
         // always has one; staff-to-staff and staff-to-patient traffic is not model work.
         if (PATIENT.equals(sender.type())) {
             agentRunService.recordForMessage(msg, sender.id());
+        } else if (PATIENT.equals(receiver.type())) {
+            // A human answer ends the review: the waiting draft is stale from here on (57.3).
+            agentRunService.supersedeWaitingFor(receiver.id());
         }
         MessageVO vo = MessageVO.fromEntity(msg);
         notifyAfterCommit(new NewMessageEvent(sender.id(), sender.type(),

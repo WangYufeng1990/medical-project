@@ -143,6 +143,7 @@ public class AgentReviewService {
         ChatConversation thread = threadOf(run);
         Long staffId = staffOf(thread);
         Long patientId = patientOf(thread);
+        requireLatestMessage(run, staffId, patientId);
 
         String base = finalText == null ? result.getDraft() : finalText;
         if (base == null || base.isBlank()) {
@@ -154,12 +155,14 @@ public class AgentReviewService {
                 && !finalText.strip().equals(stripStaffNotice(result.getDraft()));
         String content = withPatientNotice(base);
 
+        // The state moves before the delivery: the delivery supersedes waiting drafts for the
+        // patient, and this run is no longer waiting.
+        run.setState(AgentRunState.PUBLISHED.name());
+        runs.save(run);
+
         com.example.medical.module.chat.dto.MessageVO published = chat.deliverAs(
                 new Party(ChatService.STAFF, staffId), patientId, ChatService.PATIENT, content,
                 "agent-review-" + runId);
-
-        run.setState(AgentRunState.PUBLISHED.name());
-        runs.save(run);
 
         AgentReviewDecision decision = new AgentReviewDecision();
         decision.setRunId(runId);
@@ -223,6 +226,19 @@ public class AgentReviewService {
         if (!claim.getStaffId().equals(reviewerId)) {
             throw new BusinessException(ResultCode.CONFLICT,
                     "run is claimed by another reviewer");
+        }
+    }
+
+    /**
+     * Publication-time freshness (Round 57.3): the run's message must still be the thread's last
+     * word. A claim-time check cannot cover the window between claiming and approving.
+     */
+    private void requireLatestMessage(AgentRun run, Long staffId, Long patientId) {
+        List<Message> thread = messages.findMessagesBetween(
+                staffId, ChatService.STAFF, patientId, ChatService.PATIENT);
+        if (thread.isEmpty() || !thread.get(thread.size() - 1).getId().equals(run.getMessageId())) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "the conversation moved on since this draft was written");
         }
     }
 

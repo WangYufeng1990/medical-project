@@ -14,7 +14,7 @@ import pytest
 from medical_agent.checkpoints import open_checkpointer
 from medical_agent.classification.classifier import Classifier
 from medical_agent.graph.nodes import ValidationError
-from medical_agent.java_client import CallCredentials, outcome_for
+from medical_agent.java_client import CallCredentials
 from medical_agent.providers.base import ProviderError, ProviderRequest, ProviderResponse
 from medical_agent.schemas.classification import Intent, RiskLevel
 from medical_agent.schemas.run import RunStartRequest
@@ -291,4 +291,6 @@ def test_the_mock_submits_the_specific_intent_not_other(
         )
 
     assert state["intents"][0] != "OTHER"
-    assert outcome_for(state) == expected
+    # The result contract carries these separately now; the expected value keeps the old
+    # "intent:risk" shape, so compare the pair (Round 57.1 removed the outcome string).
+    assert f"{state['classification']}:{state['risk']}:DRAFT_READY" == expected

@@ -78,6 +78,16 @@ public class AgentRunService {
     }
 
     /**
+     * Marks every waiting draft for this patient as superseded: once a human has answered, an agent
+     * draft can no longer be approved onto the thread (Round 57.3).
+     */
+    @Transactional
+    public int supersedeWaitingFor(Long patientId) {
+        return runs.supersedeWaiting(patientId, AgentRunState.WAITING_REVIEW.name(),
+                AgentRunState.SUPERSEDED.name());
+    }
+
+    /**
      * Claims and dispatches the jobs that are due.
      *
      * @return how many jobs this caller claimed and attempted

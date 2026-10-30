@@ -24,6 +24,14 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, Long> {
      * The row a reviewer is deciding on, locked for the transaction: two concurrent approvals must
      * not both publish, and the lock is what serialises them (Round 57.2).
      */
+    /** A human reply makes every waiting draft for that patient stale (Round 57.3). */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE AgentRun r SET r.state = :to "
+            + "WHERE r.state = :from AND r.patientId = :patientId")
+    int supersedeWaiting(@org.springframework.data.repository.query.Param("patientId") Long patientId,
+                         @org.springframework.data.repository.query.Param("from") String from,
+                         @org.springframework.data.repository.query.Param("to") String to);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT r FROM AgentRun r WHERE r.id = :id")
     java.util.Optional<AgentRun> findByIdForUpdate(@org.springframework.data.repository.query.Param("id")
