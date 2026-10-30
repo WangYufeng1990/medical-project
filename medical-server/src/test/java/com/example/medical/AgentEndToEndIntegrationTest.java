@@ -172,6 +172,20 @@ class AgentEndToEndIntegrationTest {
         assertEquals(1, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM agent_run WHERE message_id = ?", Integer.class, messageId),
                 "still one job for one message");
+
+        // One more real restart, now that Java has accepted the result: nothing may be resent.
+        stopPython();
+        String thirdUrl = startPython(PATIENT_TOKEN_ENV, checkpoints);
+        agentProperties.setBaseUrl(thirdUrl);
+
+        assertEquals(0, agentRuns.dispatchDue(), "an accepted run is not due again");
+        long runId = ((Number) runFor(messageId).get("id")).longValue();
+        assertEquals(2, ((Number) runFor(messageId).get("attempt")).intValue(),
+                "the restarted worker must not attempt the run a third time");
+        assertEquals("WAITING_REVIEW", runFor(messageId).get("state"));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class, runId),
+                "the accepted result stays the only one");
     }
 
     // ── the Python process ──────────────────────────────────────────

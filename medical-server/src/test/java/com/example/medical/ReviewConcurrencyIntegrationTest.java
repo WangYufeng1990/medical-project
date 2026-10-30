@@ -445,7 +445,6 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
         Ready ready = ready("My invoice looks wrong");
         claim(ready.runId());
         authenticateAsDoctor(2L);
-
         java.util.concurrent.atomic.AtomicReference<com.example.medical.module.chat.dto.agent.ReviewDecisionVO>
                 decided = new java.util.concurrent.atomic.AtomicReference<>();
         try {
@@ -462,6 +461,8 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
             });
         } catch (org.springframework.transaction.UnexpectedRollbackException rolledBack) {
             // The rollback-only marker makes the commit throw; that is the expected outcome.
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
 
         assertNotNull(decided.get(), "the approval must have returned");

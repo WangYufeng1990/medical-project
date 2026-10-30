@@ -111,7 +111,6 @@ class StubProvider:
 def java_stub() -> Iterator[str]:
     StubJava.received = []
     StubJava.expected_generation = None
-    StubJava.accepted_receipt = True
     StubJava.accepted_generation = 1
     StubJava.accepted_receipt = False
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubJava)

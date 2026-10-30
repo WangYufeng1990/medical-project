@@ -6290,6 +6290,22 @@ covers "an accepted receipt for another generation" rather than "no receipt".
 **Still open.** The restart test still uses a stub for the worker side; no killed-and-restarted real
 process is exercised.
 
+### Round 57.3 — Real restart after acceptance (2026-10-30)
+
+The opt-in dual-process test already started a real Python process, killed it and restarted it to
+finish a run Java was retrying. It now adds the acceptance case the review asked for: **after** Java
+has stored the result (`WAITING_REVIEW`, one `agent_run_result` row), the Python process is killed and
+started again with the same checkpoints. A dispatch attempt finds **nothing due**, the attempt count
+stays 2, the state stays `WAITING_REVIEW` and the run still has exactly one result — a restarted
+worker does not post an accepted generation again.
+
+Two test-hygiene items from the review: the rollback test clears the `SecurityContext` in a `finally`,
+and the Python stub fixture no longer assigns `accepted_receipt` twice.
+
+**Verification (actually run).** `mvn test -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true` →
+passes in 11.2 s with the real process kill/restart; `mvn clean verify` → **398 tests** (1 skipped);
+`pytest` → **206 passed**; `ruff` and `mypy --strict` clean (33 files).
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
