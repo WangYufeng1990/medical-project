@@ -199,8 +199,7 @@ public class AgentReviewService {
         vo.setFinalText(content);
         vo.setEdited(edited);
         vo.setNoticeAppended(!base.contains(SafetyNoticeService.RESPONSE_NOTICE));
-        eventLog.record(runId, "APPROVED", reviewerId,
-                "published as message " + published.getId());
+        eventLog.recordDecision(runId, "APPROVED", reviewerId);
         return vo;
     }
 
@@ -237,7 +236,7 @@ public class AgentReviewService {
         vo.setRunId(runId);
         vo.setDecision("REJECTED");
         vo.setActorId(reviewerId);
-        eventLog.record(runId, "REJECTED", reviewerId, reason);
+        eventLog.recordDecision(runId, "REJECTED", reviewerId);
         return vo;
     }
 

@@ -82,6 +82,9 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     private com.example.medical.module.chat.service.ChatService chatService;
 
     @Autowired
+    private com.example.medical.module.chat.service.AgentReviewService reviews;
+
+    @Autowired
     private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
@@ -398,6 +401,10 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
         assertEquals("DENIED", jdbc.queryForObject(
                 "SELECT action FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
                 String.class, ready.runId()));
+        // The classification is fixed text, not the exception or the rejection reason.
+        assertEquals("APPROVED_409", jdbc.queryForObject(
+                "SELECT detail FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+                String.class, ready.runId()));
         assertEquals(2L, jdbc.queryForObject(
                 "SELECT actor_id FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
                 Long.class, ready.runId()));
@@ -412,6 +419,31 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
         assertEquals("APPROVED", jdbc.queryForObject(
                 "SELECT action FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
                 String.class, ready.runId()));
+    }
+
+    @Test
+    void aRolledBackApprovalLeavesNoEventBehind() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+        claim(ready.runId());
+
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                reviews.approve(2L, ready.runId(), null);
+                status.setRollbackOnly();
+            });
+        } catch (RuntimeException expected) {
+            // Rollback-only commits throw; the point is what is left in the database.
+        }
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_decision WHERE run_id = ?", Integer.class,
+                ready.runId()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_event WHERE run_id = ?", Integer.class,
+                ready.runId()));
+        assertEquals(0, countStaffMessages());
+        assertEquals("WAITING_REVIEW", jdbc.queryForObject(
+                "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId()));
     }
 
     @Test

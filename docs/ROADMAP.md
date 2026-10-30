@@ -6231,6 +6231,38 @@ a *later* generation overwriting an earlier result reads as not accepted for the
 the intended stale-generation answer, but it means "accepted" is about this generation, not the run.
 The restart test exercises the worker against a stub, not a killed-and-restarted real process.
 
+### Round 57.3 review fixes (2026-10-30, second pass)
+
+**1. P1 — the Python receipt query did not send the generation**, so Java answered `accepted=false`
+and recovery still posted, then took the 403. `fetch_receipt(run_id, generation)` sends the query
+parameter and the worker only skips the submission when the receipt's run **and** generation match.
+The stub now answers strictly: a missing or different generation is not accepted. Tests: an accepted
+receipt for the same generation → **zero** result posts; a receipt for generation 1 does not suppress
+generation 2's submission (one post).
+
+**2. P2 — success events were committed independently.** `recordDecision` now uses `MANDATORY`
+(the decision's transaction), and only refusals use `REQUIRES_NEW` (`recordRefusal`). Test: an
+approval performed inside a transaction that is then rolled back leaves **no** decision, **no** event,
+**no** message and the run still `WAITING_REVIEW`.
+
+**3. P2 — the rejection reason reappeared in plaintext.** Events no longer store the reason at all:
+a decision event carries only action and actor, and the reason stays in the encrypted decision row.
+Refusal events carry a fixed classification (`APPROVED_409`, `APPROVE_SYSTEM_ERROR`, `AUTHORIZATION`),
+never exception text. The event's `detail` is thus free of patient text — asserted by the fixed-string
+check in the refusal test.
+
+**4. P2 — failure logging covered only `BusinessException`.** The controller now also records a fixed
+`FAILED` classification for runtime failures, and a `HandlerInterceptor` on `/api/v1/agent/reviews/**`
+records `DENIED`/`AUTHORIZATION` when `@PreAuthorize` refuses before the method runs, keeping the
+original response semantics (403) intact.
+
+**Verification (actually run).** `mvn clean verify` → **397 tests, 0 failures, 1 skipped**; Python
+`pytest` → **206 passed**, `ruff` and `mypy --strict` clean.
+
+**Still open.** The restart test still uses a stub for the worker side (no killed-and-restarted real
+process), and the authorization interceptor is exercised only for the business path — a dedicated
+patient-token assertion for the interceptor's event is not yet written.
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.

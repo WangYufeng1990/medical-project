@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import urllib.parse
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,22 +34,31 @@ class StubJava(BaseHTTPRequestHandler):
     expected_generation: ClassVar[int | None] = None
     # When set, the stub answers the receipt query with an accepted result.
     accepted_receipt: ClassVar[bool] = False
+    # The generation a receipt is accepted for; None means "accept regardless of what was asked".
+    accepted_generation: ClassVar[int | None] = 1
 
     def do_GET(self) -> None:
-        if not self.path.endswith("/receipt"):
+        if "/receipt" not in self.path:
             self.send_response(404)
             self.end_headers()
             return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        requested = query.get("generation", [None])[0]
+        # Java's rule: the answer is for one generation, and a missing or different one is not
+        # accepted. A stub that always says yes hides a caller that forgets to send it.
+        accepted = (StubJava.accepted_receipt and requested == "1"
+                    and (StubJava.accepted_generation is None
+                         or requested == str(StubJava.accepted_generation)))
         payload = {
             "code": 200,
             "message": "ok",
             "data": {
                 "runId": 41,
-                "generation": 1,
-                "state": "PUBLISHED" if StubJava.accepted_receipt else "RUNNING",
-                "hasResult": StubJava.accepted_receipt,
-                "resultGeneration": 1 if StubJava.accepted_receipt else None,
-                "accepted": StubJava.accepted_receipt,
+                "generation": int(requested) if requested is not None else None,
+                "state": "PUBLISHED" if accepted else "RUNNING",
+                "hasResult": accepted,
+                "resultGeneration": 1 if accepted else None,
+                "accepted": accepted,
             },
         }
         body = json.dumps(payload).encode()
@@ -101,6 +111,8 @@ class StubProvider:
 def java_stub() -> Iterator[str]:
     StubJava.received = []
     StubJava.expected_generation = None
+    StubJava.accepted_generation = 1
+    StubJava.accepted_receipt = False
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubJava)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -277,3 +289,30 @@ def test_a_recovery_that_finds_the_result_accepted_does_not_resubmit(
 
     assert response.status_code == 202
     assert StubJava.received == [], "an accepted result must not be submitted again"
+
+
+def test_a_receipt_for_another_generation_does_not_count(
+    tmp_path: Path, java_stub: str
+) -> None:
+    # Java answers per generation: an accepted receipt for generation 1 must not stop the
+    # submission of generation 2 (the run was retried).
+    StubJava.accepted_generation = 1
+    settings = Settings(
+        inbound_token=INBOUND,
+        outbound_token=OUTBOUND,
+        java_base_url=java_stub,
+        checkpoint_url=f"sqlite://{tmp_path / 'other-generation.sqlite'}",
+    )
+    app = create_app(settings, provider=StubProvider())
+
+    with TestClient(app) as started:
+        response = started.post(
+            "/internal/v1/runs",
+            json=request_body(execution_generation=2),
+            headers=headers(),
+        )
+
+    assert response.status_code == 202
+    assert [entry["path"] for entry in StubJava.received] == [
+        "/api/v1/internal/agent/runs/41/results"
+    ], "a receipt for another generation must not suppress this submission"

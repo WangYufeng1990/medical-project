@@ -51,9 +51,14 @@ public class AgentReviewController {
         try {
             return Result.ok(decision.get());
         } catch (BusinessException refused) {
-            eventLog.record(runId, "DENIED", user.getUserId(),
-                    action + ": " + refused.getMessage());
+            // Fixed classification only: the refusal reason can carry patient text.
+            eventLog.recordRefusal(runId, "DENIED", user.getUserId(),
+                    action + "_" + refused.getCode());
             throw refused;
+        } catch (RuntimeException failure) {
+            // A system failure is an attempt too; its message is not stored for the same reason.
+            eventLog.recordRefusal(runId, "FAILED", user.getUserId(), action + "_SYSTEM_ERROR");
+            throw failure;
         }
     }
 
