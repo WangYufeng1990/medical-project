@@ -85,6 +85,12 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     private com.example.medical.module.chat.service.AgentReviewService reviews;
 
     @Autowired
+    private com.example.medical.module.chat.repository.AgentReviewDecisionRepository decisions;
+
+    @Autowired
+    private com.example.medical.module.chat.repository.AgentReviewEventRepository events;
+
+    @Autowired
     private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
@@ -383,6 +389,19 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
                 + "WHERE party_a_type = 'PATIENT' AND party_a_id = 100", Long.class));
     }
 
+    /** The service calls in this test run outside MockMvc, so the doctor identity is set here. */
+    private void authenticateAsDoctor(long doctorId) {
+        com.example.medical.security.LoginUser user =
+                new com.example.medical.security.LoginUser(doctorId, "doctor1", "irrelevant",
+                        java.util.List.of("DOCTOR"));
+        var authentication = new org.springframework.security.authentication
+                .UsernamePasswordAuthenticationToken(user, null,
+                java.util.List.of(new org.springframework.security.core.authority
+                        .SimpleGrantedAuthority("ROLE_DOCTOR")));
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .setAuthentication(authentication);
+    }
+
     private int countAllMessages() {
         return jdbc.queryForObject("SELECT COUNT(*) FROM message", Integer.class);
     }
@@ -422,28 +441,65 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void aRolledBackApprovalLeavesNoEventBehind() throws Exception {
+    void aRolledBackApprovalLeavesNoDecisionMessageOrSuccessEvent() throws Exception {
         Ready ready = ready("My invoice looks wrong");
         claim(ready.runId());
+        authenticateAsDoctor(2L);
 
+        java.util.concurrent.atomic.AtomicReference<com.example.medical.module.chat.dto.agent.ReviewDecisionVO>
+                decided = new java.util.concurrent.atomic.AtomicReference<>();
         try {
             transactionTemplate.executeWithoutResult(status -> {
-                reviews.approve(2L, ready.runId(), null);
+                decided.set(reviews.approve(2L, ready.runId(), null));
+                // The approval really ran: inside the transaction the decision and the success event
+                // exist. Asserting this keeps the test from passing on an early refusal.
+                assertNotNull(decisions.findByRunId(ready.runId()).orElse(null),
+                        "the decision must be written before the rollback");
+                assertTrue(events.findByRunIdOrderByIdAsc(ready.runId()).stream()
+                                .anyMatch(event -> "APPROVED".equals(event.getAction())),
+                        "the success event must exist inside the transaction");
                 status.setRollbackOnly();
             });
-        } catch (RuntimeException expected) {
-            // Rollback-only commits throw; the point is what is left in the database.
+        } catch (org.springframework.transaction.UnexpectedRollbackException rolledBack) {
+            // The rollback-only marker makes the commit throw; that is the expected outcome.
         }
 
+        assertNotNull(decided.get(), "the approval must have returned");
         assertEquals(0, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM agent_review_decision WHERE run_id = ?", Integer.class,
                 ready.runId()));
         assertEquals(0, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM agent_review_event WHERE run_id = ?", Integer.class,
-                ready.runId()));
+                "SELECT COUNT(*) FROM agent_review_event WHERE run_id = ? AND action = 'APPROVED'",
+                Integer.class, ready.runId()));
         assertEquals(0, countStaffMessages());
         assertEquals("WAITING_REVIEW", jdbc.queryForObject(
                 "SELECT state FROM agent_run WHERE id = ?", String.class, ready.runId()));
+    }
+
+    @Test
+    void anAuthorizationRefusalIsRecordedOnce() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+
+        mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_event WHERE run_id = ? AND action = 'DENIED' "
+                        + "AND detail = 'AUTHORIZATION'", Integer.class, ready.runId()));
+
+        // A business refusal is a different outcome and must not be counted as an authorization one.
+        mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict());
+
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_review_event WHERE run_id = ? AND detail = 'AUTHORIZATION'",
+                Integer.class, ready.runId()));
     }
 
     @Test

@@ -111,6 +111,7 @@ class StubProvider:
 def java_stub() -> Iterator[str]:
     StubJava.received = []
     StubJava.expected_generation = None
+    StubJava.accepted_receipt = True
     StubJava.accepted_generation = 1
     StubJava.accepted_receipt = False
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubJava)
@@ -296,6 +297,7 @@ def test_a_receipt_for_another_generation_does_not_count(
 ) -> None:
     # Java answers per generation: an accepted receipt for generation 1 must not stop the
     # submission of generation 2 (the run was retried).
+    StubJava.accepted_receipt = True
     StubJava.accepted_generation = 1
     settings = Settings(
         inbound_token=INBOUND,

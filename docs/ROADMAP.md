@@ -6263,6 +6263,33 @@ original response semantics (403) intact.
 process), and the authorization interceptor is exercised only for the business path — a dedicated
 patient-token assertion for the interceptor's event is not yet written.
 
+### Round 57.3 review fixes (2026-10-30, third pass)
+
+**1. P2 — authorization refusals were never recorded.** The interceptor relied on
+`afterCompletion`'s exception being an `AccessDeniedException`, but the global handler consumes it,
+so the interceptor received `null` and returned. The denial is now logged where it is handled: a
+`@RestControllerAdvice(assignableTypes = AgentReviewController.class)` with highest precedence catches
+the `AccessDeniedException`, records `DENIED`/`AUTHORIZATION` with the actor and run id, and returns
+the same 403 body the global handler used. Test: a patient token gets 403 and exactly one
+`DENIED`/`AUTHORIZATION` event; a following business 409 does not add a second authorization event.
+
+**2. P2 — the rollback test could pass without the approval running.** It swallowed every
+`RuntimeException` and then only checked that nothing was written, and it called the service without a
+doctor identity. It now sets a doctor authentication explicitly, asserts **inside** the transaction
+that the decision and the `APPROVED` event exist (so the approval really ran), then marks the
+transaction rollback-only, expects only `UnexpectedRollbackException`, and checks that the decision,
+the success event, the message and the state all rolled back. Red check (actually run): set
+`recordDecision` back to `REQUIRES_NEW` and the test fails with `expected: <0> but was: <1>`.
+
+**3. Python test strengthened.** The wrong-generation case now sets `accepted_receipt = True`, so it
+covers "an accepted receipt for another generation" rather than "no receipt".
+
+**Verification (actually run).** `mvn clean verify` → **398 tests, 0 failures, 1 skipped**; Python
+`pytest` → **206 passed**, `ruff` and `mypy --strict` clean.
+
+**Still open.** The restart test still uses a stub for the worker side; no killed-and-restarted real
+process is exercised.
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
