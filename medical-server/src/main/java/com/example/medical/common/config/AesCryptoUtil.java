@@ -221,12 +221,12 @@ public class AesCryptoUtil {
      */
     public static boolean isCiphertext(String value) {
         if (value == null || value.isEmpty() || value.length() % 2 != 0) return false;
-        byte[] bytes;
-        try {
-            bytes = hexToBytes(value);
-        } catch (RuntimeException notHex) {
-            return false;
+        // hexToBytes() maps an invalid digit to bits, it does not throw, so every character has to
+        // be checked here: a prose value that merely starts with "01" is not ciphertext.
+        for (int index = 0; index < value.length(); index++) {
+            if (Character.digit(value.charAt(index), 16) < 0) return false;
         }
+        byte[] bytes = hexToBytes(value);
         // GCM_TAG_LENGTH is in bits; the tag occupies 16 bytes.
         return bytes.length >= GCM_IV_LENGTH + (GCM_TAG_LENGTH / 8) + 1
                 && bytes[0] == VERSION_CURRENT;

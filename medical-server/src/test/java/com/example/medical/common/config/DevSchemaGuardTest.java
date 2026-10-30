@@ -143,8 +143,47 @@ class DevSchemaGuardTest {
         probe.update("INSERT INTO agent_review_decision (id, reason) VALUES (1, ?)", wide);
         assertEquals(wide, probe.queryForObject(
                 "SELECT reason FROM agent_review_decision WHERE id = 1", String.class));
-        assertEquals(11, probe.queryForObject(
+        assertEquals(DevSchemaGuard.SCHEMA_VERSION, probe.queryForObject(
                 "SELECT MAX(version) FROM schema_version", Integer.class));
+    }
+
+    @Test
+    void repairsADatabaseThatRecordedV11WithANarrowColumn() {
+        // The previous build could record v11 while the column was still VARCHAR(500), and its
+        // early return kept the capacity check from running. Such a database must be repaired.
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:repair-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        JdbcTemplate probe = new JdbcTemplate(dataSource);
+        probe.execute("CREATE TABLE schema_version (id BIGINT NOT NULL AUTO_INCREMENT, "
+                + "version INT NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                + "PRIMARY KEY (id))");
+        probe.execute("CREATE TABLE chat_conversation (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_capability (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_run_result (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_claim (id BIGINT NOT NULL PRIMARY KEY)");
+        probe.execute("CREATE TABLE agent_review_decision (id BIGINT NOT NULL PRIMARY KEY, "
+                + "reason VARCHAR(500))");
+        probe.execute("CREATE TABLE message (id BIGINT NOT NULL AUTO_INCREMENT, "
+                + "sender_id BIGINT NOT NULL, sender_type VARCHAR(10) NOT NULL, "
+                + "receiver_id BIGINT NOT NULL, receiver_type VARCHAR(10) NOT NULL, "
+                + "PRIMARY KEY (id))");
+        probe.update("INSERT INTO schema_version (version) VALUES (11)");
+
+        new DevSchemaGuard(probe, "jdbc:h2:mem:repair-upgrade").run();
+
+        // The 500-character reason becomes 1058 characters of ciphertext, which only fits now.
+        String wide = "b".repeat(1058);
+        probe.update("INSERT INTO agent_review_decision (id, reason) VALUES (2, ?)", wide);
+        assertEquals(wide, probe.queryForObject(
+                "SELECT reason FROM agent_review_decision WHERE id = 2", String.class));
+        assertEquals(DevSchemaGuard.SCHEMA_VERSION, probe.queryForObject(
+                "SELECT MAX(version) FROM schema_version", Integer.class));
+
+        // A second start is a no-op.
+        new DevSchemaGuard(probe, "jdbc:h2:mem:repair-upgrade").run();
+        assertEquals(wide, probe.queryForObject(
+                "SELECT reason FROM agent_review_decision WHERE id = 2", String.class));
     }
 
     @Test

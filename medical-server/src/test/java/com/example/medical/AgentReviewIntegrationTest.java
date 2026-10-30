@@ -394,6 +394,19 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void aProseValueStartingLikeACiphertextIsMigrated() {
+        String prose = "01" + "z".repeat(120);
+        jdbc.update("INSERT INTO agent_run_result (id, run_id, intent, risk, requires_clinician, "
+                        + "draft, validation_ok, validation_kind) "
+                        + "VALUES (901, 902, 'BILLING', 'ROUTINE', 0, ?, 1, 'policy_answer')", prose);
+
+        assertEquals(1, backfill.encryptColumn("agent_run_result", "draft"));
+        assertEquals(prose, converter.convertToEntityAttribute(jdbc.queryForObject(
+                "SELECT draft FROM agent_run_result WHERE id = 901", String.class)));
+        assertEquals(0, backfill.encryptColumn("agent_run_result", "draft"));
+    }
+
+    @Test
     void aFiveHundredCharacterRejectionReasonIsEncryptedAndReadable() throws Exception {
         Dispatched dispatched = ready("My invoice looks wrong");
         claim(dispatched.runId());

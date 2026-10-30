@@ -5859,7 +5859,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
-| 57.2 Approve/edit/reject | P0 / **In progress** (2026-10-29; encryption fixes applied, awaiting re-review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
+| 57.2 Approve/edit/reject | P0 / **In progress** (2026-10-30; third review round applied, awaiting re-review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
 | 57.3 Freshness and recovery | P0 / Pending | Conversation/result version check; human reply invalidates old draft; reliable graph resume after Java publication | ReviewConcurrencyIntegrationTest: new message prevents stale approval; Python outage does not block staff send; recovery never resends |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
@@ -6052,6 +6052,31 @@ decrypted through the converter.
 existing database); the H2 ALTER syntax is dev-guard-only, and MySQL applies `schema.sql` by hand as
 the guard's message says. The backfill covers exactly the three columns this slice added — it is not
 a general plaintext sweep.
+
+### Round 57.2 review fixes, third round (2026-10-30)
+
+**1. P2 — `isCiphertext()` did not validate hex characters.** It relied on `hexToBytes()` throwing,
+but that method turns an invalid digit into bits and never throws, so a 122-character prose value
+starting with `01` was reported as ciphertext: the backfill skipped it (0 rows, twice), the plaintext
+stayed, and reads kept failing. Every character is checked with `Character.digit(…, 16)` now. Tests:
+such a prose value is migrated and read back correctly, while real ciphertext is skipped and a second
+pass migrates nothing.
+
+**2. P2 — a database already marked v11 with a narrow column was never repaired.** The guard returns
+early when the recorded version equals the current one, so the capacity check introduced with v11
+could not run for a database that had already recorded v11 while `reason` was still `VARCHAR(500)` —
+and the new backfill would then fail at startup writing the 1058-character ciphertext of a
+500-character reason. Schema version **v12** repeats the retype: v11 is now "the version that could be
+wrong", and v12 re-checks the capacity and widens the column before the version is recorded. Test: a
+probe database at v11 with `reason VARCHAR(500)` is upgraded, stores a 1058-character value, records
+v12, and a second start is a no-op.
+
+The new crypto test also had to snapshot and restore the static key: Surefire reuses the JVM, so a
+test key left installed made later classes decrypt the application's rows with the wrong key (a 500
+on login, which is how it surfaced in the full run).
+
+**Verification (actually run).** `mvn clean verify` → **387 tests, 0 failures, 1 skipped**;
+`AesCryptoUtilCiphertextTest` 2, `DevSchemaGuardTest` 11, `AgentReviewIntegrationTest` 13.
 
 ## Round 58 — Read-only appointment tools (Pending)
 
