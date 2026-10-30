@@ -108,6 +108,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
     void reset() {
         patientLockAttempts.set(0);
         CAPABILITIES.clear();
+        jdbc.update("DELETE FROM agent_review_event");
         jdbc.update("DELETE FROM agent_review_decision");
         jdbc.update("DELETE FROM agent_review_claim");
         jdbc.update("DELETE FROM agent_run_result");
@@ -381,6 +382,61 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 
     private int countAllMessages() {
         return jdbc.queryForObject("SELECT COUNT(*) FROM message", Integer.class);
+    }
+
+    @Test
+    void aRefusedDecisionIsStillRecorded() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+
+        // Not claimed: the approval is refused, and the attempt must still be auditable.
+        mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict());
+
+        assertEquals("DENIED", jdbc.queryForObject(
+                "SELECT action FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+                String.class, ready.runId()));
+        assertEquals(2L, jdbc.queryForObject(
+                "SELECT actor_id FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+                Long.class, ready.runId()));
+
+        claim(ready.runId());
+        mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        assertEquals("APPROVED", jdbc.queryForObject(
+                "SELECT action FROM agent_review_event WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+                String.class, ready.runId()));
+    }
+
+    @Test
+    void theReceiptTellsARefusedReplayFromAFinishedRun() throws Exception {
+        Ready ready = ready("My invoice looks wrong");
+        claim(ready.runId());
+        mockMvc.perform(post("/api/v1/agent/reviews/" + ready.runId() + "/approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        replayResult(ready);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/internal/agent/runs/" + ready.runId() + "/receipt")
+                        .param("generation", String.valueOf(ready.generation()))
+                        .header("X-Agent-Service-Token", "test-inbound-token"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.data.state").value("PUBLISHED"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.data.hasResult").value(true))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.data.accepted").value(true));
     }
 
     // ── helpers ─────────────────────────────────────────────────────

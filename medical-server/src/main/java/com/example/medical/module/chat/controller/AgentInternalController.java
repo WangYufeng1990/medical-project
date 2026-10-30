@@ -10,7 +10,9 @@ import com.example.medical.module.chat.agent.AgentServiceToken;
 import com.example.medical.module.chat.dto.agent.AgentRunContextVO;
 import com.example.medical.module.chat.dto.agent.AgentRunResultRequest;
 import com.example.medical.module.chat.entity.AgentRun;
+import com.example.medical.module.chat.dto.agent.RunReceiptVO;
 import com.example.medical.module.chat.service.AgentReviewService;
+import com.example.medical.module.chat.service.AgentRunReceiptService;
 import com.example.medical.module.chat.service.AgentRunStateStore;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class AgentInternalController {
     private final PatientLookup patients;
     private final AgentRunStateStore states;
     private final AgentReviewService reviews;
+    private final AgentRunReceiptService receipts;
 
     @GetMapping("/runs/{runId}")
     public Result<AgentRunContextVO> run(@RequestHeader(value = "X-Agent-Service-Token", required = false) String token,
@@ -44,6 +47,15 @@ public class AgentInternalController {
         AgentRun run = capabilities.verify(runId, capability);
         requireActiveAccount(run);
         return Result.ok(AgentRunContextVO.of(run));
+    }
+
+    @GetMapping("/runs/{runId}/receipt")
+    public Result<RunReceiptVO> receipt(
+            @RequestHeader(value = "X-Agent-Service-Token", required = false) String token,
+            @PathVariable Long runId,
+            @RequestParam(required = false) Long generation) {
+        serviceToken.require(token);
+        return Result.ok(receipts.receipt(runId, generation));
     }
 
     @PostMapping("/runs/{runId}/results")

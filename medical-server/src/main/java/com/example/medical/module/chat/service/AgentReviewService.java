@@ -56,6 +56,7 @@ public class AgentReviewService {
     private final AgentRunStateStore states;
     private final AgentCapabilityService capabilities;
     private final EntityManager entityManager;
+    private final AgentReviewEventService eventLog;
     private final AgentReviewClaimRepository claims;
     private final AgentReviewDecisionRepository decisions;
     private final ChatService chat;
@@ -198,6 +199,8 @@ public class AgentReviewService {
         vo.setFinalText(content);
         vo.setEdited(edited);
         vo.setNoticeAppended(!base.contains(SafetyNoticeService.RESPONSE_NOTICE));
+        eventLog.record(runId, "APPROVED", reviewerId,
+                "published as message " + published.getId());
         return vo;
     }
 
@@ -234,6 +237,7 @@ public class AgentReviewService {
         vo.setRunId(runId);
         vo.setDecision("REJECTED");
         vo.setActorId(reviewerId);
+        eventLog.record(runId, "REJECTED", reviewerId, reason);
         return vo;
     }
 

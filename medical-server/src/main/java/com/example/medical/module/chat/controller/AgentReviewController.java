@@ -6,6 +6,8 @@ import com.example.medical.module.chat.dto.agent.ApproveReviewRequest;
 import com.example.medical.module.chat.dto.agent.RejectReviewRequest;
 import com.example.medical.module.chat.dto.agent.ReviewDecisionVO;
 import com.example.medical.module.chat.dto.agent.ReviewItemVO;
+import com.example.medical.common.exception.BusinessException;
+import com.example.medical.module.chat.service.AgentReviewEventService;
 import com.example.medical.module.chat.service.AgentReviewService;
 import com.example.medical.security.LoginUser;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ import java.util.List;
 public class AgentReviewController {
 
     private final AgentReviewService reviews;
+    private final AgentReviewEventService eventLog;
     private final DoctorPatientScope scope;
 
     @GetMapping
@@ -40,6 +43,18 @@ public class AgentReviewController {
         // two from drifting apart (the token's scopes and the ROLE_* authorities differ).
         boolean admin = scope.resolve() == null;
         return Result.ok(reviews.queue(user.getUserId(), admin));
+    }
+
+    /** A refused decision is still an action: it is logged before the error reaches the caller. */
+    private Result<ReviewDecisionVO> decide(LoginUser user, Long runId, String action,
+                                            java.util.function.Supplier<ReviewDecisionVO> decision) {
+        try {
+            return Result.ok(decision.get());
+        } catch (BusinessException refused) {
+            eventLog.record(runId, "DENIED", user.getUserId(),
+                    action + ": " + refused.getMessage());
+            throw refused;
+        }
     }
 
     @PostMapping("/{runId}/claim")
@@ -52,13 +67,15 @@ public class AgentReviewController {
     public Result<ReviewDecisionVO> approve(@AuthenticationPrincipal LoginUser user,
                                             @PathVariable Long runId,
                                             @Valid @RequestBody ApproveReviewRequest request) {
-        return Result.ok(reviews.approve(user.getUserId(), runId, request.getFinalText()));
+        return decide(user, runId, "APPROVED",
+                () -> reviews.approve(user.getUserId(), runId, request.getFinalText()));
     }
 
     @PostMapping("/{runId}/reject")
     public Result<ReviewDecisionVO> reject(@AuthenticationPrincipal LoginUser user,
                                            @PathVariable Long runId,
                                            @Valid @RequestBody RejectReviewRequest request) {
-        return Result.ok(reviews.reject(user.getUserId(), runId, request.getReason()));
+        return decide(user, runId, "REJECTED",
+                () -> reviews.reject(user.getUserId(), runId, request.getReason()));
     }
 }

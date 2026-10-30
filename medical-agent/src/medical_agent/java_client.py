@@ -46,11 +46,49 @@ def _dicts(value: object) -> list[dict[str, object]]:
     return [item for item in value if isinstance(item, dict)]
 
 
+@dataclass(frozen=True)
+class RunReceipt:
+    """What Java says about a generation's result (Round 57.3)."""
+
+    run_id: int
+    state: str
+    has_result: bool
+    accepted: bool
+
+
+def fetch_receipt(run_id: int) -> RunReceipt | None:
+    """The receipt, or None when Java cannot answer (old build, outage)."""
+    credentials = _credentials.get()
+    if credentials is None:
+        return None
+    try:
+        response = httpx.get(
+            f"{credentials.java_base_url.rstrip('/')}/api/v1/internal/agent/runs/{run_id}/receipt",
+            headers={"X-Agent-Service-Token": credentials.outbound_token},
+            timeout=5.0,
+        )
+    except httpx.HTTPError:
+        return None
+    if response.status_code != 200:
+        return None
+    body = response.json().get("data") or {}
+    return RunReceipt(
+        run_id=int(body.get("runId") or run_id),
+        state=str(body.get("state") or ""),
+        has_result=bool(body.get("hasResult")),
+        accepted=bool(body.get("accepted")),
+    )
+
+
 def submit_result(state: RunState) -> None:
     """POST the result for this attempt; a failure raises so the graph stops there."""
     credentials = _credentials.get()
     if credentials is None:
         raise RuntimeError("no call credentials are bound to this execution")
+    receipt = fetch_receipt(int(state["run_id"]))
+    if receipt is not None and receipt.accepted:
+        # Recovery must not resend: the status codes cannot say "already accepted", the receipt can.
+        return
     raw_validation = state.get("validation")
     validation: dict[str, object] = raw_validation if isinstance(raw_validation, dict) else {}
     adopted = _dicts(state.get("adopted_citations"))

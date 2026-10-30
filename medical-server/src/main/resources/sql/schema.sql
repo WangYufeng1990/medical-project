@@ -402,6 +402,20 @@ CREATE TABLE IF NOT EXISTS agent_review_decision (
     UNIQUE KEY uk_agent_review_decision_run (run_id)
 );
 
+-- Round 57.3: every review action, including refused ones.
+CREATE TABLE IF NOT EXISTS agent_review_event (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    run_id BIGINT NOT NULL,
+    action VARCHAR(16) NOT NULL,
+    actor_id BIGINT NOT NULL,
+    detail TEXT,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT DEFAULT NULL,

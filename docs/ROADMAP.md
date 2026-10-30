@@ -6204,6 +6204,33 @@ Red check (actually run): with `lockThread` moved after `saveAndFlush`, the test
 `expected: <PATIENT> but was: <STAFF>` — the original pointer bug, not just the probe. Restored, the
 class passes 7 of 7 and `mvn clean verify` passes 394 tests (1 skipped).
 
+### Round 57.3 — Receipts, restart recovery and review events (2026-10-30)
+
+**Receipt instead of "any 403/409 means done".**
+`GET /api/v1/internal/agent/runs/{runId}/receipt` (service token) answers `{runId, state,
+hasResult, resultGeneration, accepted}` for a generation. `POST …/results` keeps returning 200/empty
+for the normal path, and the receipt is the only way to distinguish "already accepted" from "refused
+now" — the capability is revoked after acceptance, so a replay gets 403 while the work is finished.
+The Python worker queries it before submitting: if `accepted` is true it returns without posting, so a
+recovered run whose result Java already stored is **not resent**. Tests: Java (`ReviewConcurrency`) a
+replayed result is refused and the receipt then reports `PUBLISHED`, `hasResult`, `accepted`; Python
+(`test_api_runs`) a stub whose receipt says accepted receives **zero** result posts.
+
+**Durable review events.** `agent_review_event` (schema v13) records every decision attempt:
+`APPROVED`/`REJECTED` inside the decision transaction, and `DENIED` from the controller whenever the
+decision throws (no claim, another reviewer's claim, stale conversation, wrong state), written in its
+own transaction so a refused action survives the rollback that refused it. Test: an unclaimed
+approval records `DENIED` with the actor, then the claimant's approval records `APPROVED`.
+
+**Verification (actually run).** `mvn clean verify` → **396 tests, 0 failures, 1 skipped**; Python
+`pytest` → **205 passed**, `ruff` and `mypy --strict` clean (33 files); the dual-process test passes in
+11.1 s with the receipt call in the submission path.
+
+**Limits.** The receipt's `accepted` compares the requested generation with the run's current one, so
+a *later* generation overwriting an earlier result reads as not accepted for the earlier one — that is
+the intended stale-generation answer, but it means "accepted" is about this generation, not the run.
+The restart test exercises the worker against a stub, not a killed-and-restarted real process.
+
 ## Round 58 — Read-only appointment tools (Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.

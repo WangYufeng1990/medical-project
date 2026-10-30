@@ -31,6 +31,32 @@ class StubJava(BaseHTTPRequestHandler):
     # When set, the stub behaves like Java's generation check: a result for any other
     # generation is refused with 409, exactly as AgentInternalController does.
     expected_generation: ClassVar[int | None] = None
+    # When set, the stub answers the receipt query with an accepted result.
+    accepted_receipt: ClassVar[bool] = False
+
+    def do_GET(self) -> None:
+        if not self.path.endswith("/receipt"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        payload = {
+            "code": 200,
+            "message": "ok",
+            "data": {
+                "runId": 41,
+                "generation": 1,
+                "state": "PUBLISHED" if StubJava.accepted_receipt else "RUNNING",
+                "hasResult": StubJava.accepted_receipt,
+                "resultGeneration": 1 if StubJava.accepted_receipt else None,
+                "accepted": StubJava.accepted_receipt,
+            },
+        }
+        body = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -230,3 +256,24 @@ def test_a_java_retry_with_a_new_generation_takes_over_the_finished_work(
     generations = [sent["body"]["generation"] for sent in StubJava.received]
     assert generations == [1, 2], f"one attempt per generation: {generations}"
     assert StubJava.received[-1]["capability"] == "capability-for-retry"
+
+
+def test_a_recovery_that_finds_the_result_accepted_does_not_resubmit(
+    tmp_path: Path, java_stub: str
+) -> None:
+    # The capability is revoked once a result is stored, so a resend would be refused with 403;
+    # the receipt is what tells the worker the work is already done.
+    StubJava.accepted_receipt = True
+    settings = Settings(
+        inbound_token=INBOUND,
+        outbound_token=OUTBOUND,
+        java_base_url=java_stub,
+        checkpoint_url=f"sqlite://{tmp_path / 'receipt.sqlite'}",
+    )
+    app = create_app(settings, provider=StubProvider())
+
+    with TestClient(app) as started:
+        response = started.post("/internal/v1/runs", json=request_body(), headers=headers())
+
+    assert response.status_code == 202
+    assert StubJava.received == [], "an accepted result must not be submitted again"
