@@ -36,6 +36,9 @@ class StubJava(BaseHTTPRequestHandler):
     accepted_receipt: ClassVar[bool] = False
     # The generation a receipt is accepted for; None means "accept regardless of what was asked".
     accepted_generation: ClassVar[int | None] = 1
+    # Java accepts the result and then the response is lost: the worker keeps its pending submit.
+    fail_result_response: ClassVar[bool] = False
+    receipt_queries: ClassVar[list[str | None]] = []
 
     def do_GET(self) -> None:
         if "/receipt" not in self.path:
@@ -44,6 +47,7 @@ class StubJava(BaseHTTPRequestHandler):
             return
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         requested = query.get("generation", [None])[0]
+        StubJava.receipt_queries.append(requested)
         # Java's rule: the answer is for one generation, and a missing or different one is not
         # accepted. A stub that always says yes hides a caller that forgets to send it.
         accepted = (StubJava.accepted_receipt and requested == "1"
@@ -80,7 +84,10 @@ class StubJava(BaseHTTPRequestHandler):
             }
         )
         status = 200
-        if (
+        if StubJava.fail_result_response:
+            # Java stored the result; the response is what the worker never receives.
+            status = 500
+        elif (
             StubJava.expected_generation is not None
             and body.get("generation") != StubJava.expected_generation
         ):
@@ -113,6 +120,8 @@ def java_stub() -> Iterator[str]:
     StubJava.expected_generation = None
     StubJava.accepted_generation = 1
     StubJava.accepted_receipt = False
+    StubJava.fail_result_response = False
+    StubJava.receipt_queries = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubJava)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -317,3 +326,39 @@ def test_a_receipt_for_another_generation_does_not_count(
     assert [entry["path"] for entry in StubJava.received] == [
         "/api/v1/internal/agent/runs/41/results"
     ], "a receipt for another generation must not suppress this submission"
+
+
+def test_recovery_after_a_lost_result_response_asks_the_receipt_and_does_not_resend(
+    tmp_path: Path, java_stub: str
+) -> None:
+    # Java stores the result but the response never reaches the worker, so the checkpoint keeps a
+    # pending submit and no submitted_generation. A restart replays the same run/generation: the
+    # worker must learn from the receipt that the result is accepted and post nothing.
+    checkpoints = tmp_path / "lost-response.sqlite"
+    StubJava.fail_result_response = True
+    settings = Settings(
+        inbound_token=INBOUND,
+        outbound_token=OUTBOUND,
+        java_base_url=java_stub,
+        checkpoint_url=f"sqlite://{checkpoints}",
+    )
+    first_app = create_app(settings, provider=StubProvider())
+    with TestClient(first_app, raise_server_exceptions=False) as started:
+        first = started.post("/internal/v1/runs", json=request_body(), headers=headers())
+    assert first.status_code == 500, "the lost response must surface as a failed dispatch"
+    assert len(StubJava.received) == 1, "Java did receive the first submission"
+
+    # The restart: same checkpoint, Java now answers the receipt as accepted.
+    StubJava.fail_result_response = False
+    StubJava.accepted_receipt = True
+    StubJava.received = []
+    StubJava.receipt_queries = []
+    second_app = create_app(settings, provider=StubProvider())
+    with TestClient(second_app) as restarted:
+        replay = restarted.post("/internal/v1/runs", json=request_body(), headers=headers())
+
+    assert replay.status_code == 202
+    assert StubJava.receipt_queries == ["1"], "recovery must ask Java about this generation"
+    assert [entry["path"] for entry in StubJava.received] == [], (
+        "an accepted result must not be posted again after a restart"
+    )

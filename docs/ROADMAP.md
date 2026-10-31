@@ -6297,7 +6297,8 @@ finish a run Java was retrying. It now adds the acceptance case the review asked
 has stored the result (`WAITING_REVIEW`, one `agent_run_result` row), the Python process is killed and
 started again with the same checkpoints. A dispatch attempt finds **nothing due**, the attempt count
 stays 2, the state stays `WAITING_REVIEW` and the run still has exactly one result — a restarted
-worker does not post an accepted generation again.
+worker does not post an accepted generation again. This assertion covers scheduling, not the worker's
+own recovery: it would hold even without the receipt logic, and the record says so.
 
 Two test-hygiene items from the review: the rollback test clears the `SecurityContext` in a `finally`,
 and the Python stub fixture no longer assigns `accepted_receipt` twice.
@@ -6305,6 +6306,26 @@ and the Python stub fixture no longer assigns `accepted_receipt` twice.
 **Verification (actually run).** `mvn test -Dtest=AgentEndToEndIntegrationTest -Dagent.e2e=true` →
 passes in 11.2 s with the real process kill/restart; `mvn clean verify` → **398 tests** (1 skipped);
 `pytest` → **206 passed**; `ruff` and `mypy --strict` clean (33 files).
+
+### Round 57.3 — Receipt-driven recovery window (2026-10-30)
+
+The previous restart assertion only proved that Java does not re-dispatch a `WAITING_REVIEW` run; with
+the receipt logic deleted it still passed. The window the review asked for is now covered at the
+worker level, with a **real checkpoint** and a second service instance:
+
+1. Java stores the result but the response is lost (the stub records the POST and answers 500), so the
+   checkpoint keeps a pending submit and **no** `submitted_generation`.
+2. The service is shut down and recreated against the same SQLite checkpoint.
+3. The same run and generation are replayed to the intake.
+4. Assertions: the intake answers 202, Java's receipt was queried for generation `1`, and the result
+   POST list is **empty** — the restart learned from the receipt and did not resend.
+
+Red check (actually run): with the receipt skip removed, the test fails on `receipt_queries == ["1"]`
+(and would also fail the empty-POST assertion). Python `pytest` → **207 passed**, `ruff` and
+`mypy --strict` clean; `mvn clean verify` → 398 tests (1 skipped).
+
+The end-to-end test's own restart assertion is documented as "an accepted run is not scheduled
+again", which is what it measures.
 
 ## Round 58 — Read-only appointment tools (Pending)
 
