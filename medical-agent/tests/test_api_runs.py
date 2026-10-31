@@ -19,7 +19,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from medical_agent.api.app import create_app
+from medical_agent.checkpoints import open_checkpointer
+from medical_agent.classification.classifier import Classifier
 from medical_agent.config import Settings
+from medical_agent.graph.builder import build_graph
 from medical_agent.providers.base import ProviderRequest, ProviderResponse
 
 INBOUND = "inbound-token-for-tests"
@@ -347,6 +350,18 @@ def test_recovery_after_a_lost_result_response_asks_the_receipt_and_does_not_res
         first = started.post("/internal/v1/runs", json=request_body(), headers=headers())
     assert first.status_code == 500, "the lost response must surface as a failed dispatch"
     assert len(StubJava.received) == 1, "Java did receive the first submission"
+
+    # The precondition is an assertion too: the checkpoint must still owe a submission and must not
+    # have recorded the generation, otherwise the replay below would be answered before any receipt.
+    with open_checkpointer(f"sqlite://{checkpoints}") as checkpointer:
+        graph = build_graph(Classifier(StubProvider()), None, lambda state: None, checkpointer)
+        snapshot = graph.get_state({"configurable": {"thread_id": "run-41"}})
+        assert "submit_result" in snapshot.next, (
+            f"the lost response must leave the submission pending, next was {snapshot.next}"
+        )
+        assert not snapshot.values.get("submitted_generation"), (
+            "the checkpoint must not have recorded the submission"
+        )
 
     # The restart: same checkpoint, Java now answers the receipt as accepted.
     StubJava.fail_result_response = False

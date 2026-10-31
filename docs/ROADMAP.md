@@ -5852,7 +5852,7 @@ citations and validation, which is what Round 56 built.
 **Verification (actually run).** `evals/run.py` → **156/156**; `pytest` → **190 passed** (187 + the
 three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Java unchanged.
 
-## Round 57 — Staff review and safe publication (In progress: 57.1–57.2 Done, 57.3 in review)
+## Round 57 — Staff review and safe publication (Done: 57.1–57.3)
 
 **Goal:** first complete business demo: patient → safety/routing → cited draft → staff edit/approval → patient reply → audit. **Estimate:** 24–40 hours. Depends on Rounds 54–56.
 
@@ -5860,7 +5860,7 @@ three dataset guards); `ruff` clean; `mypy --strict` clean (32 source files). Ja
 |---|---|---|---|
 | 57.1 Review queue | P0 / **Done** (2026-10-29, after review) | Result contract v1 (`run-result.request`) persisted to `agent_run_result`; staff queue with draft/risk/reason/citations; claim exclusive per run; human-only items when the agent produced nothing; scope and role enforcement | AgentReviewAuthorizationTest (5): a patient cannot read the queue (403), a doctor outside the patient's scope sees nothing and cannot claim (403), the reviewing doctor sees draft + citations and is the only claimant (409/403 for another), an answered thread leaves the queue, and an agent failure keeps the message as a human-only `RUN_PENDING` item (see the 57.1 record) |
 | 57.2 Approve/edit/reject | P0 / **Done** (2026-10-30, after review) | Explicit approve-and-send in one transaction (row lock, state PUBLISHED, decision row, message published by the thread's clinician); edit replaces the draft and the original stays in `agent_run_result`; reject sets REJECTED and leaves the message in the queue as a human-only `REJECTED` item; the staff notice is stripped and the patient-facing notice ensured before sending | AgentReviewIntegrationTest (6): an approval publishes once with actor and both texts recorded; the edited text is what the patient receives; concurrent approvals give 200 + 409 and one message; a rejected draft stays actionable and a manual reply clears the queue; a second decision on a decided run is 409; a patient token is 403 (see the 57.2 record) |
-| 57.3 Freshness and recovery | P0 / **In progress** (2026-10-30; send-path lock order fixed, recovery/audit gaps open) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
+| 57.3 Freshness and recovery | P0 / **Done** (2026-10-30, after review) | Publication-time freshness inside the approve transaction; a human reply supersedes every waiting draft for that patient; a replayed result after publication is refused and publishes nothing | ReviewConcurrencyIntegrationTest (3): a newer patient message makes the approval 409 with nothing published; a manual reply marks the run SUPERSEDED and blocks approval; a replayed result after publication is refused and leaves one reply (see the 57.3 record) |
 
 Use an atomic business transaction for review decision and message publication; do not hold it over a Python request. Record durable agent_action_event entries for decisions and denied/failed actions, not just successful AOP calls. Any projection to the existing async audit must have deduplicated/recoverable delivery if it is claimed as reliable.
 
@@ -6317,15 +6317,22 @@ worker level, with a **real checkpoint** and a second service instance:
    checkpoint keeps a pending submit and **no** `submitted_generation`.
 2. The service is shut down and recreated against the same SQLite checkpoint.
 3. The same run and generation are replayed to the intake.
-4. Assertions: the intake answers 202, Java's receipt was queried for generation `1`, and the result
-   POST list is **empty** — the restart learned from the receipt and did not resend.
+4. Assertions, including the precondition: the failed attempt left the checkpoint with `submit_result`
+   pending **and** no `submitted_generation`; the intake answers 202, Java's receipt was queried for
+   generation `1`, and the result POST list is **empty** — the restart learned from the receipt and
+   did not resend.
 
 Red check (actually run): with the receipt skip removed, the test fails on `receipt_queries == ["1"]`
 (and would also fail the empty-POST assertion). Python `pytest` → **207 passed**, `ruff` and
 `mypy --strict` clean; `mvn clean verify` → 398 tests (1 skipped).
 
-The end-to-end test's own restart assertion is documented as "an accepted run is not scheduled
-again", which is what it measures.
+**Evidence is layered, and the record says which layer each piece covers.** This test: a real SQLite
+checkpoint, the application instance recreated, Java replaced by an HTTP stub. The opt-in
+dual-process test: a real Python OS process killed and restarted, with Java's real scheduling. Neither
+is the full fault injection "real Java accepts the result and then the response is lost while the
+Python process is killed"; that combination is recorded as a possible later enhancement and does not
+block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
+not scheduled again", which is what it measures.
 
 ## Round 58 — Read-only appointment tools (Pending)
 
