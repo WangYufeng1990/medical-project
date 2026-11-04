@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -46,15 +46,15 @@ class AppointmentArguments(BaseModel):
 class Tool:
     name: str
     arguments: type[BaseModel]
-    path: Callable[[int, BaseModel], str]
+    path: Callable[[int, Any], str]
     description: str
 
 
-def _appointments_path(run_id: int, args: BaseModel) -> str:
+def _appointments_path(run_id: int, args: Any) -> str:
     return f"/api/v1/internal/agent/runs/{run_id}/appointments?limit={getattr(args, 'limit', 10)}"
 
 
-def _appointment_path(run_id: int, args: BaseModel) -> str:
+def _appointment_path(run_id: int, args: Any) -> str:
     appointment_id = args.appointment_id
     return f"/api/v1/internal/agent/runs/{run_id}/appointments/{appointment_id}"
 
@@ -85,6 +85,20 @@ class ToolExecutor:
     max_calls: int = MAX_CALLS_PER_RUN
     calls: int = field(default=0, init=False)
 
+    @staticmethod
+    def _describe(error: dict[str, object]) -> str:
+        """A field path and an error type, never a value or an untrusted key name.
+
+        An extra field's `loc` is the key the model chose, not a schema field, so it is collapsed to
+        a placeholder: otherwise a canary key name would travel into the error (Round 58.2 review).
+        """
+        if error.get("type") == "extra_forbidden":
+            return "<extra>:extra_forbidden"
+        location = error.get("loc")
+        parts = list(location) if isinstance(location, (list, tuple)) else []
+        path = ".".join(str(part) for part in parts) or "<root>"
+        return f"{path}:{error.get('type')}"
+
     def execute(self, name: str, arguments: dict[str, object], run_id: int) -> ToolResult:
         tool = TOOLS.get(name)
         if tool is None:
@@ -95,10 +109,7 @@ class ToolExecutor:
         except ValidationError as invalid:
             # Only field paths and error types: the values may contain patient text, and the raw
             # validation error echoes them (Round 58.2 review).
-            detail = ", ".join(
-                f"{'.'.join(str(part) for part in error['loc']) or '<root>'}:{error['type']}"
-                for error in invalid.errors()
-            )
+            detail = ", ".join(self._describe(dict(error)) for error in invalid.errors())
             raise ToolDenied("invalid_arguments", detail) from None
         if self.calls >= self.max_calls:
             raise ToolDenied("call_budget_exhausted", str(self.max_calls))

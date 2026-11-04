@@ -81,6 +81,30 @@ def test_an_extra_field_is_refused_even_when_the_rest_is_valid(
     assert client.paths == []
 
 
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("get_my_appointments", {"limit": 5, "SYNTHETIC_PRIVATE_TEXT": "x"}),
+        ("get_appointment", {"appointment_id": 900, "SYNTHETIC_PRIVATE_TEXT": "x"}),
+    ],
+)
+def test_an_extra_field_key_name_is_not_echoed(
+    client: StubClient, name: str, arguments: dict[str, Any]
+) -> None:
+    canary = "SYNTHETIC_PRIVATE_TEXT"
+    executor = ToolExecutor(client)
+
+    with pytest.raises(ToolDenied) as denied:
+        executor.execute(name, arguments, run_id=41)
+
+    assert denied.value.code == "invalid_arguments"
+    assert "<extra>:extra_forbidden" in str(denied.value)
+    formatted = "".join(traceback.format_exception(denied.value))
+    assert canary not in str(denied.value)
+    assert canary not in formatted
+    assert client.paths == []
+
+
 def test_a_denial_carries_no_input_text(client: StubClient) -> None:
     canary = "Zxqv-canary-patient-text"
     executor = ToolExecutor(client)

@@ -6471,6 +6471,19 @@ files).
 **Handed to the graph wiring.** The call budget is an executor-instance counter; it must be bound to
 the run and continue across checkpoint recovery, not reset per process.
 
+### Round 58.2 review fixes (2026-11-04, second pass)
+
+**P2 — a sanitised denial still leaked the extra field's *name*.** `error["loc"]` for an
+`extra_forbidden` error is the key the model chose, so `{"limit": 5, "SYNTHETIC_PRIVATE_TEXT": "x"}`
+produced `invalid_arguments: SYNTHETIC_PRIVATE_TEXT:extra_forbidden` in both the message and the
+formatted traceback. Extra fields are now collapsed to `<extra>:extra_forbidden`; only schema field
+paths come from `loc`. Both tools have a canary-*key* case asserting the canary is absent from the
+message and the traceback and that the client was not called. Red check (actually run): removing the
+collapse makes both cases fail.
+
+**Verification (actually run).** `pytest` → **223 passed**, `ruff` and `mypy --strict` clean (35
+files).
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
