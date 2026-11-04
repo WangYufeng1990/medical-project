@@ -61,28 +61,22 @@ public class AgentInternalController {
             @RequestHeader(value = "X-Agent-Service-Token", required = false) String token,
             @RequestHeader(value = "X-Agent-Capability", required = false) String capability,
             @PathVariable Long runId,
-            @RequestParam(defaultValue = "10") int limit,
-            @org.springframework.beans.factory.annotation.Value(
-                    "${app.agent.appointment-timezone:America/New_York}") String timezone) {
+            @RequestParam(defaultValue = "10") int limit) {
         serviceToken.require(token);
         AgentRun run = capabilities.verify(runId, capability);
         requireActiveAccount(run);
-        return Result.ok(appointmentReads.upcoming(run.getPatientId(),
-                java.time.ZoneId.of(timezone), limit));
+        return Result.ok(appointmentReads.upcoming(run.getPatientId(), limit));
     }
 
     @GetMapping("/runs/{runId}/appointments/{appointmentId}")
     public Result<AgentAppointmentView> appointment(
             @RequestHeader(value = "X-Agent-Service-Token", required = false) String token,
             @RequestHeader(value = "X-Agent-Capability", required = false) String capability,
-            @PathVariable Long runId, @PathVariable Long appointmentId,
-            @org.springframework.beans.factory.annotation.Value(
-                    "${app.agent.appointment-timezone:America/New_York}") String timezone) {
+            @PathVariable Long runId, @PathVariable Long appointmentId) {
         serviceToken.require(token);
         AgentRun run = capabilities.verify(runId, capability);
         requireActiveAccount(run);
-        return Result.ok(appointmentReads.one(run.getPatientId(), appointmentId,
-                java.time.ZoneId.of(timezone)));
+        return Result.ok(appointmentReads.one(run.getPatientId(), appointmentId));
     }
 
     @GetMapping("/runs/{runId}/receipt")

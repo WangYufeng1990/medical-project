@@ -30,7 +30,8 @@ public class AgentAppointmentReadService {
     private final AppointmentRepository appointments;
     private final StaffLookup staff;
 
-    public List<AgentAppointmentView> upcoming(Long patientId, ZoneId zone, int limit) {
+    public List<AgentAppointmentView> upcoming(Long patientId, int limit) {
+        ZoneId zone = ZoneId.systemDefault();
         int bounded = Math.max(1, Math.min(limit, MAX_ITEMS));
         // The write paths store LocalDateTime.now() (server wall time) and never a zone, so the read
         // filters on the same clock. The zone parameter is the practice's label for those wall times,
@@ -47,7 +48,8 @@ public class AgentAppointmentReadService {
     }
 
     /** An ID lookup is owned by the run's patient: another patient's appointment does not exist. */
-    public AgentAppointmentView one(Long patientId, Long appointmentId, ZoneId zone) {
+    public AgentAppointmentView one(Long patientId, Long appointmentId) {
+        ZoneId zone = ZoneId.systemDefault();
         Appointment appointment = appointments.findById(appointmentId)
                 .filter(found -> patientId.equals(found.getPatientId()))
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "appointment not found"));
@@ -59,6 +61,9 @@ public class AgentAppointmentReadService {
         view.setAppointmentId(appointment.getId());
         view.setStatus(appointment.getStatus());
         view.setStartTime(appointment.getAppointmentTime());
+        // The stored value is a server-local wall time, so the label must be the server's zone too;
+        // a separately configured zone would tell a consumer to read the same digits as a different
+        // instant (Round 58.1 review).
         view.setTimezone(zone.getId());
         view.setDurationMinutes(appointment.getDuration());
         view.setProviderName(staff.realName(appointment.getDoctorId()).orElse(null));

@@ -6403,6 +6403,25 @@ check (actually run): removing the item cap makes it return 22.
 the cap); DST boundaries and patient-zone conversion remain unexercised, and the stored-wall-time
 interpretation is documented rather than migrated.
 
+### Round 58.1 review fixes, second round (2026-11-04)
+
+**1. P2 — the zone label could still be wrong.** The read returned the stored server wall time with a
+separately configurable zone (default `America/New_York`), which tells a consumer to read the same
+digits as a different instant. Since this slice defines the stored values as server-local wall times,
+the label is now the **server zone** (`ZoneId.systemDefault()`); the `app.agent.appointment-timezone`
+property is gone. Test: the JVM default is pinned to `America/Los_Angeles`, an appointment an hour
+ahead is stored and the response carries that same zone.
+
+**2. P2 — the window bounds had no assertion.** `theQueryIsBounded` only counted rows, so deleting the
+365-day upper bound or the "future" lower bound changed nothing. A dedicated case now stores one past,
+one in-window and one day-366 appointment and asserts the returned ids: 1501 present, 1500 and 1502
+absent. Red check (actually run): widening the lower bound to ten years returns 5 rows and fails.
+
+**3. P2 — the deactivation test polluted the shared database.** It now restores `patient_auth.status`
+in a `finally`, so running it last cannot leave patient1 disabled for the classes that follow.
+
+**Verification (actually run).** `mvn clean verify` → **406 tests, 0 failures, 1 skipped**.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

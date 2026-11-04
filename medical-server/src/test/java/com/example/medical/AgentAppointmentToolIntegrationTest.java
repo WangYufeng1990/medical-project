@@ -47,7 +47,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.agent.request-timeout=10s",
         "app.agent.deadline=30m",
         "app.agent.capability-ttl=5m",
-        "app.agent.appointment-timezone=America/New_York",
 })
 class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
 
@@ -135,7 +134,8 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].appointmentId").value(900))
-                .andExpect(jsonPath("$.data[0].timezone").value("America/New_York"));
+                .andExpect(jsonPath("$.data[0].timezone")
+                        .value(java.time.ZoneId.systemDefault().getId()));
     }
 
     @Test
@@ -188,6 +188,20 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void theWindowKeepsPastAndTooDistantAppointmentsOut() throws Exception {
+        insertAppointment(1500, 100, 2, LocalDateTime.now().minusDays(1), "PastOnly");
+        insertAppointment(1501, 100, 2, LocalDateTime.now().plusDays(10), "Inside");
+        insertAppointment(1502, 100, 2, LocalDateTime.now().plusDays(366), "TooFarOnly");
+
+        mockMvc.perform(appointments())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[?(@.appointmentId == 1501)]").exists())
+                .andExpect(jsonPath("$.data[?(@.appointmentId == 1500)]").doesNotExist())
+                .andExpect(jsonPath("$.data[?(@.appointmentId == 1502)]").doesNotExist());
+    }
+
+    @Test
     void cancelledAppointmentsDoNotFillTheList() throws Exception {
         for (int index = 0; index < 20; index++) {
             insertAppointment(1200 + index, 100, 2,
@@ -208,24 +222,36 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void aDeactivatedAccountCannotReadAppointments() throws Exception {
-        jdbc.update("UPDATE patient_auth SET status = 0 WHERE patient_id = 100");
+        try {
+            jdbc.update("UPDATE patient_auth SET status = 0 WHERE patient_id = 100");
 
-        mockMvc.perform(appointments()).andExpect(status().isForbidden());
-        mockMvc.perform(appointment(900)).andExpect(status().isForbidden());
+            mockMvc.perform(appointments()).andExpect(status().isForbidden());
+            mockMvc.perform(appointment(900)).andExpect(status().isForbidden());
+        } finally {
+            // The database is shared with the other test classes: leaving the account disabled
+            // would break their logins when this test runs last (Round 58.1 review).
+            jdbc.update("UPDATE patient_auth SET status = 1 WHERE patient_id = 100");
+        }
     }
 
     @Test
-    void aDifferentJvmZoneDoesNotHideAValidFutureAppointment() throws Exception {
-        // The reads filter on the same server clock the write paths use; the configured zone is a
-        // label. A one-hour-ahead appointment must be visible whatever the JVM default is.
-        org.junit.jupiter.api.Assertions.assertEquals(
-                "America/New_York",
-                mockMvc.perform(appointments()).andReturn()
-                        .getResponse().getContentAsString().contains("America/New_York") ? "America/New_York" : "?");
-        insertAppointment(1400, 100, 2, LocalDateTime.now().plusHours(1), "Soon");
-        mockMvc.perform(appointments())
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[?(@.department == 'Soon')]").exists());
+    void theReturnedZoneMatchesTheStoredWallTime() throws Exception {
+        java.util.TimeZone original = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/Los_Angeles"));
+        try {
+            LocalDateTime stored = LocalDateTime.now().plusHours(1).withNano(0);
+            insertAppointment(1400, 100, 2, stored, "Soon");
+
+            mockMvc.perform(appointments())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[?(@.department == 'Soon')]").exists())
+                    // The digits are the stored wall time and the label is the zone they belong to,
+                    // so a consumer reads back the same instant the write path meant.
+                    .andExpect(jsonPath("$.data[?(@.department == 'Soon')].timezone")
+                            .value("America/Los_Angeles"));
+        } finally {
+            java.util.TimeZone.setDefault(original);
+        }
     }
 
     // ── helpers ─────────────────────────────────────────────────────
