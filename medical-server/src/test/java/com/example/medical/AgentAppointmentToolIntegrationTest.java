@@ -85,13 +85,20 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
     private long runId;
     private String capability;
 
+    private static java.util.TimeZone originalZone;
+
     @BeforeAll
     void authenticate() throws Exception {
+        // Pin the zone before any capability or lease is issued: the lease compares local times, so
+        // switching the JVM zone mid-test would move that comparison under the code (Round 58.1).
+        originalZone = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/Los_Angeles"));
         patientToken = patientLogin("patient1", "patient123");
     }
 
     @AfterAll
     void stop() {
+        java.util.TimeZone.setDefault(originalZone);
         AGENT_STUB.stop(0);
     }
 
@@ -236,22 +243,18 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void theReturnedZoneMatchesTheStoredWallTime() throws Exception {
-        java.util.TimeZone original = java.util.TimeZone.getDefault();
-        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/Los_Angeles"));
-        try {
-            LocalDateTime stored = LocalDateTime.now().plusHours(1).withNano(0);
-            insertAppointment(1400, 100, 2, stored, "Soon");
+        // The class pins America/Los_Angeles before the capability is issued, so this asserts the
+        // label without changing the zone under a live lease.
+        LocalDateTime stored = LocalDateTime.now().plusHours(1).withNano(0);
+        insertAppointment(1400, 100, 2, stored, "Soon");
 
-            mockMvc.perform(appointments())
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[?(@.department == 'Soon')]").exists())
-                    // The digits are the stored wall time and the label is the zone they belong to,
-                    // so a consumer reads back the same instant the write path meant.
-                    .andExpect(jsonPath("$.data[?(@.department == 'Soon')].timezone")
-                            .value("America/Los_Angeles"));
-        } finally {
-            java.util.TimeZone.setDefault(original);
-        }
+        mockMvc.perform(appointments())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.department == 'Soon')]").exists())
+                // The digits are the stored wall time and the label is the zone they belong to,
+                // so a consumer reads back the same instant the write path meant.
+                .andExpect(jsonPath("$.data[?(@.department == 'Soon')].timezone")
+                        .value("America/Los_Angeles"));
     }
 
     // ── helpers ─────────────────────────────────────────────────────

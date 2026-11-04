@@ -6334,14 +6334,14 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (In progress: 58.1 in re-review, 58.2–58.3 Pending)
+## Round 58 — Read-only appointment tools (In progress: 58.1 Done, 58.2 in progress, 58.3 Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 58.1 Minimal appointment reads | P0 / **In progress** (2026-11-04; review fixes applied, awaiting re-review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
-| 58.2 Tool selection/execution | P1 / Pending | Tool registry and strict schemas; maximum calls/deadline; failure to human route | test_tool_execution.py: unknown tool denied; invalid args never execute; instructions inside tool results cannot grant access |
+| 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
+| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
@@ -6421,6 +6421,29 @@ absent. Red check (actually run): widening the lower bound to ten years returns 
 in a `finally`, so running it last cannot leave patient1 disabled for the classes that follow.
 
 **Verification (actually run).** `mvn clean verify` → **406 tests, 0 failures, 1 skipped**.
+
+### Round 58.1 acceptance + 58.2 first pass (2026-11-04)
+
+**58.1 cleanups.** `API-LAYOUT.md` no longer mentions the removed `app.agent.appointment-timezone`; it
+now states the server-local wall-time semantics and the label rule. The timezone test pins the JVM
+zone in `@BeforeAll` (before any capability or lease exists) and restores it in `@AfterAll`, instead
+of switching the zone under a live lease.
+
+**58.2 first pass.** `medical_agent/tools/registry.py` defines the tool surface: two read-only tools
+(`get_my_appointments`, `get_appointment`) whose arguments are strict Pydantic models
+(`extra="forbid"`, bounded `limit`, positive `appointment_id`), a path builder that uses the **run
+id** — never an argument — and `ToolExecutor` with a call budget and typed denials
+(`unknown_tool`, `invalid_arguments`, `call_budget_exhausted`). `tests/test_tool_execution.py` (8)
+shows that an unknown tool and every invalid argument shape are refused with **zero** calls, that the
+path is derived from the run, that a result claiming new permissions grants nothing, and that the
+budget stops the sixth call.
+
+**Verification (actually run).** Python `pytest` → **215 passed**, `ruff` and `mypy --strict` clean
+(35 files); `mvn clean verify` → **406 tests, 0 failures, 1 skipped**.
+
+**Not done in 58.2 yet.** The executor is not wired to the graph or to HTTP credentials, there is no
+per-run deadline clock yet, and a failed call is not routed to a human (typed result only). 58.3's
+isolation matrix has not started.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

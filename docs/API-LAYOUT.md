@@ -665,9 +665,11 @@ refused and publishes nothing; the patient's message stays in the queue as a hum
 `GET /api/v1/internal/agent/runs/{runId}/appointments/{appointmentId}` (service token + capability).
 The patient is the run's patient; a request cannot name another one. Response items carry
 `appointmentId`, `status`, `startTime`, `timezone`, `durationMinutes`, `providerName`, `department` —
-no chief complaint, notes, description or codes. Upcoming is future-only, capped at 20 items and 365
-days; another patient's appointment is **404**. The clinic zone is `app.agent.appointment-timezone`
-(default `America/New_York`).
+no chief complaint, notes, description or codes. Upcoming is future-only, excludes cancelled,
+completed and no-show appointments, is capped at 20 items and 365 days, and another patient's
+appointment is **404**. Stored times are server-local wall times: `startTime` keeps those digits and
+`timezone` is the server's zone (`ZoneId.systemDefault()`), so the label never disagrees with the
+value. There is no separately configurable appointment zone.
 
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
