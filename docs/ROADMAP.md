@@ -6341,7 +6341,7 @@ not scheduled again", which is what it measures.
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
-| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
+| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04; execution boundary done, graph wiring pending) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
@@ -6483,6 +6483,29 @@ collapse makes both cases fail.
 
 **Verification (actually run).** `pytest` → **223 passed**, `ruff` and `mypy --strict` clean (35
 files).
+
+### Round 58.2 — Execution boundary (2026-11-04)
+
+`ToolSession` now holds what must outlive a process: the call counter and the deadline. The counter
+lives in the run's state, so a resumed run continues its budget instead of starting a fresh one, and
+the deadline is measured from the session start. Operational refusals — budget exhausted, deadline
+expired, a broken client or a non-200 answer — return `ToolResult(needs_human=True, reason=...)`
+instead of raising, because an agent that cannot finish is a human task, while `unknown_tool` and
+`invalid_arguments` stay hard denials. `tools/http_client.py` builds a reader bound to the run's
+credentials (service token + capability) and turns a non-200 into `tool_failed`.
+
+Tests (20 in `test_tool_execution.py`): the counter continues across two executors sharing a session;
+the sixth call returns `needs_human` with `call_budget_exhausted` and no client call; an expired
+deadline returns `deadline_exceeded` without a call; a broken client becomes `tool_failed`; and a real
+HTTP stub shows the reader sends the run's token and capability to the run-scoped path.
+
+**Verification (actually run).** `pytest` → **227 passed**, `ruff` and `mypy --strict` clean (36
+files).
+
+**Still open in 58.2.** The executor is not yet invoked from a graph node: no tool call is made during
+a run, so the end-to-end path from a message to a tool result does not exist yet. The run's state does
+not yet carry `tool_calls`/deadline, and a `needs_human` result is not yet fed into the routing
+decision.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

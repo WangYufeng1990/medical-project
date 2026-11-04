@@ -11,7 +11,12 @@ from typing import Any
 
 import pytest
 
-from medical_agent.tools.registry import MAX_CALLS_PER_RUN, ToolDenied, ToolExecutor
+from medical_agent.tools.registry import (
+    MAX_CALLS_PER_RUN,
+    ToolDenied,
+    ToolExecutor,
+    ToolSession,
+)
 
 
 class StubClient:
@@ -152,8 +157,84 @@ def test_the_call_budget_is_enforced(client: StubClient) -> None:
     for _ in range(MAX_CALLS_PER_RUN):
         executor.execute("get_my_appointments", {}, run_id=41)
 
-    with pytest.raises(ToolDenied) as denied:
-        executor.execute("get_my_appointments", {}, run_id=41)
+    sixth = executor.execute("get_my_appointments", {}, run_id=41)
 
-    assert denied.value.code == "call_budget_exhausted"
+    assert sixth.needs_human is True
+    assert sixth.reason == "call_budget_exhausted"
     assert len(client.paths) == MAX_CALLS_PER_RUN
+
+
+def test_the_budget_continues_after_a_restart(client: StubClient) -> None:
+    # The counter lives in the session (the run's state), so a resumed run keeps the budget it had
+    # already spent instead of starting with a fresh one.
+    session = ToolSession()
+    ToolExecutor(client, session).execute("get_my_appointments", {}, run_id=41)
+    ToolExecutor(client, session).execute("get_my_appointments", {}, run_id=41)
+
+    assert session.calls == 2
+    for _ in range(MAX_CALLS_PER_RUN - 2):
+        ToolExecutor(client, session).execute("get_my_appointments", {}, run_id=41)
+    assert ToolExecutor(client, session).execute(
+        "get_my_appointments", {}, run_id=41).reason == "call_budget_exhausted"
+
+
+def test_an_expired_deadline_hands_the_run_to_a_human(client: StubClient) -> None:
+    executor = ToolExecutor(client, ToolSession(deadline_seconds=-1))
+
+    result = executor.execute("get_my_appointments", {}, run_id=41)
+
+    assert result.needs_human is True
+    assert result.reason == "deadline_exceeded"
+    assert client.paths == []
+
+
+def test_a_broken_client_becomes_a_human_task(client: StubClient) -> None:
+    def failing(path: str) -> Any:
+        raise RuntimeError("connection reset")
+
+    result = ToolExecutor(failing).execute("get_my_appointments", {}, run_id=41)
+
+    assert result.needs_human is True
+    assert result.reason == "tool_failed"
+
+
+def test_the_http_client_uses_the_runs_credentials() -> None:
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from medical_agent.java_client import CallCredentials, use_credentials
+    from medical_agent.tools.http_client import java_reader
+
+    seen: dict[str, str | None] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen["path"] = self.path
+            seen["token"] = self.headers.get("X-Agent-Service-Token")
+            seen["capability"] = self.headers.get("X-Agent-Capability")
+            body = json.dumps({"data": {"items": []}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        use_credentials(CallCredentials(capability="cap-41", outbound_token="token-41",
+                                        java_base_url="http://unused"))
+        payload = java_reader(f"http://127.0.0.1:{server.server_address[1]}")(  # type: ignore[no-untyped-call]
+            "/api/v1/internal/agent/runs/41/appointments?limit=5")
+    finally:
+        server.shutdown()
+
+    assert payload == {"items": []}
+    assert seen["token"] == "token-41"
+    assert seen["capability"] == "cap-41"
+    assert seen["path"] == "/api/v1/internal/agent/runs/41/appointments?limit=5"

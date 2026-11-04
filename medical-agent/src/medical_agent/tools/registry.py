@@ -8,6 +8,7 @@ extra fields, and nothing is sent anywhere until validation passes. The patient 
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Final
@@ -78,12 +79,36 @@ class ToolResult:
 
 
 @dataclass
+class ToolSession:
+    """The per-run budget and deadline (Round 58.2).
+
+    The counter and the deadline live in the run's state, not in the process: a checkpoint resume
+    must continue the same budget instead of starting a fresh one, and a run cannot outlive its
+    deadline by recovering.
+    """
+
+    calls: int = 0
+    started_at: float = field(default_factory=lambda: time.monotonic())
+    deadline_seconds: float = DEFAULT_DEADLINE_SECONDS
+
+    def expired(self, now: float | None = None) -> bool:
+        moment = now if now is not None else time.monotonic()
+        return moment - self.started_at > self.deadline_seconds
+
+    def take(self) -> None:
+        if self.expired():
+            raise ToolDenied("deadline_exceeded", f"{self.deadline_seconds:.0f}s")
+        if self.calls >= MAX_CALLS_PER_RUN:
+            raise ToolDenied("call_budget_exhausted", str(MAX_CALLS_PER_RUN))
+        self.calls += 1
+
+
+@dataclass
 class ToolExecutor:
     """Executes at most MAX_CALLS_PER_RUN calls within a deadline."""
 
     client: Callable[[str], object]
-    max_calls: int = MAX_CALLS_PER_RUN
-    calls: int = field(default=0, init=False)
+    session: ToolSession = field(default_factory=ToolSession)
 
     @staticmethod
     def _describe(error: dict[str, object]) -> str:
@@ -111,9 +136,18 @@ class ToolExecutor:
             # validation error echoes them (Round 58.2 review).
             detail = ", ".join(self._describe(dict(error)) for error in invalid.errors())
             raise ToolDenied("invalid_arguments", detail) from None
-        if self.calls >= self.max_calls:
-            raise ToolDenied("call_budget_exhausted", str(self.max_calls))
-        self.calls += 1
+        try:
+            self.session.take()
+        except ToolDenied as exhausted:
+            # Operational refusals are not safety refusals: the agent ran out of budget or time,
+            # which is a reason to hand the run to a human rather than to crash the worker.
+            return ToolResult(name=name, needs_human=True, reason=exhausted.code)
         # The model's text in the result is data: it cannot grant another patient, another run or
         # another tool, because the path is built from the run and the validated arguments only.
-        return ToolResult(name=name, payload=self.client(tool.path(run_id, parsed)))
+        try:
+            payload = self.client(tool.path(run_id, parsed))
+        except ToolDenied as refused:
+            return ToolResult(name=name, needs_human=True, reason=refused.code)
+        except Exception:  # a broken client must become a human task, not a crash
+            return ToolResult(name=name, needs_human=True, reason="tool_failed")
+        return ToolResult(name=name, payload=payload)
