@@ -31,7 +31,9 @@ class ToolDenied(RuntimeError):
 class AppointmentsArguments(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    limit: Annotated[int, Field(ge=1, le=20)] = 10
+    # strict: a JSON true, "5" or 5.0 is not the integer the tool means, and coercion would let a
+    # model's type mistake through as a valid call (Round 58.2 review).
+    limit: Annotated[int, Field(ge=1, le=20, strict=True)] = 10
 
 
 class AppointmentArguments(BaseModel):
@@ -53,8 +55,8 @@ def _appointments_path(run_id: int, args: BaseModel) -> str:
 
 
 def _appointment_path(run_id: int, args: BaseModel) -> str:
-    return (f"/api/v1/internal/agent/runs/{run_id}/appointments/"
-            f"{args.appointment_id}")
+    appointment_id = args.appointment_id
+    return f"/api/v1/internal/agent/runs/{run_id}/appointments/{appointment_id}"
 
 
 TOOLS: Final[dict[str, Tool]] = {
@@ -86,11 +88,18 @@ class ToolExecutor:
     def execute(self, name: str, arguments: dict[str, object], run_id: int) -> ToolResult:
         tool = TOOLS.get(name)
         if tool is None:
-            raise ToolDenied("unknown_tool", name)
+            # The name is model input; echoing it would put untrusted text into the error.
+            raise ToolDenied("unknown_tool", "unsupported tool")
         try:
             parsed = tool.arguments.model_validate(arguments)
         except ValidationError as invalid:
-            raise ToolDenied("invalid_arguments", str(invalid)) from invalid
+            # Only field paths and error types: the values may contain patient text, and the raw
+            # validation error echoes them (Round 58.2 review).
+            detail = ", ".join(
+                f"{'.'.join(str(part) for part in error['loc']) or '<root>'}:{error['type']}"
+                for error in invalid.errors()
+            )
+            raise ToolDenied("invalid_arguments", detail) from None
         if self.calls >= self.max_calls:
             raise ToolDenied("call_budget_exhausted", str(self.max_calls))
         self.calls += 1

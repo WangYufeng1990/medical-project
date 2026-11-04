@@ -6445,6 +6445,32 @@ budget stops the sixth call.
 per-run deadline clock yet, and a failed call is not routed to a human (typed result only). 58.3's
 isolation matrix has not started.
 
+### Round 58.2 review fixes (2026-11-04)
+
+**1. P2 — `limit` was coerced.** `extra="forbid"` does not disable type conversion, so `true`, `"5"`
+and `5.0` all reached the client as a limit. The field is `strict=True` now and all three are refused
+with `invalid_arguments` and zero calls.
+
+**2. P2 — denials carried the model's input.** `ToolDenied` embedded `str(ValidationError)` and the
+unknown tool name, and kept the original exception chain, so a canary in an argument appeared in both
+the message and the formatted traceback. The denial now carries a fixed code plus field paths and
+error types (`field:type`, never values), the validation chain is dropped (`from None`), and an
+unknown tool is reported as "unsupported tool" without echoing its name. Test: a canary placed in an
+extra field, in `limit`, and as a tool name appears in neither `str(error)` nor
+`traceback.format_exception`.
+
+**3. P2 — the extra-field test was not independent.** `{"patient_id": 101}` was sent to the tool that
+requires `appointment_id`, so it failed for a second reason; switching both models to
+`extra="ignore"` left all tests green. Both tools are now tested with valid arguments **plus** an extra
+field and must be refused with zero calls. Red check (actually run): `extra="ignore"` makes three
+tests fail.
+
+**Verification (actually run).** `pytest` → **221 passed**, `ruff` and `mypy --strict` clean (35
+files).
+
+**Handed to the graph wiring.** The call budget is an executor-instance counter; it must be bound to
+the run and continue across checkpoint recovery, not reset per process.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
