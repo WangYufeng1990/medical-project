@@ -6334,17 +6334,41 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (Pending)
+## Round 58 — Read-only appointment tools (In progress: 58.1 Done, 58.2–58.3 Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 58.1 Minimal appointment reads | P0 / Pending | Appointment-owned DTO/service/controller; task-derived patient; bounded upcoming query; clinic timezone contract | AgentAppointmentToolIntegrationTest: only own appointments; no chiefComplaint/notes/ICD payload; explicit time semantics and ownership on ID lookup |
+| 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
 | 58.2 Tool selection/execution | P1 / Pending | Tool registry and strict schemas; maximum calls/deadline; failure to human route | test_tool_execution.py: unknown tool denied; invalid args never execute; instructions inside tool results cannot grant access |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
+
+### Round 58.1 — Minimal appointment reads (Done, 2026-11-04)
+
+**What was built.** `AgentAppointmentReadService` (appointment module) exposes two reads:
+`upcoming(patientId, zone, limit)` — future appointments only, capped at 20 items and 365 days, ordered
+by time — and `one(patientId, appointmentId, zone)`, which treats another patient's appointment as
+`404`. `AgentAppointmentView` deliberately has no clinical text fields: id, status, start time,
+timezone, duration, provider display name, department. The internal endpoints
+`GET /api/v1/internal/agent/runs/{runId}/appointments[/{appointmentId}]` take the service token and the
+capability, and derive the patient from the run — the request never names a patient. The clinic
+timezone is `app.agent.appointment-timezone` (default `America/New_York`) and is reported per item.
+
+**Tests (`AgentAppointmentToolIntegrationTest`, 4).** Only patient 100's future appointment is listed;
+patient 101's appointment is not; the ID lookup for 101's appointment is 404 while 100's succeeds; the
+JSON contains no `chiefComplaint`, `notes`, `description`, `icd10` or `cptCode`; a past appointment is
+excluded and `limit=500` is capped. The test inserts only its own rows and deletes only those, because
+the seeded appointments belong to other classes (the first version deleted every appointment and broke
+two neighbouring test classes — fixed and re-run).
+
+**Verification (actually run).** `mvn clean verify` → **402 tests, 0 failures, 1 skipped**.
+
+**Limits.** The service returns the stored local time plus the zone name; it does not convert to the
+patient's zone, and DST boundaries are not exercised. 58.2's tool layer (schemas, call budget) and
+58.3's isolation matrix are not started.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

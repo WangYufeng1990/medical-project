@@ -660,6 +660,15 @@ concurrent approval); **403** outside the caller's scope or for a patient token.
 refused and publishes nothing; the patient's message stays in the queue as a human-only item with
 `reason: REJECTED`.
 
+### Agent appointment reads (Round 58.1)
+`GET /api/v1/internal/agent/runs/{runId}/appointments?limit=10` and
+`GET /api/v1/internal/agent/runs/{runId}/appointments/{appointmentId}` (service token + capability).
+The patient is the run's patient; a request cannot name another one. Response items carry
+`appointmentId`, `status`, `startTime`, `timezone`, `durationMinutes`, `providerName`, `department` —
+no chief complaint, notes, description or codes. Upcoming is future-only, capped at 20 items and 365
+days; another patient's appointment is **404**. The clinic zone is `app.agent.appointment-timezone`
+(default `America/New_York`).
+
 ### Rate Limiting
 Redisson `RRateLimiter` filter: 10 req/min/IP on login, 20 req/min/IP on token refresh, 5 req/hour/IP on CSV export. Returns HTTP 429.
 
