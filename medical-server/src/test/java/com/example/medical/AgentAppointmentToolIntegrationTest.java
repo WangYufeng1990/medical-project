@@ -107,7 +107,8 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
         jdbc.update("DELETE FROM message");
         jdbc.update("DELETE FROM chat_conversation");
         // Only this test's rows: the seeded appointments belong to other test classes.
-        jdbc.update("DELETE FROM appointment WHERE id IN (900, 901, 902)");
+        jdbc.update("DELETE FROM appointment WHERE id IN (900, 901, 902) OR id >= 1000");
+        jdbc.update("UPDATE patient_auth SET status = 1 WHERE patient_id = 100");
 
         MvcResult sent = mockMvc.perform(post("/api/v1/patient/me/messages")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -163,14 +164,68 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void theQueryIsBounded() throws Exception {
-        // A past appointment is not "upcoming"; the limit is capped server-side.
+        // 21 live appointments inside the window, one at day 366 and one in the past.
+        for (int index = 0; index < 21; index++) {
+            insertAppointment(1000 + index, 100, 2,
+                    LocalDateTime.now().plusDays(1).plusHours(index), "Live");
+        }
+        insertAppointment(1100, 100, 2, LocalDateTime.now().plusDays(366), "TooFar");
         insertAppointment(902, 100, 2, LocalDateTime.now().minusDays(2), "Past");
+
         mockMvc.perform(get("/api/v1/internal/agent/runs/" + runId + "/appointments")
                         .param("limit", "500")
                         .header("X-Agent-Service-Token", "test-inbound-token")
                         .header("X-Agent-Capability", capability))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(jsonPath("$.data.length()").value(20));
+
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + runId + "/appointments")
+                        .param("limit", "3")
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", capability))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3));
+    }
+
+    @Test
+    void cancelledAppointmentsDoNotFillTheList() throws Exception {
+        for (int index = 0; index < 20; index++) {
+            insertAppointment(1200 + index, 100, 2,
+                    LocalDateTime.now().plusHours(1).plusMinutes(index), "Cancelled", 2);
+        }
+        insertAppointment(1300, 100, 2, LocalDateTime.now().plusDays(5), "Live");
+
+        mockMvc.perform(appointments())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[1].department").value("Live"));
+
+        // The ID lookup still reports the patient's own cancelled appointment.
+        mockMvc.perform(appointment(1200))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value(2));
+    }
+
+    @Test
+    void aDeactivatedAccountCannotReadAppointments() throws Exception {
+        jdbc.update("UPDATE patient_auth SET status = 0 WHERE patient_id = 100");
+
+        mockMvc.perform(appointments()).andExpect(status().isForbidden());
+        mockMvc.perform(appointment(900)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aDifferentJvmZoneDoesNotHideAValidFutureAppointment() throws Exception {
+        // The reads filter on the same server clock the write paths use; the configured zone is a
+        // label. A one-hour-ahead appointment must be visible whatever the JVM default is.
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "America/New_York",
+                mockMvc.perform(appointments()).andReturn()
+                        .getResponse().getContentAsString().contains("America/New_York") ? "America/New_York" : "?");
+        insertAppointment(1400, 100, 2, LocalDateTime.now().plusHours(1), "Soon");
+        mockMvc.perform(appointments())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.department == 'Soon')]").exists());
     }
 
     // ── helpers ─────────────────────────────────────────────────────
@@ -194,9 +249,14 @@ class AgentAppointmentToolIntegrationTest extends IntegrationTestSupport {
 
     private void insertAppointment(long id, long patientId, long doctorId, LocalDateTime when,
                                    String department) {
+        insertAppointment(id, patientId, doctorId, when, department, 1);
+    }
+
+    private void insertAppointment(long id, long patientId, long doctorId, LocalDateTime when,
+                                   String department, int status) {
         jdbc.update("INSERT INTO appointment (id, patient_id, doctor_id, appointment_time, status, "
                         + "visit_type, department, duration, create_time, update_time) "
-                        + "VALUES (?,?,?,?,1,'FOLLOW_UP',?,30,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
-                id, patientId, doctorId, Timestamp.valueOf(when), department);
+                        + "VALUES (?,?,?,?,?,'FOLLOW_UP',?,30,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+                id, patientId, doctorId, Timestamp.valueOf(when), status, department);
     }
 }

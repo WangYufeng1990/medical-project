@@ -6334,13 +6334,13 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (In progress: 58.1 Done, 58.2–58.3 Pending)
+## Round 58 — Read-only appointment tools (In progress: 58.1 in re-review, 58.2–58.3 Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
-| 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
+| 58.1 Minimal appointment reads | P0 / **In progress** (2026-11-04; review fixes applied, awaiting re-review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
 | 58.2 Tool selection/execution | P1 / Pending | Tool registry and strict schemas; maximum calls/deadline; failure to human route | test_tool_execution.py: unknown tool denied; invalid args never execute; instructions inside tool results cannot grant access |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
@@ -6369,6 +6369,39 @@ two neighbouring test classes — fixed and re-run).
 **Limits.** The service returns the stored local time plus the zone name; it does not convert to the
 patient's zone, and DST boundaries are not exercised. 58.2's tool layer (schemas, call budget) and
 58.3's isolation matrix are not started.
+
+### Round 58.1 review fixes (2026-11-04)
+
+**1. P1 — the new endpoints skipped the account re-check.** Both appointment endpoints verified the
+service token and capability but never called `requireActiveAccount`, so a deactivated patient could
+still be served while a capability and lease were live. Both now perform the same check the other
+internal endpoints do. Test: deactivate `patient_auth` for patient 100, then the list and the ID
+lookup answer 403. Red check (actually run): with the check removed the test fails
+`Status expected:<403> but was:<200>`.
+
+**2. P2 — reads and writes used different clocks.** The read filtered on `LocalDateTime.now(zone)`
+(default New York) while creation/reschedule/cancel store `LocalDateTime.now()` — server wall time
+with no zone. In a JVM set to Los Angeles an appointment an hour ahead was filtered out. The read now
+filters on the same server clock the writes use, and the configured zone is a label for those stored
+wall times, not a conversion. Test: an appointment one hour ahead is returned while the configured
+zone differs from the JVM default.
+
+**3. P2 — cancelled appointments consumed the list.** The query had no status condition, so 20 earlier
+cancelled appointments could push live ones out of the 20-item budget. Upcoming now excludes
+`CANCELLED`, `COMPLETED` and `NO_SHOW` **before** pagination; the ID lookup still returns the
+patient's own cancelled appointment. Test: 20 cancelled + 1 live returns the live one, and the ID
+lookup reports status 2.
+
+**4. P2 — the bounds were not proved.** The old test had one qualifying appointment, so removing the
+cap changed nothing. It now inserts 21 live appointments in the window, one at day 366 and one in the
+past: `limit=500` returns **20**, `limit=3` returns 3, the day-366 and past rows are excluded. Red
+check (actually run): removing the item cap makes it return 22.
+
+**Verification (actually run).** `mvn clean verify` → **405 tests, 0 failures, 1 skipped**.
+
+**Still open.** The 365-day window has no dedicated red check (the day-366 row is also pushed out by
+the cap); DST boundaries and patient-zone conversion remain unexercised, and the stored-wall-time
+interpretation is documented rather than migrated.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

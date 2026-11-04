@@ -66,6 +66,7 @@ public class AgentInternalController {
                     "${app.agent.appointment-timezone:America/New_York}") String timezone) {
         serviceToken.require(token);
         AgentRun run = capabilities.verify(runId, capability);
+        requireActiveAccount(run);
         return Result.ok(appointmentReads.upcoming(run.getPatientId(),
                 java.time.ZoneId.of(timezone), limit));
     }
@@ -79,6 +80,7 @@ public class AgentInternalController {
                     "${app.agent.appointment-timezone:America/New_York}") String timezone) {
         serviceToken.require(token);
         AgentRun run = capabilities.verify(runId, capability);
+        requireActiveAccount(run);
         return Result.ok(appointmentReads.one(run.getPatientId(), appointmentId,
                 java.time.ZoneId.of(timezone)));
     }

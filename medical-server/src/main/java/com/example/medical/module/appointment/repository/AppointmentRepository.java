@@ -15,10 +15,14 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long>,
     /** Bounded future appointments for one patient (Round 58.1); no clinical text is selected. */
     @Query("SELECT a FROM Appointment a WHERE a.patientId = :patientId "
             + "AND a.appointmentTime >= :from AND a.appointmentTime <= :until "
+            + "AND a.status NOT IN (:cancelled, :completed, :noShow) "
             + "AND a.isDeleted = 0 ORDER BY a.appointmentTime ASC")
     List<Appointment> findUpcomingForPatient(@Param("patientId") Long patientId,
                                              @Param("from") LocalDateTime from,
                                              @Param("until") LocalDateTime until,
+                                             @Param("cancelled") int cancelled,
+                                             @Param("completed") int completed,
+                                             @Param("noShow") int noShow,
                                              Pageable pageable);
 
     @Query("SELECT a FROM Appointment a WHERE a.doctorId = :doctorId AND a.status <> :cancelledStatus " +

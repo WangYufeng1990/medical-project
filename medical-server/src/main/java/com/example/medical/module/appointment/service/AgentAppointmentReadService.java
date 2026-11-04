@@ -32,8 +32,14 @@ public class AgentAppointmentReadService {
 
     public List<AgentAppointmentView> upcoming(Long patientId, ZoneId zone, int limit) {
         int bounded = Math.max(1, Math.min(limit, MAX_ITEMS));
-        LocalDateTime now = LocalDateTime.now(zone);
+        // The write paths store LocalDateTime.now() (server wall time) and never a zone, so the read
+        // filters on the same clock. The zone parameter is the practice's label for those wall times,
+        // not a conversion; mixing the two bases dropped appointments that were still in the future.
+        LocalDateTime now = LocalDateTime.now();
         return appointments.findUpcomingForPatient(patientId, now, now.plusDays(MAX_DAYS_AHEAD),
+                        com.example.medical.module.appointment.entity.AppointmentStatus.CANCELLED.code(),
+                        com.example.medical.module.appointment.entity.AppointmentStatus.COMPLETED.code(),
+                        com.example.medical.module.appointment.entity.AppointmentStatus.NO_SHOW.code(),
                         org.springframework.data.domain.PageRequest.of(0, bounded))
                 .stream()
                 .map(appointment -> view(appointment, zone))
