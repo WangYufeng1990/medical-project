@@ -6342,7 +6342,7 @@ not scheduled again", which is what it measures.
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
 | 58.2 Tool selection/execution | P1 / **Done** (2026-11-04, after review; 58.3 covers isolation) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
-| 58.3 Isolation/recovery | P0 / **Done** (2026-11-05, after review) | Cross-run capability, capability after acceptance, wrong-generation result, resumed-state patient identity; timeout and restart flows remain | AgentToolIsolationTest (3) + `test_a_resumed_run_never_changes_patient`: a capability from another run is 403, a capability after acceptance is 403, a wrong-generation result is 409 with no row, and a resumed checkpoint for another patient is refused before any tool call |
+| 58.3 Isolation/recovery | P0 / **Done** (2026-11-05, after review) | Cross-run capability, capability after acceptance, wrong-generation result, resumed-state patient identity, takeover and timeout, tool-path restart | AgentToolIsolationTest (4): another run's capability is 403, a capability after acceptance is 403, a wrong-generation result is 409 with no row, and after a takeover the old capability is 403 while the new one works; `test_a_resumed_run_never_changes_patient` and the slow-tool and restart tests cover the Python side |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
 
@@ -6759,19 +6759,38 @@ cover.
 **Verification (actually run).** Python `pytest` → **258 passed**, `ruff` and `mypy --strict` clean
 (37 files). 58.3 is Done; Round 58 is complete.
 
-## Round 59 — Evaluation, observability and release evidence (Pending)
+## Round 59 — Evaluation, observability and release evidence (In progress: 59.1 in progress)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
 
 | Slice | Priority / status | Work | Completion gate |
 |---|---|---|---|
-| 59.1 Golden dataset/regression | P1 / Pending | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
+| 59.1 Golden dataset/regression | P1 / **In progress** (2026-11-05; run identity and metrics report done, case expansion pending) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / Pending | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
 | 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
 | 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
 
-### Evaluation and release criteria
+#### Round 59.1 — Run identity and per-family report (2026-11-05)
+
+`evals/run.py --report <path>` writes a JSON report with a **manifest** — dataset SHA-256, case count,
+splits, provider, prompt version, KB version and the git commit — plus totals and a per-family
+`{total, failed}` table and the failure examples. The manifest is the gate this slice asks for ("every
+run identifies dataset/model/prompt/KB/commit"), and the per-family denominators are now available
+without reading the console output.
+
+**Test.** `test_the_report_carries_the_run_identity_and_denominators` runs the CLI in a subprocess and
+asserts the manifest fields, the 64-hex dataset hash, `splits == ["dev"]`, totals, the six families
+and non-zero denominators.
+
+**Verification (actually run).** `pytest` → **259 passed**, `ruff` and `mypy --strict` clean (37
+files); the report itself: 156 cases, 0 failed, all six families present.
+
+**Still open in 59.1.** The dataset is 156 cases (the slice asks for roughly 300–500 with classification,
+retrieval, clinical escalation, tools and attacks), and there is no held-out split yet. Real-model runs
+with a cost budget are not part of this increment.
+
+### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

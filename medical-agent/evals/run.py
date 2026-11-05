@@ -248,9 +248,33 @@ HANDLERS = {
 }
 
 
+def manifest(retriever: Retriever, cases: list[dict]) -> dict:
+    """The run's identity, so a result cannot be read without knowing what produced it (59.1)."""
+    import subprocess
+
+    dataset = CASES.read_bytes()
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                                text=True, timeout=5).stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        commit = "unknown"
+    knowledge = KnowledgeBase(CORPUS / "manifest.json")
+    version = knowledge.ingest()
+    return {
+        "dataset_sha256": hashlib.sha256(dataset).hexdigest(),
+        "cases": len(cases),
+        "splits": sorted({case.get("split") for case in cases}),
+        "provider": "mock-or-canned",
+        "prompt_version": "classification-prompt-v1",
+        "kb_version": f"{version.id}:{version.chunk_count}",
+        "commit": commit,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--family")
+    parser.add_argument("--report", type=Path, help="write a JSON report with the run manifest")
     args = parser.parse_args()
 
     retriever = corpus_retriever()
@@ -263,6 +287,17 @@ def main() -> int:
         if problems:
             per_family[case["family"]][1] += 1
             failures.append(f"{case['id']} ({case['family']}): {'; '.join(problems)}")
+
+    report = {
+        "manifest": manifest(retriever, cases),
+        "totals": {"cases": len(cases),
+                   "failed": len(failures)},
+        "per_family": {family: {"total": total, "failed": failed}
+                       for family, (total, failed) in sorted(per_family.items())},
+        "examples": failures,
+    }
+    if args.report:
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
 
     print(f"cases: {len(cases)}")
     for family in sorted(per_family):

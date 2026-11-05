@@ -62,3 +62,25 @@ def test_a_validator_that_accepts_everything_fails_the_forged_cases(
 def test_the_real_validator_passes_the_real_cases(retriever: Retriever) -> None:
     assert runner.check_citation(cases()["cit-valid"], retriever) == []
     assert runner.check_citation(cases()["cit-forged-hash"], retriever) == []
+
+
+def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
+    """59.1: a result is unreadable without knowing what produced it."""
+    import subprocess as sp
+
+    report = tmp_path / "report.json"
+    sp.run([sys.executable, "-m", "evals.run", "--report", str(report)], cwd=ROOT,
+           env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")},
+           check=True, capture_output=True)
+
+    payload = json.loads(report.read_text())
+
+    assert payload["manifest"]["cases"] == len(cases())
+    assert len(payload["manifest"]["dataset_sha256"]) == 64
+    assert payload["manifest"]["splits"] == ["dev"]
+    assert payload["manifest"]["provider"] == "mock-or-canned"
+    assert payload["manifest"]["commit"]
+    assert payload["totals"] == {"cases": len(cases()), "failed": 0}
+    assert set(payload["per_family"]) == {"classification", "uncertainty", "retrieval",
+                                          "citations", "validation", "graph"}
+    assert all(entry["total"] > 0 for entry in payload["per_family"].values())
