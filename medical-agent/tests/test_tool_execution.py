@@ -353,3 +353,50 @@ def test_an_exhausted_budget_never_calls_the_client(client: StubClient, remainin
     assert result.needs_human is True
     assert result.reason == "deadline_exceeded"
     assert client.paths == []
+
+
+def _state(classification: str = "APPOINTMENT") -> dict[str, Any]:
+    return {
+        "classification": classification, "flags": [], "requires_clinician": False,
+        "tool_calls": 1, "tool_started_at": 1000.0,
+    }
+
+
+def test_the_tool_node_folds_a_payload_into_the_state() -> None:
+    from medical_agent.graph.nodes import tool_node
+
+    seen: list[dict[str, Any]] = []
+
+    def runner(state: Any) -> dict[str, Any]:
+        seen.append(dict(state))
+        return {"payload": [{"appointmentId": 900}], "calls": 2, "needs_human": False}
+
+    updated = tool_node(runner)(_state())  # type: ignore[arg-type]
+
+    assert seen[0]["tool_calls"] == 1, "the run's spent budget is handed to the runner"
+    assert updated["tool_calls"] == 2
+    assert updated["tool_result"] == [{"appointmentId": 900}]
+    assert updated["tool_needs_human"] is False
+    assert "tool_needs_human" not in updated["flags"]
+
+
+def test_the_tool_node_marks_a_human_handover() -> None:
+    from medical_agent.graph.nodes import tool_node
+
+    def runner(state: Any) -> dict[str, Any]:
+        return {"payload": None, "calls": 1, "needs_human": True, "reason": "tool_failed"}
+
+    updated = tool_node(runner)(_state())  # type: ignore[arg-type]
+
+    assert updated["tool_needs_human"] is True
+    assert "tool_needs_human" in updated["flags"]
+    assert updated["requires_clinician"] is True
+
+
+def test_the_tool_node_skips_other_intents() -> None:
+    from medical_agent.graph.nodes import tool_node
+
+    def runner(state: Any) -> dict[str, Any]:
+        raise AssertionError("no tool may run for a billing question")
+
+    assert tool_node(runner)(_state("BILLING")) == {}  # type: ignore[arg-type]

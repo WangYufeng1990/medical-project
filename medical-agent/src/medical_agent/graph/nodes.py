@@ -101,6 +101,34 @@ class DraftBlocked(RuntimeError):
     """Even the safe fallback failed validation: nothing may be submitted."""
 
 
+def tool_node(
+    runner: Callable[[RunState], dict[str, object]],
+) -> Callable[[RunState], dict[str, object]]:
+    """Runs the read-only appointment tool for an appointment question (Round 58.2).
+
+    The runner owns the session (run, budget, deadline); this node only decides whether a tool is
+    relevant and folds the answer, or the need for a human, into the state.
+    """
+
+    def read(state: RunState) -> dict[str, object]:
+        if state["classification"] != "APPOINTMENT":
+            return {}
+        result = runner(state)
+        flags = list(state.get("flags") or [])
+        needs_human = bool(result.get("needs_human"))
+        if needs_human and "tool_needs_human" not in flags:
+            flags.append("tool_needs_human")
+        return {
+            "tool_calls": int(str(result.get("calls") or 0)),
+            "tool_result": result.get("payload"),
+            "tool_needs_human": needs_human,
+            "flags": flags,
+            "requires_clinician": True if needs_human else state.get("requires_clinician", False),
+        }
+
+    return read
+
+
 def draft_node(state: RunState) -> dict[str, object]:
     """Build the draft for its kind, validate it, and block if the fallback is also unusable."""
     flags = list(state.get("flags", []))

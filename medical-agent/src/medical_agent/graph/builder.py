@@ -18,6 +18,7 @@ from medical_agent.graph.nodes import (
     draft_node,
     retrieve_node,
     submit_node,
+    tool_node,
     validate_node,
 )
 from medical_agent.graph.state import RunState
@@ -33,6 +34,7 @@ SUBMIT_NODE = "submit_result"
 # The node the submission hangs off: re-entering the graph after it runs the submit node
 # again, so a repeated submission is checkpointed rather than performed outside the graph.
 DRAFT_NODE = "draft_reply"
+TOOL_NODE = "read_appointment"
 
 
 def build_graph(
@@ -40,17 +42,24 @@ def build_graph(
     retriever: Retriever | None,
     submit_result: Callable[[RunState], None],
     checkpointer: BaseCheckpointSaver[Any],
+    tools: Callable[[RunState], dict[str, object]] | None = None,
 ) -> CompiledStateGraph:
     graph = StateGraph(RunState)
     graph.add_node("validate_content", validate_node)
     graph.add_node("classify_message", classify_node(classifier))
     graph.add_node("retrieve_evidence", retrieve_node(retriever))
+    if tools is not None:
+        graph.add_node(TOOL_NODE, tool_node(tools))
     graph.add_node(DRAFT_NODE, draft_node)
     graph.add_node("submit_result", submit_node(submit_result))
     graph.add_edge(START, "validate_content")
     graph.add_edge("validate_content", "classify_message")
     graph.add_edge("classify_message", "retrieve_evidence")
-    graph.add_edge("retrieve_evidence", DRAFT_NODE)
+    if tools is not None:
+        graph.add_edge("retrieve_evidence", TOOL_NODE)
+        graph.add_edge(TOOL_NODE, DRAFT_NODE)
+    else:
+        graph.add_edge("retrieve_evidence", DRAFT_NODE)
     graph.add_edge(DRAFT_NODE, "submit_result")
     graph.add_edge("submit_result", END)
     return graph.compile(checkpointer=checkpointer)

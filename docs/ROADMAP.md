@@ -6557,6 +6557,26 @@ files).
 **Still open.** The executor is not invoked from a graph node; the run state does not carry
 `tool_calls`/deadline; `needs_human` is not fed into routing.
 
+### Round 58.2 — Graph node and state keys (2026-11-04)
+
+`RunState` now carries `tool_calls`, `tool_started_at`, `tool_result` and `tool_needs_human`, and
+`builder.build_graph(..., tools=runner)` inserts a `read_appointment` node between retrieval and
+drafting when a runner is supplied. `tool_node` runs the tool only for an `APPOINTMENT` message, folds
+the payload (or the need for a human) into the state, adds the `tool_needs_human` flag and forces
+`requires_clinician` when the agent could not finish.
+
+Tests (43 in `test_tool_execution.py`): the node hands the run's spent budget to the runner and folds
+a payload back; a human handover sets the flag and the clinician requirement; a billing question never
+calls the tool.
+
+**Verification (actually run).** `pytest` → **250 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
+**Still open in 58.2 (wiring).** The worker does not pass a `tools=` runner yet, so the node is inert
+in a real run; `tool_started_at` is not yet persisted from the run start (it is defaulted), and
+`needs_human` does not influence the routing summary beyond the clinician flag. A real
+message → appointment-read end-to-end test does not exist.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

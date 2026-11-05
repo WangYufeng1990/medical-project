@@ -33,6 +33,12 @@ class RunState(TypedDict, total=False):
     # What the validator thought of the draft:
     # {"ok": bool, "kind": str, "rejected_reasons": [...], "reasons": [...]}
     validation: dict[str, object]
+    # The read-only tool boundary (Round 58.2): the call counter and the run's start are part of the
+    # state, so a resumed run continues its budget instead of starting a fresh one.
+    tool_calls: int
+    tool_started_at: float
+    tool_result: dict[str, object] | None
+    tool_needs_human: bool
     draft: str
     # Set by the submit node: what a repeated dispatch uses to decide that this generation
     # already produced its draft (Round 55.4's "repeat execution does not create another").
