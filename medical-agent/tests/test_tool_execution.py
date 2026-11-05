@@ -527,3 +527,42 @@ def test_a_resumed_run_never_changes_patient(tmp_path) -> None:
             )
 
     assert calls == []
+
+
+def test_a_slow_tool_on_the_worker_path_becomes_a_human_task(tmp_path) -> None:
+    # The deadline is enforced around the call on the real worker path: the client consumes the
+    # budget while it runs, and the run is handed over instead of accepting a late answer (58.3).
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.base import ProviderResponse
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    now = [10_000.0]
+
+    def slow(path: str, timeout: float) -> Any:
+        now[0] += 30  # the call outlives the 10-second budget
+        return [{"appointmentId": 900, "status": 1, "startTime": "2026-11-07T09:00:00",
+                 "timezone": "UTC"}]
+
+    class Provider:
+        def invoke_now(self, request: Any) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+                provider="stub", model="stub-1", latency_ms=0)
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'slow.sqlite'}") as checkpointer:
+        worker = AgentWorker(Provider(), checkpointer, lambda state: None,
+                             tool_client=slow, tool_clock=lambda: now[0])
+        state = worker.process(
+            RunStartRequest(run_id=99, message_id=990, patient_id=100,
+                            conversation_revision=1, execution_generation=1,
+                            content="When is my next appointment?", request_id="req-slow-99"),
+            CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                            outbound_token="out"),
+        )
+
+    assert state["tool_needs_human"] is True
+    assert state["tool_reason"] == "deadline_exceeded"
+    assert state["tool_result"] is None
+    assert state["validation"]["kind"] == "routing_summary"

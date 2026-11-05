@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -141,6 +142,32 @@ class AgentToolIsolationTest extends IntegrationTestSupport {
         assertEquals(1, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
                 ready.runId));
+    }
+
+    @Test
+    void afterATakeoverTheOldCapabilityIsRefusedAndTheNewOneWorks() throws Exception {
+        Ready first = ready("When is my next appointment?");
+        // Force the dispatcher to re-claim the run: a new attempt, and therefore a new generation
+        // and a new capability (Round 58.3).
+        jdbc.update("UPDATE agent_run SET state = 'PENDING', next_attempt_at = ?, "
+                        + "lease_expires_at = ? WHERE id = ?",
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(1)),
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(1)),
+                first.runId);
+        runs.dispatchDue();
+
+        String renewed = CAPABILITIES.get(CAPABILITIES.size() - 1);
+        assertNotEquals(first.capability, renewed, "a re-dispatch issues a new capability");
+
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + first.runId + "/appointments")
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", first.capability))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/internal/agent/runs/" + first.runId + "/appointments")
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", renewed))
+                .andExpect(status().isOk());
     }
 
     // ── helpers ─────────────────────────────────────────────────────

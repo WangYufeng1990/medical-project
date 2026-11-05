@@ -6729,6 +6729,24 @@ state, so a resumed run cannot change patient.
 deadline mid-flight, a worker restart while a tool result is pending) are not exercised end-to-end;
 the per-patient appointment ownership is proved by 58.1's test rather than repeated here.
 
+### Round 58.3 — Takeover and timeout flows (2026-11-04)
+
+**Takeover.** After the dispatcher re-claims a run (new attempt, new generation), the capability the
+old attempt held is refused on the appointment read (403) while the newly issued one works (200). This
+is the "old worker still holds the old capability" shape the review asked for, complementing 55.3's
+generic rejection.
+
+**Timeout on the worker path.** A worker whose tool client consumes 30 seconds against a 10-second
+budget ends with `tool_needs_human`, `tool_reason = deadline_exceeded`, no `tool_result`, and a
+`routing_summary` draft — the late answer is discarded on the real graph path, not only in the
+executor unit.
+
+**Verification (actually run).** `mvn clean verify` → **416 tests, 0 failures, 1 skipped**; Python
+`pytest` → **257 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+**Still open in 58.3.** A worker restart while a tool result is pending is not exercised; the restart
+evidence for the result submission is 57.3's. Per-patient appointment ownership stays proved by 58.1.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
