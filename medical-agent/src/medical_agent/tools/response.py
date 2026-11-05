@@ -7,23 +7,47 @@ being handed to the drafting step.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from medical_agent.tools.registry import ToolDenied
 
 
 class AppointmentItem(BaseModel):
+    """Strict types and a real local time and zone (Round 58.2 review)."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    appointmentId: Annotated[int, Field(gt=0)]
-    status: int
+    appointmentId: Annotated[int, Field(strict=True, gt=0)]
+    status: Annotated[int, Field(strict=True, ge=0)]
     startTime: str
     timezone: str
-    durationMinutes: int | None = None
+    durationMinutes: Annotated[int, Field(strict=True, ge=0)] | None = None
     providerName: str | None = None
     department: str | None = None
+
+    @field_validator("startTime")
+    @classmethod
+    def _local_time(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            raise ValueError("startTime is not an ISO-8601 local time") from None
+        if parsed.tzinfo is not None:
+            raise ValueError("startTime must be a wall time without an offset")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def _zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("timezone is not a known zone") from None
+        return value
 
 
 class AppointmentList(BaseModel):

@@ -19,6 +19,7 @@ from medical_agent.schemas.run import StrictPositiveInt
 
 MAX_CALLS_PER_RUN: Final[int] = 5
 DEFAULT_DEADLINE_SECONDS: Final[float] = 10.0
+MIN_CALL_SECONDS: Final[float] = 0.1
 
 
 class ToolDenied(RuntimeError):
@@ -49,10 +50,17 @@ class Tool:
     arguments: type[BaseModel]
     path: Callable[[int, Any], str]
     description: str
+    parse: Callable[[object], object] | None = None
 
 
 def _appointments_path(run_id: int, args: Any) -> str:
     return f"/api/v1/internal/agent/runs/{run_id}/appointments?limit={getattr(args, 'limit', 10)}"
+
+
+def _parse(name: str, payload: object) -> object:
+    from medical_agent.tools import response
+
+    return getattr(response, name)(payload)
 
 
 def _appointment_path(run_id: int, args: Any) -> str:
@@ -63,10 +71,12 @@ def _appointment_path(run_id: int, args: Any) -> str:
 TOOLS: Final[dict[str, Tool]] = {
     "get_my_appointments": Tool(
         "get_my_appointments", AppointmentsArguments, _appointments_path,
-        "Upcoming appointments of the patient this run serves."),
+        "Upcoming appointments of the patient this run serves.",
+        lambda payload: _parse("parse_list", payload)),
     "get_appointment": Tool(
         "get_appointment", AppointmentArguments, _appointment_path,
-        "One appointment of the patient this run serves, by id."),
+        "One appointment of the patient this run serves, by id.",
+        lambda payload: _parse("parse_one", payload)),
 }
 
 
@@ -162,9 +172,13 @@ class ToolExecutor:
             return ToolResult(name=name, needs_human=True, reason=exhausted.code)
         # The model's text in the result is data: it cannot grant another patient, another run or
         # another tool, because the path is built from the run and the validated arguments only.
+        remaining = self.session.remaining()
+        if remaining < MIN_CALL_SECONDS:
+            # There is not enough budget left for a meaningful call: a zero or tiny timeout would
+            # either run anyway or fail inside the transport.
+            return ToolResult(name=name, needs_human=True, reason="deadline_exceeded")
         try:
-            payload = self.client(tool.path(self.session.run_id, parsed),
-                                  max(0.1, self.session.remaining()))
+            payload = self.client(tool.path(self.session.run_id, parsed), remaining)
         except ToolDenied as refused:
             return ToolResult(name=name, needs_human=True, reason=refused.code)
         except Exception:  # a broken client must become a human task, not a crash
@@ -172,4 +186,8 @@ class ToolExecutor:
         if self.session.expired():
             # The call answered after the deadline: its content is not trusted as an on-time result.
             return ToolResult(name=name, needs_human=True, reason="deadline_exceeded")
-        return ToolResult(name=name, payload=payload)
+        try:
+            parsed_payload = tool.parse(payload) if tool.parse is not None else payload
+        except ToolDenied as refused:
+            return ToolResult(name=name, needs_human=True, reason=refused.code)
+        return ToolResult(name=name, payload=parsed_payload)

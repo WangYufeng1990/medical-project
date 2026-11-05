@@ -6533,6 +6533,30 @@ files).
 **Still open.** The executor is still not invoked from a graph node, `tool_calls`/deadline are not in
 the run state, and `needs_human` is not fed into routing.
 
+### Round 58.2 review fixes (2026-11-04, fourth pass)
+
+**1. P2 — the response parsers were not on the execution path.** Each `Tool` now carries its parser
+(`parse_list`/`parse_one`) and the executor applies it before reporting success, so a broken payload
+fails inside reader → executor. Tests drive nine bad bodies (`data: null`, a string, missing fields,
+`true` for an id, `"0"` for a status, a bad date, an unknown zone, `"30"` for a duration, extra
+`notes`) through the whole chain and require `tool_failed`, `payload=None`; `[]` still succeeds. Red
+check: with the parser removed, nine cases fail.
+
+**2. P2 — the remaining time was rounded up.** `max(0.1, …)` let a zero budget run, and a 10 ms budget
+became 100 ms. The executor now refuses to call when the remaining time is below `MIN_CALL_SECONDS`
+and passes the exact remainder to the client; the reader no longer clamps either. Tests: remaining
+0.0, -1.0 and 0.05 all return `deadline_exceeded` with zero client calls.
+
+**3. P2 — the response model accepted wrong types and invalid time/zone.** `appointmentId`, `status`
+and `durationMinutes` are strict integers, `startTime` must be an ISO-8601 wall time without an
+offset, and `timezone` must be a known `ZoneInfo`. The nine bad bodies above include these cases.
+
+**Verification (actually run).** `pytest` → **247 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
+**Still open.** The executor is not invoked from a graph node; the run state does not carry
+`tool_calls`/deadline; `needs_human` is not fed into routing.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

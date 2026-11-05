@@ -25,7 +25,7 @@ def java_reader(base_url: str):  # type: ignore[no-untyped-def]
                 "X-Agent-Service-Token": credentials.outbound_token,
                 "X-Agent-Capability": credentials.capability,
             },
-            timeout=max(0.1, timeout),
+            timeout=timeout,
         )
         if response.status_code != 200:
             raise ToolDenied("tool_failed", f"status {response.status_code}")
