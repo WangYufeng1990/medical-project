@@ -6577,6 +6577,26 @@ in a real run; `tool_started_at` is not yet persisted from the run start (it is 
 `needs_human` does not influence the routing summary beyond the clinician flag. A real
 message → appointment-read end-to-end test does not exist.
 
+### Round 58.2 — Worker wiring (2026-11-04)
+
+`AgentWorker` accepts a `tool_client` and, when it is present, supplies a runner to the graph: the
+runner rebuilds the session from the state's `tool_calls` and `tool_started_at`, so a resumed run keeps
+its spent budget and its original start; the node persists the start it got back. `tool_client` is the
+same `(path, timeout) -> payload` shape the HTTP reader has, which keeps the tests off the network.
+
+Test: a worker run for an appointment message calls the run-scoped path once, stores the parsed
+appointment in `tool_result`, records `tool_calls == 1` and sets no human flag. Without a
+`tool_client` the graph is unchanged (the node is not added), which the existing graph and API tests
+continue to prove.
+
+**Verification (actually run).** `pytest` → **251 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
+**Still open in 58.2.** The API app does not pass a `tool_client` (it has the credentials at hand, but
+the service is not constructed with the reader yet), `tool_started_at` is only persisted from the
+first tool call rather than from the run start, and a `needs_human` result does not change the draft
+kind beyond the clinician flag; 58.3 has not started.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

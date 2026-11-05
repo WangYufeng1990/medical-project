@@ -120,6 +120,7 @@ def tool_node(
             flags.append("tool_needs_human")
         return {
             "tool_calls": int(str(result.get("calls") or 0)),
+            "tool_started_at": result.get("started_at") or 0.0,
             "tool_result": result.get("payload"),
             "tool_needs_human": needs_human,
             "flags": flags,

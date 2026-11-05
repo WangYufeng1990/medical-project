@@ -400,3 +400,52 @@ def test_the_tool_node_skips_other_intents() -> None:
         raise AssertionError("no tool may run for a billing question")
 
     assert tool_node(runner)(_state("BILLING")) == {}  # type: ignore[arg-type]
+
+
+def _appointment_state(run_id: int = 41) -> dict[str, Any]:
+    return {
+        "run_id": run_id, "message_id": 410, "patient_id": 100, "conversation_revision": 1,
+        "execution_generation": 1, "content": "When is my next appointment?",
+        "classification": "APPOINTMENT", "intents": ["APPOINTMENT"], "risk": "ROUTINE",
+        "flags": [], "confidence": 0.9, "requires_clinician": False, "review_required": True,
+        "kind": "policy_answer", "evidence": [], "citations": [], "adopted_citations": [],
+        "validation": {}, "draft": "", "submitted_generation": 0,
+        "tool_calls": 0, "tool_started_at": 0.0, "tool_result": None, "tool_needs_human": False,
+    }
+
+
+def test_the_worker_reads_appointments_for_an_appointment_message(tmp_path) -> None:
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.base import ProviderResponse
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    calls: list[str] = []
+
+    def client(path: str, timeout: float) -> Any:
+        calls.append(path)
+        return [{"appointmentId": 900, "status": 0, "startTime": "2026-05-15T09:00:00",
+                 "timezone": "UTC", "department": "Cardiology"}]
+
+    class Provider:
+        def invoke_now(self, request: Any) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+                provider="stub", model="stub-1", latency_ms=0)
+
+    with tmp_path.joinpath("c.sqlite").exists() or open_checkpointer(
+            f"sqlite://{tmp_path / 'tool.sqlite'}") as checkpointer:
+        worker = AgentWorker(Provider(), checkpointer, lambda state: None, tool_client=client)
+        state = worker.process(
+            RunStartRequest(run_id=41, message_id=410, patient_id=100,
+                            conversation_revision=1, execution_generation=1,
+                            content="When is my next appointment?", request_id="req-tool-41"),
+            CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                            outbound_token="out"),
+        )
+
+    assert calls == ["/api/v1/internal/agent/runs/41/appointments?limit=5"]
+    assert state["tool_calls"] == 1
+    assert state["tool_result"][0].appointmentId == 900
+    assert state["tool_needs_human"] is False

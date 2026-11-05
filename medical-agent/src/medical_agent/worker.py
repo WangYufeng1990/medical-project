@@ -38,6 +38,7 @@ from medical_agent.java_client import (
 from medical_agent.kb.retrieval import Retriever
 from medical_agent.providers.base import Provider
 from medical_agent.schemas.run import RunStartRequest
+from medical_agent.tools.registry import ToolExecutor, ToolSession
 
 
 def _validated(values: dict[str, Any]) -> bool:
@@ -61,12 +62,32 @@ class AgentWorker:
         submit: Callable[[RunState], None] = submit_result,
         max_prompt_chars: int = 8000,
         retriever: Retriever | None = None,
+        tool_client: Callable[[str, float], object] | None = None,
     ) -> None:
-        self._graph = build_graph(
-            Classifier(provider, max_prompt_chars), retriever, submit, checkpointer
-        )
+        self._tool_client = tool_client
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        self._graph = build_graph(
+            Classifier(provider, max_prompt_chars), retriever, submit, checkpointer,
+            tools=self._read_appointments if tool_client is not None else None,
+        )
+
+    def _read_appointments(self, state: RunState) -> dict[str, object]:
+        """Runs the appointment read for this run and reports the budget it spent (Round 58.2)."""
+        session = ToolSession(
+            run_id=int(state["run_id"]),
+            calls=int(state.get("tool_calls") or 0),
+            started_at=state.get("tool_started_at") or None,
+        )
+        assert self._tool_client is not None
+        result = ToolExecutor(self._tool_client, session).execute(
+            "get_my_appointments", {"limit": 5})
+        return {
+            "calls": session.calls,
+            "started_at": session.started_at,
+            "payload": result.payload,
+            "needs_human": result.needs_human,
+        }
 
     @staticmethod
     def _config(run_id: int) -> RunnableConfig:
