@@ -6334,7 +6334,7 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (In progress: 58.1–58.2 Done, 58.3 Pending)
+## Round 58 — Read-only appointment tools (In progress: 58.1–58.2 Done, 58.3 in progress)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
@@ -6342,7 +6342,7 @@ not scheduled again", which is what it measures.
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
 | 58.2 Tool selection/execution | P1 / **Done** (2026-11-04, after review; 58.3 covers isolation) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
-| 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
+| 58.3 Isolation/recovery | P0 / **In progress** (2026-11-04; run/generation/capability and patient-identity cases done) | Cross-run capability, capability after acceptance, wrong-generation result, resumed-state patient identity; timeout and restart flows remain | AgentToolIsolationTest (3) + `test_a_resumed_run_never_changes_patient`: a capability from another run is 403, a capability after acceptance is 403, a wrong-generation result is 409 with no row, and a resumed checkpoint for another patient is refused before any tool call |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
 
@@ -6710,6 +6710,24 @@ rather than claimed as a red/green pair.
 slice.
 
 **Verification (actually run).** `mvn clean verify` → **412 tests, 0 failures, 1 skipped**.
+
+### Round 58.3 — Isolation, first pass (2026-11-04)
+
+`AgentToolIsolationTest` (3): a capability issued for one run is refused on another run's path (403)
+and still works on its own; a capability is refused after its result was accepted (403, the capability
+is revoked); a result submitted for the wrong generation is a 409 that leaves no row, and the same run
+then accepts its own generation.
+
+Python: a resumed checkpoint whose patient is 100 is refused (`CheckpointMismatch`) when the request
+names patient 101, and the tool client is never called — the tool path is built from the run in the
+state, so a resumed run cannot change patient.
+
+**Verification (actually run).** `mvn clean verify` → **415 tests, 0 failures, 1 skipped**; Python
+`pytest` → **256 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+**Still open in 58.3.** The timeout and restart flows against the tool path (a call that outlives the
+deadline mid-flight, a worker restart while a tool result is pending) are not exercised end-to-end;
+the per-patient appointment ownership is proved by 58.1's test rather than repeated here.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

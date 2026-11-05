@@ -490,3 +490,40 @@ def test_the_worker_uses_one_clock_for_the_start_and_the_deadline(tmp_path) -> N
 
     assert calls == [], "an expired run must not call the client"
     assert state["tool_needs_human"] is True
+
+
+def test_a_resumed_run_never_changes_patient(tmp_path) -> None:
+    # The tool path is built from the run in the state; a request that names another patient must be
+    # refused before the graph runs, and the tool must not be called (Round 58.3).
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.base import ProviderResponse
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker, CheckpointMismatch
+
+    calls: list[str] = []
+
+    class Provider:
+        def invoke_now(self, request: Any) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+                provider="stub", model="stub-1", latency_ms=0)
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'patient.sqlite'}") as checkpointer:
+        worker = AgentWorker(Provider(), checkpointer, lambda state: None,
+                             tool_client=lambda path, timeout: calls.append(path) or [])
+        # A checkpoint for patient 100, then a request that claims patient 101.
+        worker._graph.update_state(  # type: ignore[attr-defined]
+            {"configurable": {"thread_id": "run-88"}}, _appointment_state(88),
+        )
+        with pytest.raises(CheckpointMismatch):
+            worker.process(
+                RunStartRequest(run_id=88, message_id=410, patient_id=101,
+                                conversation_revision=1, execution_generation=1,
+                                content="When is my next appointment?",
+                                request_id="req-patient-88"),
+                CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                                outbound_token="out"),
+            )
+
+    assert calls == []
