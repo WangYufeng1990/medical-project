@@ -90,12 +90,21 @@ public class AgentRunResultRequest {
          * cannot re-enable the failure. A tool block is new, and a field it does not define must be
          * a 400 rather than silently dropped (Round 58.2 review).
          */
+        // Internal state only: a generated setter would let a request write "unknown_field": false
+        // after an extra field and clear the mark (Round 58.2 review).
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        @lombok.Getter(lombok.AccessLevel.NONE)
+        @lombok.Setter(lombok.AccessLevel.NONE)
         private boolean unknownField;
 
         /** Records the fact only; the key is model input and must not reach a log or exception. */
         @JsonAnySetter
         public void markUnknown(String name, Object value) {
             this.unknownField = true;
+        }
+
+        public boolean hasUnknownFields() {
+            return unknownField;
         }
     }
 
@@ -129,11 +138,18 @@ public class AgentRunResultRequest {
         @Size(max = 120)
         private String department;
 
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        @lombok.Getter(lombok.AccessLevel.NONE)
+        @lombok.Setter(lombok.AccessLevel.NONE)
         private boolean unknownField;
 
         @JsonAnySetter
         public void markUnknown(String name, Object value) {
             this.unknownField = true;
+        }
+
+        public boolean hasUnknownFields() {
+            return unknownField;
         }
     }
 

@@ -504,6 +504,29 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void anUnknownFieldCannotBeUnmarkedByTheRequestBody() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        // Ordered so the extra field comes first and the attempted un-mark second.
+        java.util.Map<String, Object> tool = new java.util.LinkedHashMap<>();
+        tool.put("name", "get_my_appointments");
+        tool.put("status", "ok");
+        tool.put("chief_complaint", "chest pain");
+        tool.put("unknown_field", false);
+        tool.put("facts", List.of());
+
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(toolBody(dispatched, tool)))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
     void aUtcFactIsAccepted() throws Exception {
         Dispatched dispatched = prepared("When is my next appointment?");
         submitWithTool(dispatched, "Cardiology", "UTC");

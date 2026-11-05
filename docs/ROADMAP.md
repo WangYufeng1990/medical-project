@@ -6334,14 +6334,14 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (In progress: 58.1 Done, 58.2 in progress, 58.3 Pending)
+## Round 58 — Read-only appointment tools (In progress: 58.1–58.2 Done, 58.3 Pending)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
-| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04; tool context in the result and queue done, 58.3 pending) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
+| 58.2 Tool selection/execution | P1 / **Done** (2026-11-04, after review; 58.3 covers isolation) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
@@ -6693,6 +6693,23 @@ answers a fixed "unexpected field in the tool context" (no key, no Jackson text)
 are unchanged and the key never leaves the request body.
 
 **Verification (actually run).** `mvn clean verify` → **411 tests, 0 failures, 1 skipped**.
+
+### Round 58.2 review fix — the un-mark bypass (2026-11-04)
+
+`unknownField` was a Lombok `@Data` field, so Jackson could write it: a request could send an extra
+field and then `"unknown_field": false` to clear the mark. The field is internal now — no generated
+getter or setter, `@JsonIgnore` and an explicit `hasUnknownFields()` read by the service. The test
+posts the ordered body and requires 400 with no result row.
+
+A red check with a re-added public setter did **not** reproduce the bypass, because the field-level
+`@JsonIgnore` also suppresses the property mapping; the guarantee is structural (no writable
+property, one read-only accessor) rather than demonstrated by a failing variant. That is recorded
+rather than claimed as a red/green pair.
+
+58.2 is Done with 58.3 (isolation, old generation, capability, timeout/restart) still open as its own
+slice.
+
+**Verification (actually run).** `mvn clean verify` → **412 tests, 0 failures, 1 skipped**.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

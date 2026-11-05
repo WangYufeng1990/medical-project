@@ -422,7 +422,7 @@ public class AgentReviewService {
     /** A handover carries a fixed reason and no facts; a success carries no reason (Round 58.2). */
     private void requireConsistentTool(AgentRunResultRequest.Tool tool) {
         if (tool == null) return;
-        if (tool.isUnknownField() || tool.getFacts().stream().anyMatch(AgentRunResultRequest.Fact::isUnknownField)) {
+        if (tool.hasUnknownFields() || tool.getFacts().stream().anyMatch(AgentRunResultRequest.Fact::hasUnknownFields)) {
             throw new BusinessException(ResultCode.BAD_REQUEST,
                     "unexpected field in the tool context");
         }
