@@ -1,5 +1,7 @@
 package com.example.medical.module.chat.dto.agent;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.Valid;
@@ -65,6 +67,7 @@ public class AgentRunResultRequest {
 
     @Data
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = false)
     public static class Tool {
         @NotBlank
         @Size(max = 40)
@@ -74,16 +77,28 @@ public class AgentRunResultRequest {
         @Pattern(regexp = "ok|needs_human", message = "unknown tool status")
         private String status;
 
-        @Size(max = 40)
+        @Pattern(regexp = "tool_failed|deadline_exceeded|call_budget_exhausted|tool_unavailable",
+                message = "a handover reason is a fixed code")
         private String reason;
 
         @NotNull
         @Size(max = 5)
         private List<@Valid @NotNull Fact> facts;
+
+        /**
+         * Spring's mapper is configured to ignore unknown properties globally, so the annotation
+         * cannot re-enable the failure. A tool block is new, and a field it does not define must be
+         * a 400 rather than silently dropped (Round 58.2 review).
+         */
+        @JsonAnySetter
+        public void rejectUnknown(String name, Object value) {
+            throw new IllegalArgumentException("unknown tool field: " + name);
+        }
     }
 
     @Data
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = false)
     public static class Fact {
         @NotNull
         @Min(1)
@@ -96,10 +111,14 @@ public class AgentRunResultRequest {
         /** The stored wall time; validated as ISO-8601 when the entity is built. */
         @NotBlank
         @Size(max = 40)
+        @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?",
+                message = "startTime must be an ISO-8601 local time")
         private String startTime;
 
         @NotBlank
         @Size(max = 64)
+        @Pattern(regexp = "[A-Za-z]+/[A-Za-z_+\\-]+",
+                message = "timezone must be a zone id")
         private String timezone;
 
         @Min(0)
@@ -110,6 +129,11 @@ public class AgentRunResultRequest {
 
         @Size(max = 120)
         private String department;
+
+        @JsonAnySetter
+        public void rejectUnknown(String name, Object value) {
+            throw new IllegalArgumentException("unknown fact field: " + name);
+        }
     }
 
     @Data

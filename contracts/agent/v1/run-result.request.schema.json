@@ -171,7 +171,12 @@
         "reason": {
           "anyOf": [
             {
-              "maxLength": 40,
+              "enum": [
+                "tool_failed",
+                "deadline_exceeded",
+                "call_budget_exhausted",
+                "tool_unavailable"
+              ],
               "type": "string"
             },
             {

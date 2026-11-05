@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextvars
 from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 
@@ -90,10 +91,23 @@ def fetch_receipt(run_id: int, generation: int | None) -> RunReceipt | None:
     )
 
 
+ToolReason = Literal["tool_failed", "deadline_exceeded", "call_budget_exhausted",
+                     "tool_unavailable"]
+
+_KNOWN_TOOL_REASONS: dict[str, ToolReason] = {
+    "tool_failed": "tool_failed",
+    "deadline_exceeded": "deadline_exceeded",
+    "call_budget_exhausted": "call_budget_exhausted",
+    "tool_unavailable": "tool_unavailable",
+}
+
+
 def _tool_payload(state: RunState) -> ToolPayload | None:
     if state.get("tool_needs_human"):
+        # The contract carries a fixed code; an unexpected value must not become free text.
+        reason = _KNOWN_TOOL_REASONS.get(str(state.get("tool_reason") or ""), "tool_unavailable")
         return ToolPayload(name="get_my_appointments", status="needs_human",
-                           reason=str(state.get("tool_reason") or "tool_unavailable"), facts=[])
+                           reason=reason, facts=[])
     facts = _tool_facts(state.get("tool_result"))
     if facts is None:
         return None

@@ -6659,6 +6659,25 @@ Java-invalid fixture for it was removed and the rule is enforced and tested on b
 queue API returns it" is verified; "the frontend displays it" is not — there is no UI change in this
 slice.
 
+### Round 58.2 review fixes (2026-11-04, second pass)
+
+**1. P2 — `reason` accepted free text.** The contract carried a length check only, so synthetic text
+reached the review result. It is a `Literal` of the four fixed codes now (`tool_failed`,
+`deadline_exceeded`, `call_budget_exhausted`, `tool_unavailable`), the Java DTO has the matching
+pattern, the Python client maps an unexpected value to `tool_unavailable` rather than passing it
+through, and the shared fixtures include a free-text reason that must be refused. The Java endpoint
+test posts free text and gets a 400.
+
+**2. P2 — the Java fact validation was weaker than the shared contract.** `startTime` and `timezone`
+are now pattern-checked on the DTO, and the tool/fact classes reject unknown fields explicitly via
+`@JsonAnySetter`: Spring's mapper ignores unknown properties globally, so the annotation alone could
+not re-enable the failure. A new test posts four bodies to the real endpoint — free-text reason, a
+non-date, a non-zone and a `chief_complaint` among the facts — and every one is a 400 with no result
+row written.
+
+**Verification (actually run).** `mvn clean verify` → **410 tests, 0 failures, 1 skipped**; Python
+`pytest` → **255 passed**, `ruff` and `mypy --strict` clean (37 files).
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

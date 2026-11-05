@@ -80,7 +80,10 @@ class ToolPayload(BaseModel):
 
     name: Annotated[str, Field(min_length=1, max_length=40)]
     status: Literal["ok", "needs_human"]
-    reason: Annotated[str, Field(max_length=40)] | None = None
+    # A fixed failure code, never free text: the reason reaches the review result, where model or
+    # transport text must not appear (Round 58.2 review).
+    reason: Literal["tool_failed", "deadline_exceeded", "call_budget_exhausted",
+                    "tool_unavailable"] | None = None
     facts: Annotated[list[ToolFact], Field(max_length=5)]
 
     @model_validator(mode="after")

@@ -457,6 +457,47 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void aMalformedToolContextIsRefusedByTheRealEndpoint() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        java.util.Map<String, Object> fact = java.util.Map.of(
+                "appointment_id", 900, "status", 1, "start_time", "2026-11-07T09:00:00",
+                "timezone", "America/New_York", "department", "Cardiology");
+
+        java.util.List<java.util.Map<String, Object>> bodies = java.util.List.of(
+                // free text in the reason
+                java.util.Map.of("name", "get_my_appointments", "status", "needs_human",
+                        "reason", "Zxqv synthetic free text", "facts", List.of()),
+                // a date that is not a date
+                java.util.Map.of("name", "get_my_appointments", "status", "ok",
+                        "facts", java.util.List.of(java.util.Map.of(
+                                "appointment_id", 900, "status", 1, "start_time", "not-a-date",
+                                "timezone", "America/New_York"))),
+                // a zone that is not a zone
+                java.util.Map.of("name", "get_my_appointments", "status", "ok",
+                        "facts", java.util.List.of(java.util.Map.of(
+                                "appointment_id", 900, "status", 1,
+                                "start_time", "2026-11-07T09:00:00", "timezone", "not-a-zone"))),
+                // clinical text among the facts
+                java.util.Map.of("name", "get_my_appointments", "status", "ok",
+                        "facts", java.util.List.of(java.util.Map.of(
+                                "appointment_id", 900, "status", 1,
+                                "start_time", "2026-11-07T09:00:00",
+                                "timezone", "America/New_York", "chief_complaint", "chest pain"))));
+
+        for (java.util.Map<String, Object> tool : bodies) {
+            mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(toolBody(dispatched, tool)))
+                            .header("X-Agent-Service-Token", "test-inbound-token")
+                            .header("X-Agent-Capability", dispatched.capability()))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    @Test
     void aHandoverWithFactsIsRefused() throws Exception {
         Dispatched dispatched = prepared("When is my next appointment?");
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
