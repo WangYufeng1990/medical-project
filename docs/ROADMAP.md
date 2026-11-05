@@ -6597,6 +6597,27 @@ the service is not constructed with the reader yet), `tool_started_at` is only p
 first tool call rather than from the run start, and a `needs_human` result does not change the draft
 kind beyond the clinician flag; 58.3 has not started.
 
+### Round 58.2 — API wiring, run start and the human summary (2026-11-04)
+
+The service now hands the worker a real reader (`java_reader(settings.java_base_url)`), so a run
+actually reads appointments. The run's `tool_started_at` and an empty budget are part of the initial
+state, which means the deadline starts with the run and the checkpoint keeps it — a resume continues
+the same clock rather than restarting it. A `tool_needs_human` result forces `requires_clinician`, so
+the draft is a routing summary rather than a policy answer built on a failed read.
+
+Tests: the API path (stub serving `data: []`) still submits a routing result and no longer routes to a
+human for an empty list; the worker-level test shows the run-scoped read, the parsed result in
+`tool_result`, the spent budget and the start written back. Existing graph/API/safety tests were
+re-run and still pass, which also confirms that a fresh run seeds the identity keys the checkpoint
+validation expects.
+
+**Verification (actually run).** `pytest` → **251 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
+**Still open in 58.2.** The tool result reaches the review context (state) but not the draft text or
+the result payload; `needs_human` changes the clinician flag and the routing summary, not a dedicated
+result field; 58.3 has not started.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

@@ -20,6 +20,7 @@ request (older generation than the checkpoint) refuses rather than overwriting n
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -99,6 +100,8 @@ class AgentWorker:
 
     def process(self, request: RunStartRequest, credentials: CallCredentials) -> RunState:
         with self._lock(request.run_id):
+            # The deadline starts with the run, not with its first tool call (Round 58.2). A resume
+            # keeps whatever start the checkpoint already carries.
             return self._process_locked(request, credentials)
 
     def resume(self, run_id: int, credentials: CallCredentials) -> RunState:
@@ -149,6 +152,12 @@ class AgentWorker:
                         "conversation_revision": request.conversation_revision,
                         "execution_generation": request.execution_generation,
                         "content": request.content,
+                        # The tool deadline starts with the run, and the checkpoint keeps it, so a
+                        # resume continues the same clock instead of restarting it (Round 58.2).
+                        "tool_started_at": time.time(),
+                        "tool_calls": 0,
+                        "tool_result": None,
+                        "tool_needs_human": False,
                     },
                     config,
                 ),

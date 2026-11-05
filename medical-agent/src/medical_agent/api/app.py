@@ -24,6 +24,7 @@ from medical_agent.kb.store import KnowledgeBase
 from medical_agent.providers.base import Provider
 from medical_agent.providers.factory import build_provider
 from medical_agent.schemas.run import CONTRACT_VERSION, RunStartRequest
+from medical_agent.tools.http_client import java_reader
 from medical_agent.worker import AgentWorker
 
 
@@ -96,9 +97,10 @@ def create_app(
                 active_provider = selected if selected is not None else build_provider(settings)
                 checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
                 retriever = _open_retriever(settings)
+                tool_client = java_reader(settings.java_base_url)
                 active_worker = AgentWorker(active_provider, checkpointer,
                                            max_prompt_chars=settings.max_prompt_chars,
-                                           retriever=retriever)
+                                           retriever=retriever, tool_client=tool_client)
                 application.state.checkpointer = checkpointer
             application.state.worker = active_worker
             yield

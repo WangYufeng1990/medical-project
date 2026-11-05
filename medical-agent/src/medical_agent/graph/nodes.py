@@ -132,6 +132,11 @@ def tool_node(
 
 def draft_node(state: RunState) -> dict[str, object]:
     """Build the draft for its kind, validate it, and block if the fallback is also unusable."""
+    # The agent could not finish its own read: staff get a routing summary, never a fabricated
+    # answer, and the flag stays on the record (Round 58.2).
+    requires_clinician = bool(state.get("requires_clinician")) or bool(
+        state.get("tool_needs_human"))
+    effective: RunState = {**state, "requires_clinician": requires_clinician}
     flags = list(state.get("flags", []))
     evidence = list(state.get("evidence") or [])
     citations = list(state.get("citations") or [])
@@ -145,9 +150,9 @@ def draft_node(state: RunState) -> dict[str, object]:
         evidence = trusted
         citations = [item for item in citations if str(item["chunk_id"]) in allowed]
 
-    kind = draft_kind({**state, "evidence": evidence})
+    kind = draft_kind({**effective, "evidence": evidence})
     working: RunState = {
-        **state,
+        **effective,
         "evidence": evidence,
         "citations": citations,
         "flags": flags,
