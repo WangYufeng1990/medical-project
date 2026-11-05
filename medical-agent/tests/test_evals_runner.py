@@ -75,7 +75,8 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
 
     payload = json.loads(report.read_text())
 
-    assert payload["manifest"]["cases"] == len(cases())
+    assert payload["manifest"]["cases"] == 156, "the default run is the dev split"
+    assert payload["manifest"]["splits"] == ["dev"]
     assert len(payload["manifest"]["dataset_sha256"]) == 64
     assert payload["manifest"]["splits"] == ["dev"]
     assert payload["manifest"]["provider"] == "mock-or-canned"
@@ -83,7 +84,7 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert payload["manifest"]["prompt_version"].startswith("sha256:")
     assert len(payload["manifest"]["prompt_version"]) == len("sha256:") + 64
     assert payload["manifest"]["commit"]
-    assert payload["totals"] == {"cases": len(cases()), "failed": 0}
+    assert payload["totals"] == {"cases": 156, "failed": 0}
     assert set(payload["per_family"]) == {"classification", "uncertainty", "retrieval",
                                           "citations", "validation", "graph"}
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())

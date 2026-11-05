@@ -73,20 +73,22 @@ def test_importing_a_copy_does_not_overwrite_a_different_dataset(tmp_path: Path)
     assert module.CASES, "the module still builds its cases in memory"
 
 
-def test_the_set_is_large_enough_and_covers_every_family() -> None:
+def test_the_set_has_a_dev_gate_and_a_held_out_split() -> None:
     cases = read(CASES)
-    families = Counter(case["family"] for case in cases)
+    per_split = Counter(case["split"] for case in cases)
+    dev_families = Counter(case["family"] for case in cases if case["split"] == "dev")
+    held_out_families = Counter(case["family"] for case in cases if case["split"] == "held_out")
 
-    assert 150 <= len(cases) <= 200, f"the plan asks for 150-200 cases, found {len(cases)}"
-    assert set(families) == {"classification", "uncertainty", "retrieval", "citations",
-                            "validation", "graph"}
-    assert all(count >= 7 for count in families.values()), families
+    assert per_split["dev"] == 156, "the dev regression gate keeps its size"
+    assert per_split["held_out"] >= 20, "the held-out split must exist"
+    assert set(dev_families) == {"classification", "uncertainty", "retrieval", "citations",
+                                 "validation", "graph"}
+    assert all(count >= 7 for count in dev_families.values()), dev_families
+    assert {"classification", "retrieval", "attacks"} <= set(held_out_families)
 
 
 def test_every_case_declares_its_split() -> None:
-    # The whole set is the development/regression split; a held-out split is an open item and
-    # is not claimed by inventing a flag.
-    assert {case["split"] for case in read(CASES)} == {"dev"}
+    assert {case["split"] for case in read(CASES)} == {"dev", "held_out"}
 
 
 def test_ids_are_unique() -> None:

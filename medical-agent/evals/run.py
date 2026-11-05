@@ -71,9 +71,10 @@ class MockProvider:
             provider="mock", model="mock-1", latency_ms=0)
 
 
-def load_cases(family: str | None) -> list[dict]:
+def load_cases(family: str | None, split: str = "dev") -> list[dict]:
     cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
-    return [case for case in cases if family is None or case["family"] == family]
+    return [case for case in cases
+            if case.get("split") == split and (family is None or case["family"] == family)]
 
 
 def corpus_retriever() -> Retriever:
@@ -280,11 +281,13 @@ def manifest(retriever: Retriever, cases: list[dict]) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--family")
+    parser.add_argument("--split", default="dev",
+                        help="dev (the regression gate) or held_out (release measurement)")
     parser.add_argument("--report", type=Path, help="write a JSON report with the run manifest")
     args = parser.parse_args()
 
     retriever = corpus_retriever()
-    cases = load_cases(args.family)
+    cases = load_cases(args.family, args.split)
     if not cases:
         # A mistyped --family must not look like a green run (Round 59.1 review).
         print(f"no cases for family {args.family!r}", file=sys.stderr)
