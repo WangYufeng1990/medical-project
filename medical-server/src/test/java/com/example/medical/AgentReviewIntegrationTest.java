@@ -472,11 +472,17 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
                         "facts", java.util.List.of(java.util.Map.of(
                                 "appointment_id", 900, "status", 1, "start_time", "not-a-date",
                                 "timezone", "America/New_York"))),
-                // a zone that is not a zone
+                // a zone that looks like a zone but is not one
                 java.util.Map.of("name", "get_my_appointments", "status", "ok",
                         "facts", java.util.List.of(java.util.Map.of(
                                 "appointment_id", 900, "status", 1,
-                                "start_time", "2026-11-07T09:00:00", "timezone", "not-a-zone"))),
+                                "start_time", "2026-11-07T09:00:00",
+                                "timezone", "America/Not_A_Zone"))),
+                // a date that is shaped correctly but does not exist
+                java.util.Map.of("name", "get_my_appointments", "status", "ok",
+                        "facts", java.util.List.of(java.util.Map.of(
+                                "appointment_id", 900, "status", 1,
+                                "start_time", "2026-02-30T09:00:00", "timezone", "UTC"))),
                 // clinical text among the facts
                 java.util.Map.of("name", "get_my_appointments", "status", "ok",
                         "facts", java.util.List.of(java.util.Map.of(
@@ -495,6 +501,17 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
         assertEquals(0, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
                 dispatched.runId()));
+    }
+
+    @Test
+    void aUtcFactIsAccepted() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        submitWithTool(dispatched, "Cardiology", "UTC");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].tool.facts[0].timezone").value("UTC"));
     }
 
     @Test
@@ -535,6 +552,11 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
     }
 
     private void submitWithTool(Dispatched dispatched, String department) throws Exception {
+        submitWithTool(dispatched, department, "America/New_York");
+    }
+
+    private void submitWithTool(Dispatched dispatched, String department, String timezone)
+            throws Exception {
         long runId = dispatched.runId();
         long generation = jdbc.queryForObject(
                 "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
@@ -545,7 +567,7 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
                         List.of(java.util.Map.of(
                                 "appointment_id", 900, "status", 1,
                                 "start_time", "2026-11-07T09:00:00",
-                                "timezone", "America/New_York", "duration_minutes", 30,
+                                "timezone", timezone, "duration_minutes", 30,
                                 "provider_name", "Dr. Sarah Mitchell", "department", department)));
         mockMvc.perform(post("/api/v1/internal/agent/runs/" + runId + "/results")
                         .contentType(MediaType.APPLICATION_JSON)

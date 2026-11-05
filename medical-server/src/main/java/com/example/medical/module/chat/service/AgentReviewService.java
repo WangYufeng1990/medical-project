@@ -422,6 +422,25 @@ public class AgentReviewService {
     /** A handover carries a fixed reason and no facts; a success carries no reason (Round 58.2). */
     private void requireConsistentTool(AgentRunResultRequest.Tool tool) {
         if (tool == null) return;
+        if (tool.isUnknownField() || tool.getFacts().stream().anyMatch(AgentRunResultRequest.Fact::isUnknownField)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "unexpected field in the tool context");
+        }
+        for (AgentRunResultRequest.Fact fact : tool.getFacts()) {
+            // The patterns accepted UTC by accident and let impossible dates through; the parser is
+            // the authority for both the date and the zone (Round 58.2 review).
+            try {
+                java.time.LocalDateTime.parse(fact.getStartTime());
+            } catch (java.time.format.DateTimeParseException invalid) {
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "startTime is not an ISO-8601 local time");
+            }
+            try {
+                java.time.ZoneId.of(fact.getTimezone());
+            } catch (java.time.DateTimeException invalid) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "timezone is not a zone id");
+            }
+        }
         if ("needs_human".equals(tool.getStatus())) {
             if (!tool.getFacts().isEmpty() || tool.getReason() == null || tool.getReason().isBlank()) {
                 throw new BusinessException(ResultCode.BAD_REQUEST,

@@ -90,9 +90,12 @@ public class AgentRunResultRequest {
          * cannot re-enable the failure. A tool block is new, and a field it does not define must be
          * a 400 rather than silently dropped (Round 58.2 review).
          */
+        private boolean unknownField;
+
+        /** Records the fact only; the key is model input and must not reach a log or exception. */
         @JsonAnySetter
-        public void rejectUnknown(String name, Object value) {
-            throw new IllegalArgumentException("unknown tool field: " + name);
+        public void markUnknown(String name, Object value) {
+            this.unknownField = true;
         }
     }
 
@@ -111,14 +114,10 @@ public class AgentRunResultRequest {
         /** The stored wall time; validated as ISO-8601 when the entity is built. */
         @NotBlank
         @Size(max = 40)
-        @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?",
-                message = "startTime must be an ISO-8601 local time")
         private String startTime;
 
         @NotBlank
         @Size(max = 64)
-        @Pattern(regexp = "[A-Za-z]+/[A-Za-z_+\\-]+",
-                message = "timezone must be a zone id")
         private String timezone;
 
         @Min(0)
@@ -130,9 +129,11 @@ public class AgentRunResultRequest {
         @Size(max = 120)
         private String department;
 
+        private boolean unknownField;
+
         @JsonAnySetter
-        public void rejectUnknown(String name, Object value) {
-            throw new IllegalArgumentException("unknown fact field: " + name);
+        public void markUnknown(String name, Object value) {
+            this.unknownField = true;
         }
     }
 

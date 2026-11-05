@@ -6678,6 +6678,22 @@ row written.
 **Verification (actually run).** `mvn clean verify` → **410 tests, 0 failures, 1 skipped**; Python
 `pytest` → **255 passed**, `ruff` and `mypy --strict` clean (37 files).
 
+### Round 58.2 review fixes (2026-11-04, third pass)
+
+**1. P2 — the patterns rejected a valid `UTC` and accepted impossible values.** `[A-Za-z]+/[A-Za-z_+\-]+`
+has no single-segment zone, so `UTC` — what 58.1 returns when the JVM runs in UTC — was a 400, while
+`America/Not_A_Zone` and `2026-02-30T09:00:00` passed. The patterns are gone: the service parses
+`startTime` with `LocalDateTime.parse` and `timezone` with `ZoneId.of`, and answers a fixed 400 on a
+parse failure. Tests: a `UTC` fact is accepted and returned by the queue; `America/Not_A_Zone` and
+`2026-02-30T09:00:00` are both 400 with no result row.
+
+**2. P2 — an unknown field's key name reached the log.** The `@JsonAnySetter` methods threw with the key
+in the message, and the global handler logs exception text. They only mark a flag now, and the service
+answers a fixed "unexpected field in the tool context" (no key, no Jackson text), so the 400 semantics
+are unchanged and the key never leaves the request body.
+
+**Verification (actually run).** `mvn clean verify` → **411 tests, 0 failures, 1 skipped**.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
