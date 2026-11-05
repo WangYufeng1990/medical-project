@@ -79,8 +79,26 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert len(payload["manifest"]["dataset_sha256"]) == 64
     assert payload["manifest"]["splits"] == ["dev"]
     assert payload["manifest"]["provider"] == "mock-or-canned"
+    assert payload["manifest"]["models"], "the models actually used must be recorded"
+    assert payload["manifest"]["prompt_version"].startswith("sha256:")
+    assert len(payload["manifest"]["prompt_version"]) == len("sha256:") + 64
     assert payload["manifest"]["commit"]
     assert payload["totals"] == {"cases": len(cases()), "failed": 0}
     assert set(payload["per_family"]) == {"classification", "uncertainty", "retrieval",
                                           "citations", "validation", "graph"}
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
+
+
+def test_a_mistyped_family_fails_instead_of_passing(tmp_path) -> None:
+    import os
+    import subprocess as sp
+
+    report = tmp_path / "empty.json"
+    completed = sp.run([sys.executable, "-m", "evals.run", "--family", "retrival",
+                        "--report", str(report)], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode != 0, "an empty selection must not exit zero"
+    assert "no cases" in completed.stderr
+    assert not report.exists(), "no report is written for an empty selection"

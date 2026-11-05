@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from medical_agent.checkpoints import open_checkpointer  # noqa: E402
-from medical_agent.classification.classifier import Classifier  # noqa: E402
+from medical_agent.classification.classifier import PROMPT_TEMPLATE, Classifier  # noqa: E402
 from medical_agent.graph.nodes import DraftBlocked  # noqa: E402
 from medical_agent.java_client import CallCredentials  # noqa: E402
 from medical_agent.kb.chunking import Chunk  # noqa: E402
@@ -41,6 +41,7 @@ from medical_agent.validation import validate_draft  # noqa: E402
 from medical_agent.worker import AgentWorker  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.jsonl")
+MODELS: set[str] = set()
 CORPUS = ROOT / "kb"
 RISK_ORDER = {RiskLevel.ROUTINE: 0, RiskLevel.URGENT: 1, RiskLevel.EMERGENCY: 2}
 
@@ -49,6 +50,7 @@ class CannedProvider:
     def __init__(self, text: str | None, error: str | None = None) -> None:
         self._text = text
         self._error = error
+        MODELS.add("canned-1")
 
     def invoke_now(self, request) -> ProviderResponse:  # type: ignore[no-untyped-def]
         if self._error:
@@ -59,6 +61,9 @@ class CannedProvider:
 
 class MockProvider:
     name = "mock"
+
+    def __init__(self) -> None:
+        MODELS.add("mock-1")
 
     def invoke_now(self, request) -> ProviderResponse:  # type: ignore[no-untyped-def]
         return ProviderResponse(
@@ -265,7 +270,8 @@ def manifest(retriever: Retriever, cases: list[dict]) -> dict:
         "cases": len(cases),
         "splits": sorted({case.get("split") for case in cases}),
         "provider": "mock-or-canned",
-        "prompt_version": "classification-prompt-v1",
+        "models": sorted(MODELS),
+        "prompt_version": "sha256:" + hashlib.sha256(PROMPT_TEMPLATE.encode()).hexdigest(),
         "kb_version": f"{version.id}:{version.chunk_count}",
         "commit": commit,
     }
@@ -279,6 +285,10 @@ def main() -> int:
 
     retriever = corpus_retriever()
     cases = load_cases(args.family)
+    if not cases:
+        # A mistyped --family must not look like a green run (Round 59.1 review).
+        print(f"no cases for family {args.family!r}", file=sys.stderr)
+        return 2
     per_family: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     failures: list[str] = []
     for case in cases:

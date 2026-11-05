@@ -6790,7 +6790,23 @@ files); the report itself: 156 cases, 0 failed, all six families present.
 retrieval, clinical escalation, tools and attacks), and there is no held-out split yet. Real-model runs
 with a cost budget are not part of this increment.
 
-### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Empty selection and the real run identity (2026-11-05)
+
+**Empty selection.** `--family retrival` used to report `cases: 0, failed: 0` and exit 0. A selection
+that matches nothing now prints `no cases for family ...` to stderr, exits **2**, and writes no report,
+so a typo cannot pass a regression gate. Test: the CLI is run with a mistyped family and must fail with
+no report file.
+
+**Identity that reflects the run.** The manifest records `models` — the mock/canned ids actually used
+by the run (`mock-1`, `canned-1`) — and `prompt_version` is `sha256:` + the hash of the real
+`PROMPT_TEMPLATE`, so editing the prompt changes the identity. Test: both are asserted, and the prompt
+hash is 64 hex characters.
+
+**Verification (actually run).** `pytest` → **260 passed**, `ruff` and `mypy --strict` clean (37
+files); `--family retrival` exits 2 with no report; a full run lists `models: ["canned-1"]` (no case
+uses the mock provider) and the prompt hash.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
