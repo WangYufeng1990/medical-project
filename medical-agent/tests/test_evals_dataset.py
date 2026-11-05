@@ -79,7 +79,7 @@ def test_the_set_has_a_dev_gate_and_a_held_out_split() -> None:
     dev_families = Counter(case["family"] for case in cases if case["split"] == "dev")
     held_out_families = Counter(case["family"] for case in cases if case["split"] == "held_out")
 
-    assert per_split["dev"] == 156, "the dev regression gate keeps its size"
+    assert per_split["dev"] == 177, "the dev regression gate grew by the 59.1 expansion"
     assert per_split["held_out"] >= 20, "the held-out split must exist"
     assert set(dev_families) == {"classification", "uncertainty", "retrieval", "citations",
                                  "validation", "graph"}
@@ -105,5 +105,11 @@ def test_no_input_is_reused_across_splits() -> None:
     held_out = [case["message"] for case in cases
                 if case["split"] == "held_out" and "message" in case]
 
-    assert not set(dev) & set(held_out)
+    dev_queries = [case["query"] for case in cases
+                   if case["split"] == "dev" and "query" in case]
+    held_out_queries = [case["query"] for case in cases
+                        if case["split"] == "held_out" and "query" in case]
+
+    assert not set(dev) & set(held_out), "no message is reused across splits"
+    assert not set(dev_queries) & set(held_out_queries), "no query is reused across splits"
     assert len(held_out) == len(set(held_out)), "no duplicate inputs"

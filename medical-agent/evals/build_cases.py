@@ -499,6 +499,39 @@ case("graph-third-billing-unsupported", "graph", "graph",
      expect={"kind": "policy_answer", "adopted_documents": ["billing-and-insurance"],
              "review_required": True, "validation_ok": True})
 
+# ── dev expansion (59.1): more phrasings the rules and the corpus can answer ──────────────
+for name, text, risk, flag in [
+    ("x-crushing", "Crushing chest pain since this morning", "EMERGENCY", "emergency:chest_pain"),
+    ("x-pressure", "There is pressure in my chest when I walk", "EMERGENCY",
+     "emergency:chest_pain"),
+    ("x-catch", "I cannot breathe", "EMERGENCY", "emergency:breathing"),
+    ("x-gasp", "I am gasping for air", "EMERGENCY", "emergency:breathing"),
+    ("x-slurred", "My speech is slurred and my face droops", "EMERGENCY", "emergency:stroke"),
+    ("x-numb", "My arm is numb on one side", "EMERGENCY", "emergency:stroke"),
+    ("x-bleed", "The cut won't stop bleeding", "EMERGENCY", "emergency:bleeding"),
+    ("x-pills", "I took too many pills by mistake", "EMERGENCY", "emergency:self_harm"),
+    ("x-seizure", "My daughter had a seizure today", "EMERGENCY", "emergency:seizure"),
+    ("x-fever", "My newborn has a fever of 38", "URGENT", "urgent:infant_fever"),
+    ("x-preg", "I am pregnant and bleeding", "URGENT", "urgent:pregnancy_bleeding"),
+]:
+    classify(f"cls-{name}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
+             clinician=True, flags=[flag])
+
+for name, query, document in [
+    ("x-bill", "Can I pay my bill in instalments?", "billing-and-insurance"),
+    ("x-insurance", "How do I update my insurance details?", "billing-and-insurance"),
+    ("x-refill", "How do I request a repeat prescription?", "prescription-refills"),
+    ("x-pharmacy", "Which pharmacy will have my medicine?", "prescription-refills"),
+    ("x-results", "Where do I see my test results?", "lab-results"),
+    ("x-lab-wait", "How many days do results take?", "lab-results"),
+    ("x-book", "How do I book an appointment online?", "appointments"),
+    ("x-cancel", "How do I cancel a visit?", "appointments"),
+    ("x-record", "Can I get a copy of my record?", "privacy-and-consent"),
+    ("x-consent", "Who can see my information?", "privacy-and-consent"),
+]:
+    case(f"ret-{name}", "retrieval", "retrieve", query=query,
+         expect={"empty": False, "top_document": document})
+
 # ── held-out cases: authored from the same contract, never run during development ────────────
 SPLIT = "held_out"
 
