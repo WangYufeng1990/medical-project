@@ -64,8 +64,12 @@ class AgentWorker:
         max_prompt_chars: int = 8000,
         retriever: Retriever | None = None,
         tool_client: Callable[[str, float], object] | None = None,
+        tool_clock: Callable[[], float] = time.time,
     ) -> None:
         self._tool_client = tool_client
+        # The start is persisted as an epoch value, so the session must measure with the same clock;
+        # mixing it with monotonic() produced a remaining time of about 1.8 billion seconds.
+        self._tool_clock = tool_clock
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
         self._graph = build_graph(
@@ -79,6 +83,7 @@ class AgentWorker:
             run_id=int(state["run_id"]),
             calls=int(state.get("tool_calls") or 0),
             started_at=state.get("tool_started_at") or None,
+            clock=self._tool_clock,
         )
         assert self._tool_client is not None
         result = ToolExecutor(self._tool_client, session).execute(
@@ -154,7 +159,7 @@ class AgentWorker:
                         "content": request.content,
                         # The tool deadline starts with the run, and the checkpoint keeps it, so a
                         # resume continues the same clock instead of restarting it (Round 58.2).
-                        "tool_started_at": time.time(),
+                        "tool_started_at": self._tool_clock(),
                         "tool_calls": 0,
                         "tool_result": None,
                         "tool_needs_human": False,

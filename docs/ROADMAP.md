@@ -6618,6 +6618,20 @@ files).
 the result payload; `needs_human` changes the clinician flag and the routing summary, not a dedicated
 result field; 58.3 has not started.
 
+### Round 58.2 review fix — one clock (2026-11-04)
+
+The initial state stored `time.time()` while `ToolSession` measured with `time.monotonic()`, so the
+remaining time for a 10-second budget came out at about 1.8 billion seconds, a 30-second-old run still
+called the client, and that number was passed as the HTTP timeout. `AgentWorker` now takes a
+`tool_clock` (defaulting to `time.time`), uses it for the persisted start **and** for the session, so
+the two values belong to the same timeline.
+
+Test: a worker with a controllable clock reads a state whose run started 30 seconds ago; with the
+default 10-second budget the client is **not** called and the result is a human handover.
+
+**Verification (actually run).** `pytest` → **252 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.

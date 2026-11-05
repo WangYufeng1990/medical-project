@@ -449,3 +449,44 @@ def test_the_worker_reads_appointments_for_an_appointment_message(tmp_path) -> N
     assert state["tool_calls"] == 1
     assert state["tool_result"][0].appointmentId == 900
     assert state["tool_needs_human"] is False
+
+
+def test_the_worker_uses_one_clock_for_the_start_and_the_deadline(tmp_path) -> None:
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.base import ProviderResponse
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    calls: list[str] = []
+    now = [10_000.0]
+
+    def client(path: str, timeout: float) -> Any:
+        calls.append(path)
+        return []
+
+    class Provider:
+        def invoke_now(self, request: Any) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+                provider="stub", model="stub-1", latency_ms=0)
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'clock.sqlite'}") as checkpointer:
+        worker = AgentWorker(Provider(), checkpointer, lambda state: None,
+                             tool_client=client, tool_clock=lambda: now[0])
+        # A state whose run started 30 seconds ago: with the default 10s budget the call must not
+        # happen, and the session must measure with the same clock the start came from.
+        worker._graph.update_state(  # type: ignore[attr-defined]
+            {"configurable": {"thread_id": "run-77"}},
+            {**_appointment_state(77), "message_id": 770, "tool_started_at": now[0] - 30},
+        )
+        state = worker.process(
+            RunStartRequest(run_id=77, message_id=770, patient_id=100,
+                            conversation_revision=1, execution_generation=1,
+                            content="When is my next appointment?", request_id="req-clock-77"),
+            CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                            outbound_token="out"),
+        )
+
+    assert calls == [], "an expired run must not call the client"
+    assert state["tool_needs_human"] is True
