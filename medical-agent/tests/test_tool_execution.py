@@ -566,3 +566,56 @@ def test_a_slow_tool_on_the_worker_path_becomes_a_human_task(tmp_path) -> None:
     assert state["tool_reason"] == "deadline_exceeded"
     assert state["tool_result"] is None
     assert state["validation"]["kind"] == "routing_summary"
+
+
+def test_a_restart_after_the_tool_read_reuses_the_checkpoint_and_submits(tmp_path) -> None:
+    # Java accepted nothing yet: the read succeeded and is in the checkpoint, the submit did not.
+    # A new worker on the same checkpoint must reuse the saved read, call no tool, and submit once.
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.base import ProviderResponse
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    reads: list[str] = []
+
+    def reader(path: str, timeout: float) -> Any:
+        reads.append(path)
+        return [{"appointmentId": 900, "status": 1, "startTime": "2026-11-07T09:00:00",
+                 "timezone": "UTC", "department": "Cardiology"}]
+
+    class Provider:
+        def invoke_now(self, request: Any) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"intents": ["APPOINTMENT"], "risk": "ROUTINE", "confidence": 0.9}',
+                provider="stub", model="stub-1", latency_ms=0)
+
+    request = RunStartRequest(
+        run_id=120, message_id=1200, patient_id=100, conversation_revision=1,
+        execution_generation=1, content="When is my next appointment?",
+        request_id="req-restart-120")
+    credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                                  outbound_token="out")
+
+    def failing_submit(state: Any) -> None:
+        raise RuntimeError("java is unreachable")
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'tool-restart.sqlite'}") as checkpointer:
+        first = AgentWorker(Provider(), checkpointer, failing_submit, tool_client=reader)
+        with pytest.raises(RuntimeError):
+            first.process(request, credentials)
+
+        submitted: list[Any] = []
+
+        def must_not_read(path: str, timeout: float) -> Any:
+            raise AssertionError("a restored checkpoint must not read the tool again")
+
+        restarted = AgentWorker(Provider(), checkpointer, submitted.append,
+                                tool_client=must_not_read)
+        state = restarted.process(request, credentials)
+
+    assert reads == ["/api/v1/internal/agent/runs/120/appointments?limit=5"], (
+        "the first attempt read once and the restart did not read again")
+    assert len(submitted) == 1, "the restart submits the pending result once"
+    assert state["tool_result"][0].appointmentId == 900, "the saved read is reused"
+    assert state["tool_calls"] == 1

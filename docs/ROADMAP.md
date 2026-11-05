@@ -6334,7 +6334,7 @@ Python process is killed"; that combination is recorded as a possible later enha
 block this slice. The end-to-end test's own restart assertion is documented as "an accepted run is
 not scheduled again", which is what it measures.
 
-## Round 58 — Read-only appointment tools (In progress: 58.1–58.2 Done, 58.3 in progress)
+## Round 58 — Read-only appointment tools (Done: 58.1–58.3)
 
 **Goal:** authorized business retrieval without patient-record exposure. **Estimate:** 24–40 hours. Depends on Round 57 and the Round 55 authorization contract.
 
@@ -6342,7 +6342,7 @@ not scheduled again", which is what it measures.
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
 | 58.2 Tool selection/execution | P1 / **Done** (2026-11-04, after review; 58.3 covers isolation) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
-| 58.3 Isolation/recovery | P0 / **In progress** (2026-11-04; run/generation/capability and patient-identity cases done) | Cross-run capability, capability after acceptance, wrong-generation result, resumed-state patient identity; timeout and restart flows remain | AgentToolIsolationTest (3) + `test_a_resumed_run_never_changes_patient`: a capability from another run is 403, a capability after acceptance is 403, a wrong-generation result is 409 with no row, and a resumed checkpoint for another patient is refused before any tool call |
+| 58.3 Isolation/recovery | P0 / **Done** (2026-11-05, after review) | Cross-run capability, capability after acceptance, wrong-generation result, resumed-state patient identity; timeout and restart flows remain | AgentToolIsolationTest (3) + `test_a_resumed_run_never_changes_patient`: a capability from another run is 403, a capability after acceptance is 403, a wrong-generation result is 409 with no row, and a resumed checkpoint for another patient is refused before any tool call |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
 
@@ -6746,6 +6746,18 @@ executor unit.
 
 **Still open in 58.3.** A worker restart while a tool result is pending is not exercised; the restart
 evidence for the result submission is 57.3's. Per-patient appointment ownership stays proved by 58.1.
+
+### Round 58.3 — Tool-path restart (2026-11-05)
+
+One SQLite checkpoint, two workers: the first reads the appointment and then fails at submission
+(Java unreachable), so the checkpoint holds the tool result and a pending submit. A second worker on
+the same checkpoint reuses the saved result, reads the tool **zero** times (its client raises if
+called), submits exactly once, and the restored state still carries the appointment and
+`tool_calls == 1`. This closes the tool-result recovery path that 57.3's restart evidence did not
+cover.
+
+**Verification (actually run).** Python `pytest` → **258 passed**, `ruff` and `mypy --strict` clean
+(37 files). 58.3 is Done; Round 58 is complete.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
