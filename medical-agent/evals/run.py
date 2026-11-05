@@ -203,6 +203,33 @@ def check_validate(case: dict, retriever: Retriever) -> list[str]:
     return problems
 
 
+def check_tool(case: dict, retriever: Retriever) -> list[str]:
+    """Runs the guarded tool with a canned client and checks its decision (59.1 tools family)."""
+    from medical_agent.tools.registry import ToolDenied, ToolExecutor, ToolSession
+
+    def client(path: str, timeout: float) -> object:
+        if case.get("client_error"):
+            raise RuntimeError(case["client_error"])
+        return case.get("response")
+
+    executor = ToolExecutor(client, ToolSession(41))
+    try:
+        result = executor.execute(case["tool"], case.get("arguments") or {})
+    except ToolDenied as denied:
+        return [] if case["expect"].get("denied") == denied.code else [f"denied {denied.code}"]
+    problems: list[str] = []
+    expected_human = case["expect"].get("needs_human")
+    if expected_human is not None and result.needs_human != expected_human:
+        problems.append(f"needs_human {result.needs_human}")
+    if case["expect"].get("reason") and result.reason != case["expect"]["reason"]:
+        problems.append(f"reason {result.reason}")
+    if "fact_count" in case["expect"]:
+        facts = result.payload or []
+        if len(facts) != case["expect"]["fact_count"]:
+            problems.append(f"facts {len(facts)}")
+    return problems
+
+
 def check_graph(case: dict, retriever: Retriever) -> list[str]:
     provider = CannedProvider(case["model_answer"])
     with tempfile.TemporaryDirectory() as directory, open_checkpointer(
@@ -250,6 +277,7 @@ HANDLERS = {
     "citation_forged": check_citation,
     "citation_not_retrieved": check_citation,
     "validate": check_validate,
+    "tool": check_tool,
     "graph": check_graph,
 }
 

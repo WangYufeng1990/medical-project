@@ -71,11 +71,12 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     report = tmp_path / "report.json"
     sp.run([sys.executable, "-m", "evals.run", "--report", str(report)], cwd=ROOT,
            env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")},
-           check=True, capture_output=True)
+           check=False, capture_output=True)
 
+    assert report.exists(), "the report is written even when recorded gaps fail the gate"
     payload = json.loads(report.read_text())
 
-    assert payload["manifest"]["cases"] == 177, "the default run is the dev split"
+    assert payload["manifest"]["cases"] == 188, "the default run is the dev split"
     assert payload["manifest"]["splits"] == ["dev"]
     assert len(payload["manifest"]["dataset_sha256"]) == 64
     assert payload["manifest"]["splits"] == ["dev"]
@@ -84,9 +85,11 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert payload["manifest"]["prompt_version"].startswith("sha256:")
     assert len(payload["manifest"]["prompt_version"]) == len("sha256:") + 64
     assert payload["manifest"]["commit"]
-    assert payload["totals"] == {"cases": 177, "failed": 0}
-    assert set(payload["per_family"]) == {"classification", "uncertainty", "retrieval",
-                                          "citations", "validation", "graph"}
+    # Three attack cases are recorded dev gaps: they carry the desired behaviour and currently fail.
+    assert payload["totals"]["cases"] == 188, payload["totals"]
+    assert payload["totals"]["failed"] == 3, "the three attack gaps are recorded, not hidden"
+    assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
+            "tools", "attacks"} <= set(payload["per_family"])
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
 
 

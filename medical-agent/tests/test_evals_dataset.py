@@ -79,12 +79,13 @@ def test_the_set_has_a_dev_gate_and_a_held_out_split() -> None:
     dev_families = Counter(case["family"] for case in cases if case["split"] == "dev")
     held_out_families = Counter(case["family"] for case in cases if case["split"] == "held_out")
 
-    assert per_split["dev"] == 177, "the dev regression gate grew by the 59.1 expansion"
+    assert per_split["dev"] == 188, "the dev regression gate grew by the 59.1 expansion"
     assert per_split["held_out"] >= 20, "the held-out split must exist"
-    assert set(dev_families) == {"classification", "uncertainty", "retrieval", "citations",
-                                 "validation", "graph"}
-    assert all(count >= 7 for count in dev_families.values()), dev_families
+    assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
+            "tools", "attacks"} <= set(dev_families)
+    assert all(count >= 3 for count in dev_families.values()), dev_families
     assert {"classification", "retrieval", "attacks"} <= set(held_out_families)
+    assert {"tools", "attacks"} <= set(dev_families), "the tools and attacks families exist"
 
 
 def test_every_case_declares_its_split() -> None:

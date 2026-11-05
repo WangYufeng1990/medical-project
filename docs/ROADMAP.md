@@ -6836,7 +6836,26 @@ slice's 300–500.
 **Verification (actually run).** dev run 156/156; held-out 10/24 with the 14 IDs above; `pytest` → 261
 passed; `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Tools family and recorded attack gaps (2026-11-05)
+
+**Tools.** A `tool` kind runs the guarded executor with a canned client: `get_my_appointments`
+returning one fact and an empty list, `get_appointment`, an unknown tool, an out-of-range `limit`, an
+extra field, a malformed payload and a client error. All **8/8** pass, so the boundary's decisions are
+now part of the regression set rather than only unit tests.
+
+**Attacks.** Three injection messages carry their original wording and the behaviour we want
+(`no_policy`, review required, no citations). All three currently fail — they receive a policy answer —
+because retrieval matches the message text. They are **recorded as dev gaps**: the dev run now exits
+non-zero with 3 failures, and the gate is intentionally red until they are fixed by improving the
+product, not by rewriting the samples.
+
+Dev is 188 cases (156 + 21 expansion + 8 tools + 3 attacks), held-out remains 24. The dataset guard
+asserts the two new families exist and that the recorded failure count is 3.
+
+**Verification (actually run).** dev run: 188 cases, 185 passed, 3 recorded gaps, exit 1; `pytest` →
+261 passed; `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
