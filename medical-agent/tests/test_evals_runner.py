@@ -86,8 +86,9 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert len(payload["manifest"]["prompt_version"]) == len("sha256:") + 64
     assert payload["manifest"]["commit"]
     # Three attack cases are recorded dev gaps: they carry the desired behaviour and currently fail.
-    assert payload["totals"]["cases"] == 188, payload["totals"]
-    assert payload["totals"]["failed"] == 3, "the three attack gaps are recorded, not hidden"
+    # The real dev report reflects progress; it is not pinned to today's gap count.
+    assert payload["totals"]["cases"] == 188
+    assert payload["totals"]["failed"] == len(payload["examples"])
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(payload["per_family"])
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
@@ -106,3 +107,61 @@ def test_a_mistyped_family_fails_instead_of_passing(tmp_path) -> None:
     assert completed.returncode != 0, "an empty selection must not exit zero"
     assert "no cases" in completed.stderr
     assert not report.exists(), "no report is written for an empty selection"
+
+
+def test_a_failing_dataset_writes_the_report_and_exits_one(tmp_path) -> None:
+    # A controlled failing case proves the CLI's failure contract independently of today's gaps.
+    import os
+    import subprocess as sp
+
+    dataset = tmp_path / "one.jsonl"
+    dataset.write_text(json.dumps({
+        "id": "controlled-failure", "family": "classification", "kind": "classify",
+        "split": "dev", "message": "What are your opening hours?",
+        "model_answer": json.dumps({"intents": ["OTHER"], "risk": "ROUTINE", "confidence": 0.7}),
+        "expect": {"intents_include": [], "risk": "EMERGENCY", "requires_clinician": True,
+                   "flags_include": []},
+    }) + "\n")
+    report = tmp_path / "report.json"
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--cases", str(dataset),
+                        "--report", str(report)], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 1, "a failing case must fail the run"
+    payload = json.loads(report.read_text())
+    assert payload["totals"] == {"cases": 1, "failed": 1}
+    assert payload["examples"], "the failing example is reported"
+
+
+def test_the_tool_check_requires_a_denial_with_no_call(monkeypatch) -> None:
+    # A substitute that calls the client and then refuses must fail the evaluation (59.1 review).
+    from evals import run as runner
+
+    from medical_agent.tools import registry
+    from medical_agent.tools.registry import TOOLS
+
+    monkeypatch.setitem(TOOLS, "calls_then_refuses", TOOLS["get_my_appointments"])
+    monkeypatch.setattr(registry, "ToolExecutor", _CallsThenRefuses)
+
+    problems = runner.check_tool({
+        "tool": "calls_then_refuses", "arguments": {},
+        "expect": {"denied": "unknown_tool"},
+    }, None)  # type: ignore[arg-type]
+
+    assert problems and "client called" in problems[0]
+
+
+class _CallsThenRefuses:
+    """A stand-in executor: it reaches the registry, calls the client, then reports a refusal."""
+
+    def __init__(self, client: object, session: object) -> None:
+        self.client = client
+        self.session = session
+
+    def execute(self, name: str, arguments: dict[str, object]) -> object:
+        from medical_agent.tools.registry import ToolDenied
+
+        self.client("/called-before-refusing", 1.0)  # type: ignore[operator]
+        raise ToolDenied("unknown_tool", "unsupported tool")

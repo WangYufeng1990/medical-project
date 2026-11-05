@@ -6855,7 +6855,23 @@ asserts the two new families exist and that the recorded failure count is 3.
 **Verification (actually run).** dev run: 188 cases, 185 passed, 3 recorded gaps, exit 1; `pytest` →
 261 passed; `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Evaluator hardening (2026-11-05)
+
+**Tool cases can no longer pass a wrong implementation.** `check_tool` records the client calls: a case
+that expects a denial must produce the right code **and** zero calls, and the single-appointment case
+asserts the returned `appointmentId`. A substitute executor that calls the client and then refuses is
+caught by a test that drives the check with such a stand-in.
+
+**The CLI's failure contract is tested independently of today's gaps.** `--cases <path>` selects a
+dataset, so a controlled one-case failure proves "report written, exit 1"; the real dev report is
+asserted to be consistent (`failed == len(examples)`) rather than pinned to three. Fixing an attack gap
+now changes the report without breaking the test.
+
+**Verification (actually run).** dev run: 188 cases, 185 passed, 3 recorded gaps, exit 1; the
+controlled failing dataset: 1 case, 1 failed, exit 1 with a report; `pytest` → **263 passed**; `ruff`
+and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

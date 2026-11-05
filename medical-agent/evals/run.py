@@ -71,8 +71,8 @@ class MockProvider:
             provider="mock", model="mock-1", latency_ms=0)
 
 
-def load_cases(family: str | None, split: str = "dev") -> list[dict]:
-    cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
+def load_cases(path: Path, family: str | None, split: str = "dev") -> list[dict]:
+    cases = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     return [case for case in cases
             if case.get("split") == split and (family is None or case["family"] == family)]
 
@@ -207,7 +207,10 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
     """Runs the guarded tool with a canned client and checks its decision (59.1 tools family)."""
     from medical_agent.tools.registry import ToolDenied, ToolExecutor, ToolSession
 
+    calls: list[str] = []
+
     def client(path: str, timeout: float) -> object:
+        calls.append(path)
         if case.get("client_error"):
             raise RuntimeError(case["client_error"])
         return case.get("response")
@@ -216,7 +219,13 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
     try:
         result = executor.execute(case["tool"], case.get("arguments") or {})
     except ToolDenied as denied:
-        return [] if case["expect"].get("denied") == denied.code else [f"denied {denied.code}"]
+        problems: list[str] = []
+        if case["expect"].get("denied") != denied.code:
+            problems.append(f"denied {denied.code}")
+        if calls:
+            # A refusal that already called the client is not a refusal.
+            problems.append(f"client called before the denial: {calls}")
+        return problems
     problems: list[str] = []
     expected_human = case["expect"].get("needs_human")
     if expected_human is not None and result.needs_human != expected_human:
@@ -227,6 +236,10 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
         facts = result.payload or []
         if len(facts) != case["expect"]["fact_count"]:
             problems.append(f"facts {len(facts)}")
+    if "fact_id" in case["expect"]:
+        found = getattr(result.payload, "appointmentId", None)
+        if found != case["expect"]["fact_id"]:
+            problems.append(f"appointment id {found}")
     return problems
 
 
@@ -282,11 +295,11 @@ HANDLERS = {
 }
 
 
-def manifest(retriever: Retriever, cases: list[dict]) -> dict:
+def manifest(retriever: Retriever, cases: list[dict], path: Path) -> dict:
     """The run's identity, so a result cannot be read without knowing what produced it (59.1)."""
     import subprocess
 
-    dataset = CASES.read_bytes()
+    dataset = path.read_bytes()
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                                 text=True, timeout=5).stdout.strip() or "unknown"
@@ -312,10 +325,11 @@ def main() -> int:
     parser.add_argument("--split", default="dev",
                         help="dev (the regression gate) or held_out (release measurement)")
     parser.add_argument("--report", type=Path, help="write a JSON report with the run manifest")
+    parser.add_argument("--cases", type=Path, default=CASES, help="the dataset to run")
     args = parser.parse_args()
 
     retriever = corpus_retriever()
-    cases = load_cases(args.family, args.split)
+    cases = load_cases(args.cases, args.family, args.split)
     if not cases:
         # A mistyped --family must not look like a green run (Round 59.1 review).
         print(f"no cases for family {args.family!r}", file=sys.stderr)
@@ -330,7 +344,7 @@ def main() -> int:
             failures.append(f"{case['id']} ({case['family']}): {'; '.join(problems)}")
 
     report = {
-        "manifest": manifest(retriever, cases),
+        "manifest": manifest(retriever, cases, args.cases),
         "totals": {"cases": len(cases),
                    "failed": len(failures)},
         "per_family": {family: {"total": total, "failed": failed}

@@ -541,7 +541,7 @@ for name, tool, arguments, response, expect in [
     ("tool-empty", "get_my_appointments", {}, [],
      {"needs_human": False, "fact_count": 0}),
     ("tool-one", "get_appointment", {"appointment_id": 900}, _FACT,
-     {"needs_human": False}),
+     {"needs_human": False, "fact_id": 900}),
     ("tool-unknown", "get_patient_record", {}, None, {"denied": "unknown_tool"}),
     ("tool-bad-limit", "get_my_appointments", {"limit": 500}, None,
      {"denied": "invalid_arguments"}),
