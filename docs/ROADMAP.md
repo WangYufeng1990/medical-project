@@ -6341,7 +6341,7 @@ not scheduled again", which is what it measures.
 | Slice | Priority / status | Work | Tests first / acceptance |
 |---|---|---|---|
 | 58.1 Minimal appointment reads | P0 / **Done** (2026-11-04, after review) | `AgentAppointmentView` + `AgentAppointmentReadService` in the appointment module; run-scoped internal endpoints resolve the patient from the run; future-only, 20-item/365-day bounded query; clinic timezone from `app.agent.appointment-timezone` | AgentAppointmentToolIntegrationTest (4): only the run's patient's appointments; another patient's appointment is 404; payload carries no chiefComplaint/notes/description/ICD/cptCode; a past appointment and a 500 limit are both bounded |
-| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04; execution boundary done, graph wiring pending) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
+| 58.2 Tool selection/execution | P1 / **In progress** (2026-11-04; tool context in the result and queue done, 58.3 pending) | `medical_agent/tools/registry.py`: strict Pydantic schemas with `extra=forbid`, path built from the run id, MAX_CALLS_PER_RUN budget, typed `ToolDenied` codes; instructions in a result are data | test_tool_execution.py (8): unknown tool denied with zero calls; out-of-range/wrong-type/extra-field/missing-argument args never execute; the path comes from the run; a result claiming new permissions widens nothing; the budget is enforced |
 | 58.3 Isolation/recovery | P0 / Pending | Cross-patient/run/old-generation/capability tests and timeout/restart flows | AgentToolIsolationTest: all enumerated unauthorized cases rejected; resumed state never changes patient; no stale worker result accepted |
 
 Return only necessary appointment ID/status/time/timezone and provider/department display fields. GetMessageStatus is optional later and must be side-effect-free. GetProviderAvailability and CreateStaffFollowUpRequest remain deferred; deterministic creation of a safety review is distinct from allowing a model-requested write.
@@ -6631,6 +6631,33 @@ default 10-second budget the client is **not** called and the result is a human 
 
 **Verification (actually run).** `pytest` → **252 passed**, `ruff` and `mypy --strict` clean (37
 files).
+
+### Round 58.2 — Tool context in the review result (2026-11-04)
+
+The result contract gained an optional `tool` block: absent when no tool ran; `status: ok` with
+`facts` from the **validated** tool result (an empty list is a successful read with nothing upcoming);
+`status: needs_human` with a fixed `reason` and no facts. The Python model enforces the cross-field
+rule (needs_human → reason, no facts; ok → no reason), and the Java service enforces the same rule and
+answers 400 when a handover carries facts.
+
+Java stores the facts in `agent_run_result.tool_json`, a nullable TEXT column (schema v14; old rows
+stay NULL) that uses `AesAttributeConverter` and is in the key-rotation list, so the guard test covers
+it. The queue exposes `tool` with its facts, stored in the queue's own camelCase shape so reading it
+back does not depend on the request's snake_case.
+
+Tests: the shared contract fixtures include a valid tool block and refuse a fact carrying
+`chief_complaint` or an unknown status; Java's `AgentReviewIntegrationTest` shows the queue returning
+the facts, the raw `tool_json` not containing a canary department while the decryptor does, a
+`needs_human` context with no facts, and a 400 for a handover that carries facts with no result row
+written. Because the cross-field rule cannot be expressed in the exported JSON Schema, the
+Java-invalid fixture for it was removed and the rule is enforced and tested on both sides instead.
+
+**Verification (actually run).** `mvn clean verify` → **409 tests, 0 failures, 1 skipped**; Python
+`pytest` → **254 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+**Scope notes.** The tool context is review assistance: approval and publication are unchanged. "The
+queue API returns it" is verified; "the frontend displays it" is not — there is no UI change in this
+slice.
 
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 

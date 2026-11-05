@@ -364,6 +364,7 @@ CREATE TABLE IF NOT EXISTS agent_run_result (
     validation_reasons TEXT,
     rejected_reasons TEXT,
     citations_json TEXT,
+    tool_json TEXT,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted TINYINT NOT NULL DEFAULT 0,

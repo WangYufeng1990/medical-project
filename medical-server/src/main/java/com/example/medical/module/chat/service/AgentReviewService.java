@@ -86,6 +86,7 @@ public class AgentReviewService {
     /** Stores (or replaces) the result of a run the worker just submitted. */
     @Transactional
     public void recordResult(AgentRun run, AgentRunResultRequest request) {
+        requireConsistentTool(request.getTool());
         AgentRunResult result = results.findByRunId(run.getId()).orElseGet(AgentRunResult::new);
         result.setRunId(run.getId());
         result.setIntent(request.getIntent());
@@ -97,6 +98,7 @@ public class AgentReviewService {
         result.setValidationReasons(String.join("\n", request.getValidation().getReasons()));
         result.setRejectedReasons(String.join("\n", request.getValidation().getRejectedReasons()));
         result.setCitationsJson(citationsJson(request.getCitations()));
+        result.setToolJson(toolJson(request.getTool()));
         results.save(result);
     }
 
@@ -399,6 +401,7 @@ public class AgentReviewService {
         item.setDraft(result.getDraft());
         item.setCitations(readCitations(result.getCitationsJson()));
         item.setValidation(readValidation(result));
+        item.setTool(readTool(result.getToolJson()));
         claims.findByRunId(run.getId()).ifPresent(claim -> {
             item.setClaimedBy(claim.getStaffId());
             item.setClaimedByMe(claim.getStaffId().equals(reviewerId));
@@ -414,6 +417,56 @@ public class AgentReviewService {
             item.setClaimedByMe(claim.getStaffId().equals(reviewerId));
         });
         return item;
+    }
+
+    /** A handover carries a fixed reason and no facts; a success carries no reason (Round 58.2). */
+    private void requireConsistentTool(AgentRunResultRequest.Tool tool) {
+        if (tool == null) return;
+        if ("needs_human".equals(tool.getStatus())) {
+            if (!tool.getFacts().isEmpty() || tool.getReason() == null || tool.getReason().isBlank()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "a human handover carries a reason and no facts");
+            }
+        } else if (tool.getReason() != null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "a successful tool result carries no reason");
+        }
+    }
+
+    private String toolJson(AgentRunResultRequest.Tool tool) {
+        if (tool == null) return null;
+        // Stored in the queue's own shape: the request is snake_case and the response camelCase, and
+        // converting explicitly keeps the two contracts from leaking into each other.
+        ReviewItemVO.Tool view = new ReviewItemVO.Tool();
+        view.setName(tool.getName());
+        view.setStatus(tool.getStatus());
+        view.setReason(tool.getReason());
+        for (AgentRunResultRequest.Fact fact : tool.getFacts()) {
+            ReviewItemVO.Fact item = new ReviewItemVO.Fact();
+            item.setAppointmentId(fact.getAppointmentId());
+            item.setStatus(fact.getStatus());
+            item.setStartTime(fact.getStartTime());
+            item.setTimezone(fact.getTimezone());
+            item.setDurationMinutes(fact.getDurationMinutes());
+            item.setProviderName(fact.getProviderName());
+            item.setDepartment(fact.getDepartment());
+            view.getFacts().add(item);
+        }
+        try {
+            return objectMapper.writeValueAsString(view);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("the tool context must be serialisable", e);
+        }
+    }
+
+    private ReviewItemVO.Tool readTool(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() { });
+        } catch (JsonProcessingException e) {
+            log.warn("stored tool context could not be read", e);
+            return null;
+        }
     }
 
     private String citationsJson(List<AgentRunResultRequest.Citation> citations) {

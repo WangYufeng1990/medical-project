@@ -123,6 +123,7 @@ def tool_node(
             "tool_started_at": result.get("started_at") or 0.0,
             "tool_result": result.get("payload"),
             "tool_needs_human": needs_human,
+            "tool_reason": result.get("reason"),
             "flags": flags,
             "requires_clinician": True if needs_human else state.get("requires_clinician", False),
         }

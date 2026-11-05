@@ -1,0 +1,43 @@
+{
+  "contract_version": "v1",
+  "run_id": 41,
+  "generation": 1,
+  "intent": "BILLING",
+  "risk": "ROUTINE",
+  "requires_clinician": false,
+  "draft": "A balance can be paid in instalments [chunk:billing-and-insurance:1:002].\n\nPrepared for staff review; not medical advice.",
+  "citations": [
+    {
+      "chunk_id": "billing-and-insurance:1:002",
+      "document_id": "billing-and-insurance",
+      "document_version": 1,
+      "title": "Billing and insurance policy",
+      "heading_path": [
+        "Payment plans"
+      ],
+      "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "validation": {
+    "ok": true,
+    "kind": "policy_answer",
+    "reasons": [],
+    "rejected_reasons": []
+  },
+  "tool": {
+    "name": "get_my_appointments",
+    "status": "ok",
+    "facts": [
+      {
+        "appointment_id": 900,
+        "status": 1,
+        "start_time": "2026-11-07T09:00:00",
+        "timezone": "America/New_York",
+        "duration_minutes": 30,
+        "provider_name": "Dr. Sarah Mitchell",
+        "department": "Cardiology",
+        "chief_complaint": "chest pain"
+      }
+    ]
+  }
+}

@@ -423,6 +423,122 @@ class AgentReviewIntegrationTest extends IntegrationTestSupport {
                 dispatched.runId())));
     }
 
+    @Test
+    void theQueueCarriesTheToolContextAndKeepsItEncrypted() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        submitWithTool(dispatched, "Cardiology-Zxqv");
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].tool.status").value("ok"))
+                .andExpect(jsonPath("$.data[0].tool.facts[0].appointmentId").value(900))
+                .andExpect(jsonPath("$.data[0].tool.facts[0].department").value("Cardiology-Zxqv"));
+
+        String stored = jdbc.queryForObject(
+                "SELECT tool_json FROM agent_run_result WHERE run_id = ?", String.class,
+                dispatched.runId());
+        assertFalse(stored.contains("Cardiology-Zxqv"), "the tool snapshot must be ciphertext");
+        assertTrue(com.example.medical.common.config.AesCryptoUtil.decrypt(stored)
+                .contains("Cardiology-Zxqv"));
+    }
+
+    @Test
+    void aHumanHandoverInTheToolContextIsCarriedWithNoFacts() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        submitWithTool(dispatched, null);
+
+        mockMvc.perform(get("/api/v1/agent/reviews")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].tool.status").value("needs_human"))
+                .andExpect(jsonPath("$.data[0].tool.reason").value("tool_failed"))
+                .andExpect(jsonPath("$.data[0].tool.facts.length()").value(0));
+    }
+
+    @Test
+    void aHandoverWithFactsIsRefused() throws Exception {
+        Dispatched dispatched = prepared("When is my next appointment?");
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + dispatched.runId() + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(toolBody(dispatched,
+                                java.util.Map.of("name", "get_my_appointments", "status",
+                                        "needs_human", "reason", "tool_failed",
+                                        "facts", List.of(java.util.Map.of(
+                                                "appointment_id", 900, "status", 1,
+                                                "start_time", "2026-11-07T09:00:00",
+                                                "timezone", "America/New_York"))))))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM agent_run_result WHERE run_id = ?", Integer.class,
+                dispatched.runId()));
+    }
+
+    private java.util.Map<String, Object> toolBody(Dispatched dispatched,
+                                                   java.util.Map<String, Object> tool) {
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class,
+                dispatched.runId());
+        return java.util.Map.of(
+                "contract_version", "v1", "run_id", dispatched.runId(), "generation", generation,
+                "intent", "APPOINTMENT", "risk", "ROUTINE", "requires_clinician", false,
+                "draft", "A member of the care team will reply.\n\n"
+                        + "Prepared for staff review; not medical advice.",
+                "citations", List.of(),
+                "validation", java.util.Map.of("ok", true, "kind", "routing_summary",
+                        "reasons", List.of(), "rejected_reasons", List.of()),
+                "tool", tool);
+    }
+
+    private void submitWithTool(Dispatched dispatched, String department) throws Exception {
+        long runId = dispatched.runId();
+        long generation = jdbc.queryForObject(
+                "SELECT execution_generation FROM agent_run WHERE id = ?", Long.class, runId);
+        java.util.Map<String, Object> tool = department == null
+                ? java.util.Map.of("name", "get_my_appointments", "status", "needs_human",
+                        "reason", "tool_failed", "facts", List.of())
+                : java.util.Map.of("name", "get_my_appointments", "status", "ok", "facts",
+                        List.of(java.util.Map.of(
+                                "appointment_id", 900, "status", 1,
+                                "start_time", "2026-11-07T09:00:00",
+                                "timezone", "America/New_York", "duration_minutes", 30,
+                                "provider_name", "Dr. Sarah Mitchell", "department", department)));
+        mockMvc.perform(post("/api/v1/internal/agent/runs/" + runId + "/results")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "contract_version", "v1", "run_id", runId, "generation", generation,
+                                "intent", "APPOINTMENT", "risk", "ROUTINE",
+                                "requires_clinician", false,
+                                "draft", "A member of the care team will reply.\n\n"
+                                        + "Prepared for staff review; not medical advice.",
+                                "citations", List.of(),
+                                "validation", Map.of("ok", true, "kind", "routing_summary",
+                                        "reasons", List.of(), "rejected_reasons", List.of()),
+                                "tool", tool)))
+                        .header("X-Agent-Service-Token", "test-inbound-token")
+                        .header("X-Agent-Capability", dispatched.capability()))
+                .andExpect(status().isOk());
+    }
+
+    /** A run waiting for its worker, so a test can submit its own result shape. */
+    private Dispatched prepared(String content) throws Exception {
+        MvcResult sent = mockMvc.perform(post("/api/v1/patient/me/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("receiverId", 2, "content", content)))
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        long messageId = objectMapper.readTree(sent.getResponse().getContentAsString())
+                .get("data").get("id").asLong();
+        runs.dispatchDue();
+        Long runId = jdbc.queryForObject(
+                "SELECT id FROM agent_run WHERE message_id = ?", Long.class, messageId);
+        return new Dispatched(messageId, runId, CAPABILITIES.get(CAPABILITIES.size() - 1));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────
 
     private record Dispatched(long messageId, long runId, String capability) { }

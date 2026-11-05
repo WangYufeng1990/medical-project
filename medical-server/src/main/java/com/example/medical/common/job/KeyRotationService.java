@@ -58,6 +58,7 @@ public class KeyRotationService {
             new TableColumn("sys_user", "dea_number"),
             new TableColumn("message", "content"),
             new TableColumn("agent_run_result", "draft"),
+            new TableColumn("agent_run_result", "tool_json"),
             new TableColumn("agent_review_decision", "final_text"),
             new TableColumn("agent_review_decision", "reason"),
             new TableColumn("bill", "insurance_claim_number"),

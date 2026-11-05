@@ -48,7 +48,7 @@ import java.util.Locale;
 public class DevSchemaGuard implements CommandLineRunner {
 
     /** Baseline for the current sql/schema.sql. Bump on every schema change. */
-    public static final int SCHEMA_VERSION = 13;
+    public static final int SCHEMA_VERSION = 14;
 
     /**
      * The upgrades this build can apply to an older database, in order. A step names
@@ -91,7 +91,10 @@ public class DevSchemaGuard implements CommandLineRunner {
                     "ALTER TABLE agent_review_decision ALTER COLUMN reason SET DATA TYPE TEXT",
                     null, null, true),
             // v13: the review action log.
-            new UpgradeStep(13, "agent_review_event", null, null, null, null));
+            new UpgradeStep(13, "agent_review_event", null, null, null, null),
+            // v14: the tool review context; nullable, old rows stay NULL.
+            new UpgradeStep(14, "agent_run_result", "tool_json",
+                    "ALTER TABLE agent_run_result ADD COLUMN tool_json TEXT", null, null));
 
     private final JdbcTemplate jdbcTemplate;
     private final String datasourceUrl;

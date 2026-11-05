@@ -13,7 +13,13 @@ import httpx
 
 from medical_agent.graph.state import RunState
 from medical_agent.schemas.classification import Intent, RiskLevel
-from medical_agent.schemas.result import CitationPayload, RunResultRequest, ValidationPayload
+from medical_agent.schemas.result import (
+    CitationPayload,
+    RunResultRequest,
+    ToolFact,
+    ToolPayload,
+    ValidationPayload,
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,33 @@ def fetch_receipt(run_id: int, generation: int | None) -> RunReceipt | None:
     )
 
 
+def _tool_payload(state: RunState) -> ToolPayload | None:
+    if state.get("tool_needs_human"):
+        return ToolPayload(name="get_my_appointments", status="needs_human",
+                           reason=str(state.get("tool_reason") or "tool_unavailable"), facts=[])
+    facts = _tool_facts(state.get("tool_result"))
+    if facts is None:
+        return None
+    return ToolPayload(name="get_my_appointments", status="ok", facts=facts)
+
+
+def _tool_facts(value: object) -> list[ToolFact] | None:
+    if not isinstance(value, list):
+        return None
+    facts: list[ToolFact] = []
+    for item in value:
+        facts.append(ToolFact(
+            appointment_id=int(getattr(item, "appointmentId", 0)),
+            status=int(getattr(item, "status", 0)),
+            start_time=str(getattr(item, "startTime", "")),
+            timezone=str(getattr(item, "timezone", "")),
+            duration_minutes=getattr(item, "durationMinutes", None),
+            provider_name=getattr(item, "providerName", None),
+            department=getattr(item, "department", None),
+        ))
+    return facts
+
+
 def submit_result(state: RunState) -> None:
     """POST the result for this attempt; a failure raises so the graph stops there."""
     credentials = _credentials.get()
@@ -117,6 +150,7 @@ def submit_result(state: RunState) -> None:
             )
             for item in adopted
         ],
+        tool=_tool_payload(state),
         validation=ValidationPayload(
             ok=bool(validation.get("ok")),
             kind=str(validation.get("kind") or "unknown"),

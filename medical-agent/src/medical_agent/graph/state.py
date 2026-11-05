@@ -39,6 +39,7 @@ class RunState(TypedDict, total=False):
     tool_started_at: float
     tool_result: dict[str, object] | None
     tool_needs_human: bool
+    tool_reason: str | None
     draft: str
     # Set by the submit node: what a repeated dispatch uses to decide that this generation
     # already produced its draft (Round 55.4's "repeat execution does not create another").

@@ -59,6 +59,59 @@ public class AgentRunResultRequest {
     @NotNull
     private Validation validation;
 
+    /** Absent when the run used no tool (Round 58.2). */
+    @Valid
+    private Tool tool;
+
+    @Data
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class Tool {
+        @NotBlank
+        @Size(max = 40)
+        private String name;
+
+        @NotBlank
+        @Pattern(regexp = "ok|needs_human", message = "unknown tool status")
+        private String status;
+
+        @Size(max = 40)
+        private String reason;
+
+        @NotNull
+        @Size(max = 5)
+        private List<@Valid @NotNull Fact> facts;
+    }
+
+    @Data
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class Fact {
+        @NotNull
+        @Min(1)
+        private Long appointmentId;
+
+        @NotNull
+        @Min(0)
+        private Integer status;
+
+        /** The stored wall time; validated as ISO-8601 when the entity is built. */
+        @NotBlank
+        @Size(max = 40)
+        private String startTime;
+
+        @NotBlank
+        @Size(max = 64)
+        private String timezone;
+
+        @Min(0)
+        private Integer durationMinutes;
+
+        @Size(max = 200)
+        private String providerName;
+
+        @Size(max = 120)
+        private String department;
+    }
+
     @Data
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static class Citation {

@@ -25,6 +25,28 @@ public class ReviewItemVO {
     /** Why a human-only item is in the queue: NO_RUN, RUN_FAILED, RUN_PENDING or NO_RESULT. */
     private String reason;
 
+    /** What the run's read-only tool returned, for the reviewer (Round 58.2). */
+    private Tool tool;
+
+    @Data
+    public static class Tool {
+        private String name;
+        private String status;
+        private String reason;
+        private List<Fact> facts = new ArrayList<>();
+    }
+
+    @Data
+    public static class Fact {
+        private Long appointmentId;
+        private Integer status;
+        private String startTime;
+        private String timezone;
+        private Integer durationMinutes;
+        private String providerName;
+        private String department;
+    }
+
     @Data
     public static class Citation {
         private String chunkId;

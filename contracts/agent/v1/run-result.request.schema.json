@@ -75,6 +75,129 @@
       "title": "RiskLevel",
       "type": "string"
     },
+    "ToolFact": {
+      "additionalProperties": false,
+      "description": "One appointment as the tool returned it (Round 58.2): the 58.1 fields, nothing clinical.",
+      "properties": {
+        "appointment_id": {
+          "exclusiveMinimum": 0,
+          "title": "Appointment Id",
+          "type": "integer"
+        },
+        "department": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department"
+        },
+        "duration_minutes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Minutes"
+        },
+        "provider_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Name"
+        },
+        "start_time": {
+          "maxLength": 40,
+          "minLength": 10,
+          "title": "Start Time",
+          "type": "string"
+        },
+        "status": {
+          "minimum": 0,
+          "title": "Status",
+          "type": "integer"
+        },
+        "timezone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "appointment_id",
+        "status",
+        "start_time",
+        "timezone"
+      ],
+      "title": "ToolFact",
+      "type": "object"
+    },
+    "ToolPayload": {
+      "additionalProperties": false,
+      "description": "What the run's read-only tool did, for the review context (Round 58.2).",
+      "properties": {
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/ToolFact"
+          },
+          "maxItems": 5,
+          "title": "Facts",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "needs_human"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "facts"
+      ],
+      "title": "ToolPayload",
+      "type": "object"
+    },
     "ValidationPayload": {
       "additionalProperties": false,
       "properties": {
@@ -157,6 +280,17 @@
       "exclusiveMinimum": 0,
       "title": "Run Id",
       "type": "integer"
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolPayload"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "validation": {
       "$ref": "#/$defs/ValidationPayload"

@@ -55,4 +55,9 @@ public class AgentRunResult extends BaseEntity {
 
     @Column(name = "citations_json", columnDefinition = "TEXT")
     private String citationsJson;
+
+    // The appointment facts are patient data too: encrypted like the draft (Round 58.2).
+    @Convert(converter = AesAttributeConverter.class)
+    @Column(name = "tool_json", columnDefinition = "TEXT")
+    private String toolJson;
 }

@@ -93,6 +93,7 @@ class AgentWorker:
             "started_at": session.started_at,
             "payload": result.payload,
             "needs_human": result.needs_human,
+            "reason": result.reason,
         }
 
     @staticmethod
@@ -163,6 +164,7 @@ class AgentWorker:
                         "tool_calls": 0,
                         "tool_result": None,
                         "tool_needs_human": False,
+                        "tool_reason": None,
                     },
                     config,
                 ),
