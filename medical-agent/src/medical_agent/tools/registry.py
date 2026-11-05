@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Annotated, Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -80,20 +80,33 @@ class ToolResult:
 
 @dataclass
 class ToolSession:
-    """The per-run budget and deadline (Round 58.2).
+    """One run's budget and deadline (Round 58.2).
 
-    The counter and the deadline live in the run's state, not in the process: a checkpoint resume
-    must continue the same budget instead of starting a fresh one, and a run cannot outlive its
-    deadline by recovering.
+    The session carries the run identity, so a call for another run is refused before the client
+    runs and does not spend this run's budget. The counter and the deadline belong to the run's
+    state: a checkpoint resume continues the same budget instead of starting a fresh one.
     """
 
+    run_id: int
     calls: int = 0
-    started_at: float = field(default_factory=lambda: time.monotonic())
     deadline_seconds: float = DEFAULT_DEADLINE_SECONDS
+    clock: Callable[[], float] = time.monotonic
+    started_at: float | None = None
 
-    def expired(self, now: float | None = None) -> bool:
-        moment = now if now is not None else time.monotonic()
-        return moment - self.started_at > self.deadline_seconds
+    def __post_init__(self) -> None:
+        # The start is read from the same clock the deadline uses; a test clock must not have to
+        # match the monotonic one.
+        if self.started_at is None:
+            self.started_at = self.clock()
+
+    def elapsed(self) -> float:
+        return self.clock() - (self.started_at or 0.0)
+
+    def remaining(self) -> float:
+        return self.deadline_seconds - self.elapsed()
+
+    def expired(self) -> bool:
+        return self.remaining() < 0
 
     def take(self) -> None:
         if self.expired():
@@ -107,8 +120,8 @@ class ToolSession:
 class ToolExecutor:
     """Executes at most MAX_CALLS_PER_RUN calls within a deadline."""
 
-    client: Callable[[str], object]
-    session: ToolSession = field(default_factory=ToolSession)
+    client: Callable[[str, float], object]
+    session: ToolSession
 
     @staticmethod
     def _describe(error: dict[str, object]) -> str:
@@ -124,7 +137,12 @@ class ToolExecutor:
         path = ".".join(str(part) for part in parts) or "<root>"
         return f"{path}:{error.get('type')}"
 
-    def execute(self, name: str, arguments: dict[str, object], run_id: int) -> ToolResult:
+    def execute(self, name: str, arguments: dict[str, object],
+                run_id: int | None = None) -> ToolResult:
+        if run_id is not None and run_id != self.session.run_id:
+            # The session belongs to one run; a call for another run is refused before the client
+            # runs and does not spend this run's budget (Round 58.2 review).
+            raise ToolDenied("run_mismatch", "not this run")
         tool = TOOLS.get(name)
         if tool is None:
             # The name is model input; echoing it would put untrusted text into the error.
@@ -145,9 +163,13 @@ class ToolExecutor:
         # The model's text in the result is data: it cannot grant another patient, another run or
         # another tool, because the path is built from the run and the validated arguments only.
         try:
-            payload = self.client(tool.path(run_id, parsed))
+            payload = self.client(tool.path(self.session.run_id, parsed),
+                                  max(0.1, self.session.remaining()))
         except ToolDenied as refused:
             return ToolResult(name=name, needs_human=True, reason=refused.code)
         except Exception:  # a broken client must become a human task, not a crash
             return ToolResult(name=name, needs_human=True, reason="tool_failed")
+        if self.session.expired():
+            # The call answered after the deadline: its content is not trusted as an on-time result.
+            return ToolResult(name=name, needs_human=True, reason="deadline_exceeded")
         return ToolResult(name=name, payload=payload)

@@ -12,10 +12,10 @@ from medical_agent.java_client import _credentials
 from medical_agent.tools.registry import ToolDenied
 
 
-def java_reader(base_url: str, timeout: float = 5.0):  # type: ignore[no-untyped-def]
+def java_reader(base_url: str):  # type: ignore[no-untyped-def]
     """Builds a client for a run: `GET base_url + path` with the run's capability and token."""
 
-    def read(path: str) -> object:
+    def read(path: str, timeout: float) -> object:
         credentials = _credentials.get()
         if credentials is None:
             raise ToolDenied("tool_failed", "no credentials")
@@ -25,10 +25,13 @@ def java_reader(base_url: str, timeout: float = 5.0):  # type: ignore[no-untyped
                 "X-Agent-Service-Token": credentials.outbound_token,
                 "X-Agent-Capability": credentials.capability,
             },
-            timeout=timeout,
+            timeout=max(0.1, timeout),
         )
         if response.status_code != 200:
             raise ToolDenied("tool_failed", f"status {response.status_code}")
-        return response.json().get("data")
+        body = response.json()
+        if not isinstance(body, dict) or "data" not in body:
+            raise ToolDenied("tool_failed", "unexpected envelope")
+        return body["data"]
 
     return read

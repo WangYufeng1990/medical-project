@@ -6507,6 +6507,32 @@ a run, so the end-to-end path from a message to a tool result does not exist yet
 not yet carry `tool_calls`/deadline, and a `needs_human` result is not yet fed into the routing
 decision.
 
+### Round 58.2 review fixes (2026-11-04, third pass)
+
+**1. P2 — the session was not bound to a run.** `ToolSession` now carries `run_id`; an `execute` that
+names a different run raises `run_mismatch` **before the client runs** and leaves the budget untouched.
+Test: a session for run 41 refuses run 42 with zero calls and `calls == 0`.
+
+**2. P2 — the deadline was checked only before the call.** The client receives the remaining time as
+its timeout, and the result is re-checked after it returns: an answer that arrives late is dropped and
+reported as `deadline_exceeded` instead of being handed on with a payload. Tests use a controllable
+clock (one that advances during the call). The session's start is read from its own clock, so a test
+clock no longer has to match the monotonic one.
+
+**3. P2 — a 200 with the wrong shape counted as success.** `tools/response.py` models the 58.1 DTO
+(`AppointmentItem`, strict, no clinical fields) and validates list/single payloads; the reader rejects
+a missing or non-dict envelope. `data: null`, a string, missing fields or an extra clinical field all
+become `tool_failed`; an empty list remains valid. The HTTP stub now returns `data: []`, matching the
+Java endpoint instead of the previous `{"items": []}` drift.
+
+**Cleanup.** The HTTP test stores the credential token and resets it in a `finally`.
+
+**Verification (actually run).** `pytest` → **234 passed**, `ruff` and `mypy --strict` clean (37
+files).
+
+**Still open.** The executor is still not invoked from a graph node, `tool_calls`/deadline are not in
+the run state, and `needs_human` is not fed into routing.
+
 ## Round 59 — Evaluation, observability and release evidence (Pending)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
