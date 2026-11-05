@@ -95,3 +95,15 @@ def test_ids_are_unique() -> None:
     ids = [case["id"] for case in read(CASES)]
 
     assert len(ids) == len(set(ids))
+
+
+def test_no_input_is_reused_across_splits() -> None:
+    # A held-out case that repeats a dev input is not an independent sample (Round 59.1 review).
+    cases = read(CASES)
+    dev = [case["message"] for case in cases
+           if case["split"] == "dev" and "message" in case]
+    held_out = [case["message"] for case in cases
+                if case["split"] == "held_out" and "message" in case]
+
+    assert not set(dev) & set(held_out)
+    assert len(held_out) == len(set(held_out)), "no duplicate inputs"

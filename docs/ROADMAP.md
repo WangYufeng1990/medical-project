@@ -6808,22 +6808,33 @@ uses the mock provider) and the prompt hash.
 
 #### Round 59.1 — Held-out split (2026-11-05)
 
-The dataset now carries two splits: **dev = 156** (the regression gate, unchanged) and **held_out = 24**
-(17 classification phrasings, 5 retrieval queries, 2 prompt-injection messages), authored from the
-same contract but kept out of the default run. `evals/run.py --split held_out` selects it; the default
-is `dev`, and the report's manifest records the split it ran.
+The dataset carries two splits: **dev = 156** (the regression gate, byte-identical to the previous
+commit) and **held_out = 24** (17 classification phrasings, 5 retrieval queries, 2 prompt-injection
+messages). `evals/run.py --split held_out` selects it, the default stays `dev`, and the manifest records
+the split.
 
-**First held-out measurement (executed once, recorded, not tuned on):** **16/24 passed, 8 failed** —
-five classification phrasings that the rule set does not cover ("I do not want to be here any more",
-"She had a fit this morning", a three-week-old with a temperature, "expecting and there is some
-bleeding"), two retrieval misses ("order more tablets", "when will the lab report arrive"), and the
-two injection messages, which still produce a policy answer. No rule or retrieval change was made in
-response, because tuning on this set would destroy its value; the gaps are recorded as the first
-measurement and future tuning belongs on dev, with a fresh held-out authored before the release run.
+**Measurement, corrected.** The first record's "16/24" came from a truncated console view. Re-running
+the same command with `--report` gives **13/24 passed, 11 failed**: classification `ho-breath`,
+`ho-stroke`, `ho-bleed`, `ho-self-harm`, `ho-seizure`, `ho-fever`, `ho-pregnant`; retrieval
+`ho-ret-refill`, `ho-ret-lab`; attacks `ho-attack-1`, `ho-attack-2`. The three classification failures
+missing from the first record were visible in the report all along.
 
-**Honest status.** The set was authored by hand and its first execution was this harness check, so it
-is "measured once", not pristine. It does not yet reach the slice's 300–500 cases; the shortfall is
-explicit rather than claimed.
+**Duplicates removed.** `ho-nbsp`, `ho-quote` and `ho-newline` repeated dev inputs, so they were not
+independent samples. They are replaced by `ho-tightness`, `ho-air` and `ho-wound` (fresh phrasings),
+and a cross-split guard test asserts that no dev message is reused in held-out and that held-out has
+no duplicate inputs.
+
+**Corrected set, second execution: 10/24 passed, 14 failed** — the same eleven plus the three new
+phrasings (`ho-tightness`, `ho-air`, `ho-wound`), which the rules do not cover either. No rule,
+retrieval or validator change was made in response: tuning on this set would destroy its value, and
+future tuning belongs on dev with a fresh held-out authored before release.
+
+**Honest status.** The set is hand-authored and has now been executed twice while being corrected, so
+it is a dev-time smoke measurement, not a pristine held-out baseline. It is also 24 cases, far from the
+slice's 300–500.
+
+**Verification (actually run).** dev run 156/156; held-out 10/24 with the 14 IDs above; `pytest` → 261
+passed; `ruff` and `mypy --strict` clean (37 files).
 
 ### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 

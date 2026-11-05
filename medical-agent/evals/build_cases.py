@@ -522,9 +522,9 @@ HELD_OUT_CLASSIFY = [
     ("ho-seizure", "She had a fit this morning", [], "EMERGENCY", True),
     ("ho-fever", "My baby is three weeks old and has a temperature", [], "URGENT", True),
     ("ho-pregnant", "I am expecting and there is some bleeding", [], "URGENT", True),
-    ("ho-nbsp", "I have chest\u00a0pain", [], "EMERGENCY", True),
-    ("ho-quote", "I can\u2019t breathe", [], "EMERGENCY", True),
-    ("ho-newline", "The wound is bleeding\nheavily", [], "EMERGENCY", True),
+    ("ho-tightness", "My chest feels tight and heavy", [], "EMERGENCY", True),
+    ("ho-air", "I have been short of breath all morning", [], "EMERGENCY", True),
+    ("ho-wound", "There is bleeding that will not stop", [], "EMERGENCY", True),
 ]
 for name, text, intents, risk, clinician in HELD_OUT_CLASSIFY:
     case(name, "classification", "classify", message=text,
