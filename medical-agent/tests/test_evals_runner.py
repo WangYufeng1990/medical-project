@@ -76,7 +76,7 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert report.exists(), "the report is written even when recorded gaps fail the gate"
     payload = json.loads(report.read_text())
 
-    assert payload["manifest"]["cases"] == 231, "the default run is the dev split"
+    assert payload["manifest"]["cases"] == 259, "the default run is the dev split"
     assert payload["manifest"]["splits"] == ["dev"]
     assert len(payload["manifest"]["dataset_sha256"]) == 64
     assert payload["manifest"]["splits"] == ["dev"]
@@ -87,7 +87,7 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert payload["manifest"]["commit"]
     # Three attack cases are recorded dev gaps: they carry the desired behaviour and currently fail.
     # The real dev report reflects progress; it is not pinned to today's gap count.
-    assert payload["totals"]["cases"] == 231
+    assert payload["totals"]["cases"] == 259
     assert payload["totals"]["failed"] == len(payload["examples"])
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(payload["per_family"])

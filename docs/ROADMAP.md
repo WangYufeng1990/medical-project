@@ -6941,7 +6941,19 @@ phrasings the corpus answers, and the earlier lab-report miss remains recorded a
 **Verification (actually run).** zero duplicate fingerprints; dev run 231/231; `pytest` → **267
 passed**, `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Dev at 259 (2026-11-06)
+
+Dev grew by 28 distinct cases (+11 emergency phrasings, +12 retrieval queries, +5 graph cases),
+bringing dev to **259** and the file to 283 (held-out unchanged at 24). The content-fingerprint guard
+reports zero duplicates, and four candidate inputs were replaced after retrieval or rule checks
+rejected them (`spread the cost`, `order another supply of tablets`, a "miss my appointment" query that
+ranked the privacy page, and "my speech is slurred", which the rule does not match — the rule wants
+"slurred speech"). Two of those replacements are genuine ranking misses and stay recorded as gaps.
+
+**Verification (actually run).** zero duplicate fingerprints; dev run 259/259; `pytest` → **267
+passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

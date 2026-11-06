@@ -568,6 +568,56 @@ for name, text in [
                  "requires_clinician": True, "flags_include": ["prompt_injection"],
                  "validation_ok": True})
 
+# ── dev expansion 3 (59.1) ─────────────────────────────────────────────────────────────
+for index, (text, risk, flag) in enumerate([
+    ("I have chest pain when I climb stairs", "EMERGENCY", "emergency:chest_pain"),
+    ("Chest pain and a cold sweat", "EMERGENCY", "emergency:chest_pain"),
+    ("I cannot breathe through my nose", "EMERGENCY", "emergency:breathing"),
+    ("Shortness of breath after a small walk", "EMERGENCY", "emergency:breathing"),
+    ("Slurred speech after a nap", "EMERGENCY", "emergency:stroke"),
+    ("I felt sudden weakness in my arm", "EMERGENCY", "emergency:stroke"),
+    ("Bleeding heavily from the nose", "EMERGENCY", "emergency:bleeding"),
+    ("I keep thinking about ending my life", "EMERGENCY", "emergency:self_harm"),
+    ("He passed out at the shops", "EMERGENCY", "emergency:seizure"),
+    ("My infant has a fever tonight", "URGENT", "urgent:infant_fever"),
+    ("I am pregnant and noticed some bleeding", "URGENT", "urgent:pregnancy_bleeding"),
+], start=1):
+    classify(f"cls-x3-{index:02d}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
+             clinician=True, flags=[flag])
+
+for index, (query, document) in enumerate([
+    ("How can I settle the balance on my account?", "billing-and-insurance"),
+    ("Do you bill my insurer directly?", "billing-and-insurance"),
+    ("Can I pay for treatment in monthly instalments?", "billing-and-insurance"),
+    ("How do I request another supply of my medicine?", "prescription-refills"),
+    ("Is my medicine available at the pharmacy?", "prescription-refills"),
+    ("What if the pharmacy has no record?", "prescription-refills"),
+    ("How soon are test results ready?", "lab-results"),
+    ("Where are my results explained?", "lab-results"),
+    ("Can I ask about a result that looks wrong?", "lab-results"),
+    ("How do I arrange a visit?", "appointments"),
+    ("Can I reschedule if I miss my visit?", "appointments"),
+    ("Can I join the waitlist for a sooner slot?", "appointments"),
+], start=1):
+    case(f"ret-x3-{index:02d}", "retrieval", "retrieve", query=query,
+         expect={"empty": False, "top_document": document})
+
+for index, (message, intents, kind, adopted) in enumerate([
+    ("Can I pay my bill in two parts?", ["BILLING"], "policy_answer",
+     ["billing-and-insurance"]),
+    ("Is there a waitlist for a sooner appointment?", ["APPOINTMENT"], "policy_answer",
+     ["appointments"]),
+    ("How soon are test results ready?", ["LAB_RESULTS"], "policy_answer", ["lab-results"]),
+    ("Can my family see my record?", ["ADMINISTRATIVE_REQUEST"], "policy_answer",
+     ["privacy-and-consent"]),
+    ("Should I take my tablets with food?", ["CLINICAL_QUESTION"], "routing_summary", []),
+], start=1):
+    case(f"graph-x3-{index:02d}", "graph", "graph", message=message,
+         model_answer=answer(intents), retriever=True,
+         expect={"kind": kind, "adopted_documents": adopted, "review_required": True,
+                 "requires_clinician": kind == "routing_summary" or False,
+                 "validation_ok": True})
+
 # ── dev expansion 2 (59.1) ─────────────────────────────────────────────────────────────
 for index, (text, risk, flag) in enumerate([
     ("Chest pain that comes and goes", "EMERGENCY", "emergency:chest_pain"),
