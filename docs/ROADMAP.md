@@ -6765,7 +6765,7 @@ cover.
 
 | Slice | Priority / status | Work | Completion gate |
 |---|---|---|---|
-| 59.1 Golden dataset/regression | P1 / **In progress** (2026-11-05; run identity and metrics report done, case expansion pending) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
+| 59.1 Golden dataset/regression | P1 / **In progress** (2026-11-06; dev 300 cases, held-out rebuild and real-model run pending) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / Pending | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
 | 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
@@ -6953,7 +6953,29 @@ ranked the privacy page, and "my speech is slurred", which the rule does not mat
 **Verification (actually run).** zero duplicate fingerprints; dev run 259/259; `pytest` → **267
 passed**, `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Dev reaches 300 (2026-11-06)
+
+Dev now has **300** cases (324 in the file with the 24 held-out), so the slice's "approximately 300–500"
+floor is met. The last two batches added 41 distinct cases: 16 emergency phrasings, 17 retrieval
+queries, 6 validation cases (policy drafts, a two-sentence quoted policy, a wrong-chunk claim, a claim
+outside the policy, a missing notice and a fabricated citation id) and 9 graph cases. The
+content-fingerprint guard reports zero duplicates; two entries that were re-labelled copies of existing
+cases were replaced before this commit.
+
+Four more candidates were rejected by real checks and replaced: two refill queries that ranked the lab
+page, a two-sentence draft quoting a sentence the chunk does not contain, and a pharmacy graph case that
+adopted the lab policy. Two phrasings also needed the rule's exact wording ("cannot breathe",
+"pregnan… bleed").
+
+**On conservative escalation.** `I cannot breathe through my nose` stays in the set as a regression
+sample of the keyword rule firing, not as a verified correct emergency classification: the case proves
+the rule is triggered, nothing about clinical correctness. The record says so rather than counting it as
+a correct escalation.
+
+**Verification (actually run).** dev run 300/300; zero duplicate fingerprints; `pytest` → **267
+passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

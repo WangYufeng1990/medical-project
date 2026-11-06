@@ -568,6 +568,107 @@ for name, text in [
                  "requires_clinician": True, "flags_include": ["prompt_injection"],
                  "validation_ok": True})
 
+# ── dev expansion 5 (59.1) ─────────────────────────────────────────────────────────────
+for index, (text, risk, flag) in enumerate([
+    ("I have chest pain and feel faint", "EMERGENCY", "emergency:chest_pain"),
+    ("Crushing chest pain that started suddenly", "EMERGENCY", "emergency:chest_pain"),
+    ("I cannot breathe and my lips look blue", "EMERGENCY", "emergency:breathing"),
+    ("Slurred speech and weakness on one side", "EMERGENCY", "emergency:stroke"),
+    ("Bleeding heavily from a wound", "EMERGENCY", "emergency:bleeding"),
+    ("I have been suicidal since last week", "EMERGENCY", "emergency:self_harm"),
+], start=1):
+    classify(f"cls-x5-{index:02d}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
+             clinician=True, flags=[flag])
+
+for index, (query, document) in enumerate([
+    ("Where can I settle my account?", "billing-and-insurance"),
+    ("Does the practice take my insurance plan?", "billing-and-insurance"),
+    ("How do I renew my regular tablets?", "prescription-refills"),
+    ("Can I collect my medicine from the pharmacy?", "prescription-refills"),
+    ("How long are results normally ready?", "lab-results"),
+], start=1):
+    case(f"ret-x5-{index:02d}", "retrieval", "retrieve", query=query,
+         expect={"empty": False, "top_document": document})
+
+# ── dev expansion 4 (59.1) ─────────────────────────────────────────────────────────────
+for index, (text, risk, flag) in enumerate([
+    ("Chest pain that spreads to my jaw", "EMERGENCY", "emergency:chest_pain"),
+    ("Crushing chest pain at rest", "EMERGENCY", "emergency:chest_pain"),
+    ("I cannot breathe and it is getting worse", "EMERGENCY", "emergency:breathing"),
+    ("Shortness of breath that is getting worse", "EMERGENCY", "emergency:breathing"),
+    ("Slurred speech and a drooping face", "EMERGENCY", "emergency:stroke"),
+    ("Bleeding heavily after a fall", "EMERGENCY", "emergency:bleeding"),
+    ("I have been feeling suicidal", "EMERGENCY", "emergency:self_harm"),
+    ("She passed out in the kitchen", "EMERGENCY", "emergency:seizure"),
+    ("My baby has a fever and is not feeding", "URGENT", "urgent:infant_fever"),
+    ("I am pregnant and bleeding a bit", "URGENT", "urgent:pregnancy_bleeding"),
+], start=1):
+    classify(f"cls-x4-{index:02d}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
+             clinician=True, flags=[flag])
+
+for index, (query, document) in enumerate([
+    ("How can I pay my balance over time?", "billing-and-insurance"),
+    ("Does my plan cover this practice?", "billing-and-insurance"),
+    ("Who do I contact about a bill?", "billing-and-insurance"),
+    ("How do I request a repeat of my prescription?", "prescription-refills"),
+    ("Can the pharmacy dispense my tablets?", "prescription-refills"),
+    ("What if my prescription has expired?", "prescription-refills"),
+    ("How are test results explained to me?", "lab-results"),
+    ("Can I get my results by post?", "lab-results"),
+    ("How long until my blood test is reported?", "lab-results"),
+    ("How do I arrange a follow-up visit?", "appointments"),
+], start=1):
+    case(f"ret-x4-{index:02d}", "retrieval", "retrieve", query=query,
+         expect={"empty": False, "top_document": document})
+
+VALIDATION_4 = [
+    ("policy-ok-2", True,
+     "According to the practice policy: A balance can be paid in instalments by agreement "
+     "[chunk:billing-and-insurance:1:002].\n\n" + NOTICE, []),
+    ("policy-two-sentences", True,
+     "According to the practice policy: A balance can be paid in instalments by agreement "
+     "[chunk:billing-and-insurance:1:002]. A balance can be paid in instalments by agreement "
+     "[chunk:billing-and-insurance:1:002].\n\n" + NOTICE, []),
+    ("wrong-chunk-text", False,
+     "According to the practice policy: pay in instalments [chunk:appointments:1:000].\n\n"
+     + NOTICE, ["unsupported_claim"]),
+    ("claim-outside-policy", False,
+     "According to the practice policy: refunds are automatic "
+     "[chunk:billing-and-insurance:1:002].\n\n" + NOTICE, ["unsupported_claim"]),
+    ("missing-notice-2", False,
+     "According to the practice policy: pay in instalments "
+     "[chunk:billing-and-insurance:1:002]. Store your card details.", ["missing_safety_notice"]),
+    ("fabricated-id-2", False,
+     "According to the practice policy: pay in instalments [chunk:billing:2:001].\n\n"
+     + NOTICE, ["fabricated_citation"]),
+]
+for name, ok, draft, reasons in VALIDATION_4:
+    case(f"val-x4-{name}", "validation", "validate", draft=draft, require_citation=True,
+         evidence=[BILLING_EVIDENCE, {"chunk_id": "appointments:1:000",
+                                      "document_id": "appointments",
+                                      "text": "Appointment scheduling policy — Booking\n"
+                                              "Portal requests are answered within a business day.",
+                                      "score": 0.1}],
+         citations=[BILLING_CITATION,
+                    {"chunk_id": "appointments:1:000", "document_id": "appointments",
+                     "document_version": 1, "title": "Appointment scheduling policy",
+                     "heading_path": ["Booking"], "content_hash": "b" * 64}],
+         expect={"ok": ok, "reasons_include": reasons})
+
+for index, (message, intents, kind, adopted) in enumerate([
+    ("How do I pay my balance over time?", ["BILLING"], "policy_answer",
+     ["billing-and-insurance"]),
+    ("How are my results explained?", ["LAB_RESULTS"], "policy_answer", ["lab-results"]),
+    ("Can the pharmacy dispense my tablets?", ["PRESCRIPTION_REFILL"], "policy_answer",
+     ["prescription-refills"]),
+    ("What if I need to change my visit time?", ["APPOINTMENT"], "policy_answer",
+     ["appointments"]),
+], start=1):
+    case(f"graph-x4-{index:02d}", "graph", "graph", message=message,
+         model_answer=answer(intents), retriever=True,
+         expect={"kind": kind, "adopted_documents": adopted, "review_required": True,
+                 "requires_clinician": False, "validation_ok": True})
+
 # ── dev expansion 3 (59.1) ─────────────────────────────────────────────────────────────
 for index, (text, risk, flag) in enumerate([
     ("I have chest pain when I climb stairs", "EMERGENCY", "emergency:chest_pain"),
