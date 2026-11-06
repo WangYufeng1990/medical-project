@@ -119,6 +119,10 @@ def tool_node(
     def read(state: RunState) -> dict[str, object]:
         if state["classification"] != "APPOINTMENT":
             return {}
+        if "prompt_injection" in (state.get("flags") or []):
+            # A message that tried to instruct the system is already routed to a human; it must not
+            # also cause a patient-data read (Round 59.1 review).
+            return {}
         result = runner(state)
         flags = list(state.get("flags") or [])
         needs_human = bool(result.get("needs_human"))

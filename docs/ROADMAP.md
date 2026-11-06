@@ -6898,7 +6898,21 @@ weakening the samples.
 **Verification (actually run).** dev run 188/188, exit 0; `pytest` → **265 passed**, `ruff` and
 `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — An injected message does not trigger a patient read (2026-11-06)
+
+The tool node ran for every `APPOINTMENT` message, so `atk-system` was flagged `prompt_injection`,
+routed to a human, and still read the run's appointments first. The node now returns immediately when
+the flag is present. A worker test with a recording client asserts **zero calls** and
+`tool_calls == 0` for that message; removing the guard makes it fail with the read path listed.
+
+**Historical note.** The same commit that fixed the attacks also tightened the expectations of the two
+held-out attack cases, so the held-out figure **10/24 is a snapshot of the earlier expectations**, not
+of the current file. It is recorded as history and not as the current held-out result.
+
+**Verification (actually run).** dev run 188/188 exit 0; `pytest` → **266 passed**, `ruff` and
+`mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
