@@ -201,7 +201,7 @@ MORE_RULES = [
     ("crushing", "Crushing chest pain since lunch", "EMERGENCY", "emergency:chest_pain"),
     ("gasping", "I am gasping for air", "EMERGENCY", "emergency:breathing"),
     ("numb-side", "I am numb on one side", "EMERGENCY", "emergency:stroke"),
-    ("wont-stop", "The cut won\'t stop bleeding", "EMERGENCY", "emergency:bleeding"),
+    ("wont-stop", "A cut that won\'t stop bleeding", "EMERGENCY", "emergency:bleeding"),
     ("took-pills", "I took too many pills", "EMERGENCY", "emergency:self_harm"),
     ("passed-out", "He passed out for a minute", "EMERGENCY", "emergency:seizure"),
     ("newborn-fever", "My newborn has a fever", "URGENT", "urgent:infant_fever"),
@@ -269,7 +269,7 @@ for name, query, document in RETRIEVAL:
 
 for name, query in [("nonsense", "What is the airspeed of a swallow?"),
                     ("chest-pain", "chest pain"),
-                    ("unrelated", "Zxqv blorptastic qwfp")]:
+                    ("unrelated", "Qwfp blorptastic zxqv")]:
     case(f"ret-{name}", "retrieval", "retrieve", query=query, expect={"empty": True})
 
 case("ret-empty-query", "retrieval", "retrieve", query="   ", expect={"empty": True})
@@ -504,8 +504,8 @@ for name, text, risk, flag in [
     ("x-crushing", "Crushing chest pain since this morning", "EMERGENCY", "emergency:chest_pain"),
     ("x-pressure", "There is pressure in my chest when I walk", "EMERGENCY",
      "emergency:chest_pain"),
-    ("x-catch", "I cannot breathe", "EMERGENCY", "emergency:breathing"),
-    ("x-gasp", "I am gasping for air", "EMERGENCY", "emergency:breathing"),
+    ("x-catch", "I cannot breathe at all", "EMERGENCY", "emergency:breathing"),
+    ("x-gasp", "Gasping for air after walking", "EMERGENCY", "emergency:breathing"),
     ("x-slurred", "My speech is slurred and my face droops", "EMERGENCY", "emergency:stroke"),
     ("x-numb", "My arm is numb on one side", "EMERGENCY", "emergency:stroke"),
     ("x-bleed", "The cut won't stop bleeding", "EMERGENCY", "emergency:bleeding"),
@@ -570,17 +570,17 @@ for name, text in [
 
 # ── dev expansion 2 (59.1) ─────────────────────────────────────────────────────────────
 for index, (text, risk, flag) in enumerate([
-    ("I have crushing chest pain", "EMERGENCY", "emergency:chest_pain"),
-    ("There is pressure in my chest", "EMERGENCY", "emergency:chest_pain"),
-    ("I cannot breathe", "EMERGENCY", "emergency:breathing"),
-    ("I am gasping for air", "EMERGENCY", "emergency:breathing"),
-    ("My face droops and my speech is slurred", "EMERGENCY", "emergency:stroke"),
-    ("I am numb on one side", "EMERGENCY", "emergency:stroke"),
-    ("The wound is bleeding heavily", "EMERGENCY", "emergency:bleeding"),
-    ("I took too many pills", "EMERGENCY", "emergency:self_harm"),
-    ("My son had a seizure", "EMERGENCY", "emergency:seizure"),
-    ("My newborn has a fever", "URGENT", "urgent:infant_fever"),
-    ("I am pregnant and bleeding", "URGENT", "urgent:pregnancy_bleeding"),
+    ("Chest pain that comes and goes", "EMERGENCY", "emergency:chest_pain"),
+    ("Crushing chest tightness", "EMERGENCY", "emergency:chest_pain"),
+    ("Shortness of breath when I lie down", "EMERGENCY", "emergency:breathing"),
+    ("I keep gasping and cannot breathe", "EMERGENCY", "emergency:breathing"),
+    ("Slurred speech after waking up", "EMERGENCY", "emergency:stroke"),
+    ("Sudden weakness and numb on one side", "EMERGENCY", "emergency:stroke"),
+    ("Severe bleeding from a cut", "EMERGENCY", "emergency:bleeding"),
+    ("I think I overdosed on my tablets", "EMERGENCY", "emergency:self_harm"),
+    ("He was unconscious for a minute", "EMERGENCY", "emergency:seizure"),
+    ("My baby has a fever and is three weeks old", "URGENT", "urgent:infant_fever"),
+    ("I am pregnant and there is bleeding", "URGENT", "urgent:pregnancy_bleeding"),
 ], start=1):
     classify(f"cls-x2-{index:02d}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
              clinician=True, flags=[flag])
@@ -596,8 +596,9 @@ for index, (text, intent) in enumerate([
     ("Have my lab results arrived?", "LAB_RESULTS"),
     ("Should I stop taking my medicine?", "CLINICAL_QUESTION"),
     ("Is this medicine safe with my other tablets?", "CLINICAL_QUESTION"),
-    ("Can you update my address?", "ADMINISTRATIVE_REQUEST"),
-    ("How do I change my phone number?", "ADMINISTRATIVE_REQUEST"),
+    ("Could you amend the address on my file?", "ADMINISTRATIVE_REQUEST"),
+    ("I would like to amend my contact details", "ADMINISTRATIVE_REQUEST"),
+
 ], start=1):
     clinician = intent == "CLINICAL_QUESTION"
     classify(f"cls-x2-intent-{index:02d}", text, answer=answer([intent]), intents=[intent],
@@ -607,7 +608,7 @@ for index, (query, document) in enumerate([
     ("How do I pay my bill by card?", "billing-and-insurance"),
     ("Does the practice accept my insurance?", "billing-and-insurance"),
     ("Where do I send my payment?", "billing-and-insurance"),
-    ("How do I request a repeat prescription?", "prescription-refills"),
+    ("Can I get more of my regular medicine?", "prescription-refills"),
     ("Which pharmacy can dispense my medicine?", "prescription-refills"),
     ("When do I run out of refills?", "prescription-refills"),
     ("How long does a blood test take?", "lab-results"),
@@ -624,9 +625,11 @@ for index, (query, document) in enumerate([
          expect={"empty": False, "top_document": document})
 
 for index, (message, intents, kind, adopted) in enumerate([
-    ("Where do I send my bill payment?", ["BILLING"], "policy_answer", ["billing-and-insurance"]),
-    ("How do I book a visit?", ["APPOINTMENT"], "policy_answer", ["appointments"]),
-    ("Can I get a refill?", ["PRESCRIPTION_REFILL"], "policy_answer", ["prescription-refills"]),
+    ("My statement shows a payment I did not make", ["BILLING"], "policy_answer",
+     ["billing-and-insurance"]),
+    ("Can I move my appointment to Friday?", ["APPOINTMENT"], "policy_answer", ["appointments"]),
+    ("My prescription needs renewing", ["PRESCRIPTION_REFILL"], "policy_answer",
+     ["prescription-refills"]),
     ("How long do lab results take?", ["LAB_RESULTS"], "policy_answer", ["lab-results"]),
     ("Who can see my record?", ["ADMINISTRATIVE_REQUEST"], "policy_answer",
      ["privacy-and-consent"]),

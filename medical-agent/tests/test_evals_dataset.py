@@ -114,3 +114,14 @@ def test_no_input_is_reused_across_splits() -> None:
     assert not set(dev) & set(held_out), "no message is reused across splits"
     assert not set(dev_queries) & set(held_out_queries), "no query is reused across splits"
     assert len(held_out) == len(set(held_out)), "no duplicate inputs"
+
+
+def test_no_two_cases_are_identical_apart_from_their_id() -> None:
+    # A case that only changes its id inflates the count without adding coverage (59.1 review).
+    rows = read(CASES)
+    fingerprints = [
+        json.dumps({key: value for key, value in case.items() if key != "id"}, sort_keys=True)
+        for case in rows
+    ]
+
+    assert len(fingerprints) == len(set(fingerprints))

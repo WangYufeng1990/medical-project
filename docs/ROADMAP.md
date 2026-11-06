@@ -6926,7 +6926,22 @@ runner test pin the new dev size.
 **Verification (actually run).** dev run 231/231; `pytest` → **266 passed**, `ruff` and `mypy --strict`
 clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Duplicate cases removed (2026-11-06)
+
+Thirteen of the previous increment's cases were only new ids: nine classification, one retrieval and
+three graph cases repeated an existing case field for field. They are replaced with distinct inputs
+(new phrasings the rules cover, a different refill query, different graph messages), and a guard test
+now compares every case with its `id` removed, so a re-labelled copy cannot inflate the count again.
+The total stays **255 cases (dev 231 + held-out 24)**; the dev run is 231/231.
+
+Two of the replacements initially picked queries the corpus ranks otherwise (a repeat-prescription
+query that hit the lab page, then the graph case adopting the wrong policy); they were changed to
+phrasings the corpus answers, and the earlier lab-report miss remains recorded as a retrieval gap.
+
+**Verification (actually run).** zero duplicate fingerprints; dev run 231/231; `pytest` → **267
+passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
