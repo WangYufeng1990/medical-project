@@ -35,8 +35,9 @@ SUPPORT_RATIO = 0.6
 _MARKER = re.compile(r"\[chunk:([^\]]+)\]")
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 _INSTRUCTION = re.compile(
-    r"ignore (all )?(previous|prior|above) instructions|disregard .*instruction|"
-    r"you are now|system prompt|new instructions|reply only with|tell the patient to",
+    r"ignore (all )?(previous|prior|above|your) (instructions|rules)|disregard .*instruction|"
+    r"you are now|system prompt|new instructions|reply only with|tell the patient to|"
+    r"you may now|skip the review|another patient's",
     re.IGNORECASE,
 )
 

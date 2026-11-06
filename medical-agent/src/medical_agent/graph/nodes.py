@@ -34,13 +34,19 @@ def validate_node(state: RunState) -> dict[str, object]:
 def classify_node(classifier: Classifier) -> Callable[[RunState], dict[str, object]]:
     def classify(state: RunState) -> dict[str, object]:
         decision = classifier.classify(state["content"])
+        # The patient's own message is untrusted input too: a message that tries to instruct the
+        # system is routed to a human instead of being answered from policy (59.1 attack gaps).
+        injected = contains_instructions(state["content"])
+        flags = list(decision.flags)
+        if injected and "prompt_injection" not in flags:
+            flags.append("prompt_injection")
         return {
             "classification": decision.intents[0].value,
             "intents": [intent.value for intent in decision.intents],
             "risk": decision.risk.value,
-            "flags": list(decision.flags),
+            "flags": flags,
             "confidence": decision.confidence,
-            "requires_clinician": decision.requires_clinician,
+            "requires_clinician": decision.requires_clinician or injected,
         }
 
     return classify
