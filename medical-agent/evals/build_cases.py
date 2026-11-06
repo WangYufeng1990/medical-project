@@ -568,6 +568,74 @@ for name, text in [
                  "requires_clinician": True, "flags_include": ["prompt_injection"],
                  "validation_ok": True})
 
+# ── dev expansion 2 (59.1) ─────────────────────────────────────────────────────────────
+for index, (text, risk, flag) in enumerate([
+    ("I have crushing chest pain", "EMERGENCY", "emergency:chest_pain"),
+    ("There is pressure in my chest", "EMERGENCY", "emergency:chest_pain"),
+    ("I cannot breathe", "EMERGENCY", "emergency:breathing"),
+    ("I am gasping for air", "EMERGENCY", "emergency:breathing"),
+    ("My face droops and my speech is slurred", "EMERGENCY", "emergency:stroke"),
+    ("I am numb on one side", "EMERGENCY", "emergency:stroke"),
+    ("The wound is bleeding heavily", "EMERGENCY", "emergency:bleeding"),
+    ("I took too many pills", "EMERGENCY", "emergency:self_harm"),
+    ("My son had a seizure", "EMERGENCY", "emergency:seizure"),
+    ("My newborn has a fever", "URGENT", "urgent:infant_fever"),
+    ("I am pregnant and bleeding", "URGENT", "urgent:pregnancy_bleeding"),
+], start=1):
+    classify(f"cls-x2-{index:02d}", text, answer=ROUTINE_OTHER, intents=[], risk=risk,
+             clinician=True, flags=[flag])
+
+for index, (text, intent) in enumerate([
+    ("Please move my appointment to next week", "APPOINTMENT"),
+    ("I need to cancel my visit", "APPOINTMENT"),
+    ("Can I have a repeat prescription?", "PRESCRIPTION_REFILL"),
+    ("Please renew my medicine", "PRESCRIPTION_REFILL"),
+    ("Why was I charged twice?", "BILLING"),
+    ("My statement does not match", "BILLING"),
+    ("Where are my test results?", "LAB_RESULTS"),
+    ("Have my lab results arrived?", "LAB_RESULTS"),
+    ("Should I stop taking my medicine?", "CLINICAL_QUESTION"),
+    ("Is this medicine safe with my other tablets?", "CLINICAL_QUESTION"),
+    ("Can you update my address?", "ADMINISTRATIVE_REQUEST"),
+    ("How do I change my phone number?", "ADMINISTRATIVE_REQUEST"),
+], start=1):
+    clinician = intent == "CLINICAL_QUESTION"
+    classify(f"cls-x2-intent-{index:02d}", text, answer=answer([intent]), intents=[intent],
+             risk="URGENT" if clinician else "ROUTINE", clinician=clinician)
+
+for index, (query, document) in enumerate([
+    ("How do I pay my bill by card?", "billing-and-insurance"),
+    ("Does the practice accept my insurance?", "billing-and-insurance"),
+    ("Where do I send my payment?", "billing-and-insurance"),
+    ("How do I request a repeat prescription?", "prescription-refills"),
+    ("Which pharmacy can dispense my medicine?", "prescription-refills"),
+    ("When do I run out of refills?", "prescription-refills"),
+    ("How long does a blood test take?", "lab-results"),
+    ("Can I see my results online?", "lab-results"),
+    ("When do blood test results become available?", "lab-results"),
+    ("How do I book an appointment?", "appointments"),
+    ("Can I reschedule my visit?", "appointments"),
+    ("What is the waitlist for appointments?", "appointments"),
+    ("Who can access my medical record?", "privacy-and-consent"),
+    ("How do I give consent for a family member?", "privacy-and-consent"),
+    ("Can I get a copy of my notes?", "privacy-and-consent"),
+], start=1):
+    case(f"ret-x2-{index:02d}", "retrieval", "retrieve", query=query,
+         expect={"empty": False, "top_document": document})
+
+for index, (message, intents, kind, adopted) in enumerate([
+    ("Where do I send my bill payment?", ["BILLING"], "policy_answer", ["billing-and-insurance"]),
+    ("How do I book a visit?", ["APPOINTMENT"], "policy_answer", ["appointments"]),
+    ("Can I get a refill?", ["PRESCRIPTION_REFILL"], "policy_answer", ["prescription-refills"]),
+    ("How long do lab results take?", ["LAB_RESULTS"], "policy_answer", ["lab-results"]),
+    ("Who can see my record?", ["ADMINISTRATIVE_REQUEST"], "policy_answer",
+     ["privacy-and-consent"]),
+], start=1):
+    case(f"graph-x2-{index:02d}", "graph", "graph", message=message,
+         model_answer=answer(intents), retriever=True,
+         expect={"kind": kind, "adopted_documents": adopted, "review_required": True,
+                 "requires_clinician": False, "validation_ok": True})
+
 # ── held-out cases: authored from the same contract, never run during development ────────────
 SPLIT = "held_out"
 

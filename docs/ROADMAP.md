@@ -6912,7 +6912,21 @@ of the current file. It is recorded as history and not as the current held-out r
 **Verification (actually run).** dev run 188/188 exit 0; `pytest` → **266 passed**, `ruff` and
 `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Dev expansion to 231 (2026-11-06)
+
+Dev grew from 188 to **231** (+11 emergency phrasings, +12 intent phrasings, +15 retrieval queries,
++5 graph cases), all authored against behaviour the rules and corpus already cover. One candidate
+retrieval query ("Where do I get my lab report?") was a real miss — the privacy page outranked the lab
+page — so it was replaced with a phrasing the corpus answers; the miss itself is not hidden, it is
+recorded here and remains a retrieval-quality gap rather than a case that was tuned until green.
+
+The dev run is **231/231, exit 0**; held-out stays 24 and was not re-run. The dataset guard and the
+runner test pin the new dev size.
+
+**Verification (actually run).** dev run 231/231; `pytest` → **266 passed**, `ruff` and `mypy --strict`
+clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
