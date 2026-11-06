@@ -42,6 +42,37 @@ from medical_agent.worker import AgentWorker  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.jsonl")
 MODELS: set[str] = set()
+
+
+class BudgetExhausted(RuntimeError):
+    """A hard limit was reached before a request could be sent (59.1)."""
+
+
+class Budget:
+    """Hard limits for a model run: requests and (optionally) estimated dollars.
+
+    The check happens before the request; a case that cannot run is reported as skipped, not as a
+    pass or a failure, so an exhausted budget never looks like a green run.
+    """
+
+    def __init__(self, max_requests: int | None, max_usd: float | None,
+                 price_per_request_usd: float = 0.0) -> None:
+        self.max_requests = max_requests
+        self.max_usd = max_usd
+        self.price_per_request_usd = price_per_request_usd
+        self.requests = 0
+        self.spent_usd = 0.0
+
+    def take(self) -> None:
+        if self.max_requests is not None and self.requests >= self.max_requests:
+            raise BudgetExhausted(f"request budget of {self.max_requests} reached")
+        if self.max_usd is not None and self.spent_usd + self.price_per_request_usd > self.max_usd:
+            raise BudgetExhausted(f"cost budget of ${self.max_usd:.2f} reached")
+        self.requests += 1
+        self.spent_usd += self.price_per_request_usd
+
+
+BUDGET = Budget(None, None)
 CORPUS = ROOT / "kb"
 RISK_ORDER = {RiskLevel.ROUTINE: 0, RiskLevel.URGENT: 1, RiskLevel.EMERGENCY: 2}
 
@@ -329,8 +360,16 @@ def main() -> int:
                         help="dev (the regression gate) or held_out (release measurement)")
     parser.add_argument("--report", type=Path, help="write a JSON report with the run manifest")
     parser.add_argument("--cases", type=Path, default=CASES, help="the dataset to run")
+    parser.add_argument("--max-requests", type=int, default=None,
+                        help="hard cap on model requests for this run")
+    parser.add_argument("--max-usd", type=float, default=None,
+                        help="hard cap on estimated cost for this run")
+    parser.add_argument("--price-per-request-usd", type=float, default=0.0,
+                        help="recorded per-request price assumption")
     args = parser.parse_args()
 
+    global BUDGET
+    BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
     retriever = corpus_retriever()
     cases = load_cases(args.cases, args.family, args.split)
     if not cases:
@@ -339,7 +378,16 @@ def main() -> int:
         return 2
     per_family: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     failures: list[str] = []
-    for case in cases:
+    skipped = 0
+    executed = 0
+    for executed, case in enumerate(cases, start=1):
+        try:
+            BUDGET.take()
+        except BudgetExhausted as exhausted:
+            # Every remaining case is skipped, not failed: the run did not measure it.
+            skipped = len(cases) - (executed - 1)
+            print(f"budget exhausted: {exhausted}; {skipped} case(s) not run", file=sys.stderr)
+            break
         problems = HANDLERS[case["kind"]](case, retriever)
         per_family[case["family"]][0] += 1
         if problems:
@@ -348,8 +396,12 @@ def main() -> int:
 
     report = {
         "manifest": manifest(retriever, cases, args.cases),
+        "budget": {"requests": BUDGET.requests, "max_requests": BUDGET.max_requests,
+                   "spent_usd": round(BUDGET.spent_usd, 4), "max_usd": BUDGET.max_usd,
+                   "skipped": skipped},
         "totals": {"cases": len(cases),
-                   "failed": len(failures)},
+                   "failed": len(failures),
+                   "skipped": skipped},
         "per_family": {family: {"total": total, "failed": failed}
                        for family, (total, failed) in sorted(per_family.items())},
         "examples": failures,

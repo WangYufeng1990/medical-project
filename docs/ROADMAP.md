@@ -6978,8 +6978,8 @@ passed**, `ruff` and `mypy --strict` clean (37 files).
 #### Round 59.1 — A fresh, unexecuted held-out set (2026-11-06)
 
 The previous held-out had been executed twice and its expectations changed by the attack fix, so it was
-no longer a measurement. It is replaced by **27 new cases** (20 classification including two injection
-messages, 6 retrieval, 2 tools) that have **not been run**: the dataset guard checks structure only
+no longer a measurement. It is replaced by **27 new cases** (17 classification, 6 retrieval, 2 injection attacks
+routed through the graph, 2 tools) that have **not been run**: the dataset guard checks structure only
 (ids, splits, no cross-split reuse, no duplicate fingerprints), and the first execution of this set is
 the release measurement. A failure there is recorded, not tuned away.
 
@@ -6989,7 +6989,28 @@ the held-out split.
 **Verification (actually run).** structured checks only — `pytest` → **267 passed**, `ruff` and
 `mypy --strict` clean (37 files); the held-out set was deliberately not executed.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Hard model budget and graph-path injections (2026-11-06)
+
+**Held-out injections now test the protection.** The two attack cases were classified through
+`check_classify`, which never sets `prompt_injection` or skips the tool, and they expected
+`requires_clinician: false` — so they would pass even with no protection at all. They keep their wording
+and now run through the graph path, expecting `routing_summary`, `requires_clinician: true`, the
+`prompt_injection` flag and no citations. The held-out set is 17 classification + 6 retrieval + 2
+attacks + 2 tools = 27, still unexecuted.
+
+**Hard limits before any request.** `evals/run.py` accepts `--max-requests`, `--max-usd` and
+`--price-per-request-usd`. `Budget.take()` runs **before** each case's model call: when the request or
+cost ceiling is reached, the remaining cases are counted as **skipped** (neither passed nor failed) and
+the report records `{requests, max_requests, spent_usd, max_usd, skipped}`. Test: two cases with
+`--max-requests 1` → one measured, one skipped, exit 0, provider called once.
+
+**Known limit.** The cost check uses a recorded per-request price assumption, not measured tokens; a real
+token/cost accounting belongs with the live-provider run, which is not part of this increment.
+
+**Verification (actually run).** `pytest` → **268 passed**, `ruff` and `mypy --strict` clean (37 files);
+`--max-requests 2` on the dev set reports 2 measured and 298 skipped.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

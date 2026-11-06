@@ -89,6 +89,7 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     # The real dev report reflects progress; it is not pinned to today's gap count.
     assert payload["totals"]["cases"] == 300
     assert payload["totals"]["failed"] == len(payload["examples"])
+    assert payload["totals"]["skipped"] == 0
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(payload["per_family"])
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
@@ -131,7 +132,7 @@ def test_a_failing_dataset_writes_the_report_and_exits_one(tmp_path) -> None:
 
     assert completed.returncode == 1, "a failing case must fail the run"
     payload = json.loads(report.read_text())
-    assert payload["totals"] == {"cases": 1, "failed": 1}
+    assert payload["totals"] == {"cases": 1, "failed": 1, "skipped": 0}
     assert payload["examples"], "the failing example is reported"
 
 
@@ -191,3 +192,34 @@ class _ReturnsNormally:
         from medical_agent.tools.registry import ToolResult
 
         return ToolResult(name=name, payload=[])
+
+
+def test_the_budget_stops_before_the_second_case_is_measured(tmp_path) -> None:
+    # A hard cap of one request: the second case is skipped, not passed or failed (59.1).
+    import os
+    import subprocess as sp
+
+    dataset = tmp_path / "two.jsonl"
+    rows = []
+    for index in (1, 2):
+        rows.append(json.dumps({
+            "id": f"budget-{index}", "family": "classification", "kind": "classify",
+            "split": "dev", "message": f"Where do I send my bill payment {index}?",
+            "model_answer": json.dumps({"intents": ["BILLING"], "risk": "ROUTINE",
+                                        "confidence": 0.9}),
+            "expect": {"intents_include": ["BILLING"], "risk": "ROUTINE",
+                       "requires_clinician": False, "flags_include": []},
+        }))
+    dataset.write_text("\n".join(rows) + "\n")
+    report = tmp_path / "budget.json"
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--cases", str(dataset),
+                        "--max-requests", "1", "--report", str(report)], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 0, "a skipped case is not a failure"
+    payload = json.loads(report.read_text())
+    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 1}
+    assert payload["budget"]["requests"] == 1
+    assert payload["budget"]["skipped"] == 1
