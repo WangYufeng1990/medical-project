@@ -6871,7 +6871,17 @@ now changes the report without breaking the test.
 controlled failing dataset: 1 case, 1 failed, exit 1 with a report; `pytest` → **263 passed**; `ruff`
 and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — A denial case cannot pass on a normal return (2026-11-06)
+
+`check_tool`'s refusal-code check ran only inside the `except ToolDenied` branch, so an implementation
+that returned a result for `tool-bad-limit` or `tool-extra-field` passed those cases. The success
+branch now fails a case whose `expect.denied` is set, and a stand-in executor that returns normally is
+caught by a test (`expected denial ... returned a result`).
+
+**Verification (actually run).** tools family 8/8; the stand-in returning normally fails; `pytest` →
+**264 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

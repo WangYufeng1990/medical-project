@@ -227,6 +227,9 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
             problems.append(f"client called before the denial: {calls}")
         return problems
     problems: list[str] = []
+    if case["expect"].get("denied"):
+        # The case expects a refusal; a normal return is a failure, not a pass.
+        problems.append(f"expected denial {case['expect']['denied']}, returned a result")
     expected_human = case["expect"].get("needs_human")
     if expected_human is not None and result.needs_human != expected_human:
         problems.append(f"needs_human {result.needs_human}")

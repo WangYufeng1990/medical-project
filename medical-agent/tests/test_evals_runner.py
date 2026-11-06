@@ -165,3 +165,29 @@ class _CallsThenRefuses:
 
         self.client("/called-before-refusing", 1.0)  # type: ignore[operator]
         raise ToolDenied("unknown_tool", "unsupported tool")
+
+
+def test_a_case_that_expects_a_denial_fails_on_a_normal_result(monkeypatch) -> None:
+    # An implementation that returns instead of refusing must not pass a denial case (59.1 review).
+    from evals import run as runner
+
+    from medical_agent.tools import registry
+
+    monkeypatch.setattr(registry, "ToolExecutor", _ReturnsNormally)
+
+    problems = runner.check_tool({
+        "tool": "get_my_appointments", "arguments": {"limit": 500},
+        "expect": {"denied": "invalid_arguments"},
+    }, None)  # type: ignore[arg-type]
+
+    assert problems and "expected denial" in problems[0]
+
+
+class _ReturnsNormally:
+    def __init__(self, client: object, session: object) -> None:
+        pass
+
+    def execute(self, name: str, arguments: dict[str, object]) -> object:
+        from medical_agent.tools.registry import ToolResult
+
+        return ToolResult(name=name, payload=[])
