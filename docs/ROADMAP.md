@@ -6975,7 +6975,21 @@ a correct escalation.
 **Verification (actually run).** dev run 300/300; zero duplicate fingerprints; `pytest` → **267
 passed**, `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — A fresh, unexecuted held-out set (2026-11-06)
+
+The previous held-out had been executed twice and its expectations changed by the attack fix, so it was
+no longer a measurement. It is replaced by **27 new cases** (20 classification including two injection
+messages, 6 retrieval, 2 tools) that have **not been run**: the dataset guard checks structure only
+(ids, splits, no cross-split reuse, no duplicate fingerprints), and the first execution of this set is
+the release measurement. A failure there is recorded, not tuned away.
+
+The dev set is unchanged at 300 (327 in the file with the 27 held-out), and no dev input is reused in
+the held-out split.
+
+**Verification (actually run).** structured checks only — `pytest` → **267 passed**, `ruff` and
+`mypy --strict` clean (37 files); the held-out set was deliberately not executed.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

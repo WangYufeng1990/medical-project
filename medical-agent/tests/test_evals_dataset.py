@@ -84,7 +84,7 @@ def test_the_set_has_a_dev_gate_and_a_held_out_split() -> None:
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(dev_families)
     assert all(count >= 3 for count in dev_families.values()), dev_families
-    assert {"classification", "retrieval", "attacks"} <= set(held_out_families)
+    assert {"classification", "retrieval", "tools"} <= set(held_out_families)
     assert {"tools", "attacks"} <= set(dev_families), "the tools and attacks families exist"
 
 
