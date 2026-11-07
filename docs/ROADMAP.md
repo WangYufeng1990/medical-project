@@ -7254,7 +7254,27 @@ price assumption, and a Java-side OTel span (the dispatch is still a log line, n
 **Verification (actually run).** Java `mvn clean verify` → **418 tests, 0 failures, 1 skipped**;
 `pytest` → **282 passed**, `ruff` and `mypy --strict` clean (38 files); the probe output above.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Measured usage kept apart from the price assumption (2026-11-06)
+
+`ProviderResponse` gained optional `prompt_tokens`/`completion_tokens`, and the DeepSeek adapter fills
+them from the response's `usage` block. The evaluation report now carries a `usage` object —
+`responses`, `measured_responses`, `prompt_tokens`, `completion_tokens` — with tokens **null** when the
+provider reported none, so a missing measurement is never written as zero. Cost stays a separate,
+labelled figure: `budget.spent_usd` from the recorded per-request assumption.
+
+**Runs.** Canned dev run: 177 responses, `measured_responses: 0`, tokens null (the canned providers
+report no usage). Live run of two classification cases: 2 responses, **2 measured**, **238 prompt +
+54 completion tokens**, recorded spend $0.004 under the $0.05 cap. The token counts are the provider's
+usage; the dollar figure is still the assumption, not a bill.
+
+Tests: a stub that reports usage and a stub that does not — one measured response, 11/7 tokens, both
+responses counted — and the report keeps tokens null when nothing was measured.
+
+**Still open in 59.2.** Langfuse export and a real Java-side OTel span.
+
+**Verification (actually run).** `pytest` → **283 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

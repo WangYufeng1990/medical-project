@@ -69,11 +69,30 @@ class BudgetedProvider:
         model = getattr(response, "model", None)
         if model:
             MODELS.add(str(model))
+        prompt_tokens = getattr(response, "prompt_tokens", None)
+        completion_tokens = getattr(response, "completion_tokens", None)
+        USAGE["responses"] += 1
+        if prompt_tokens is not None and completion_tokens is not None:
+            USAGE["measured"] += 1
+            USAGE["prompt_tokens"] += int(prompt_tokens)
+            USAGE["completion_tokens"] += int(completion_tokens)
         return response
 
 
 LIVE_PROVIDER: object | None = None
 UPSTREAM_ERRORS = 0
+USAGE: dict[str, int] = {"responses": 0, "measured": 0, "prompt_tokens": 0,
+                         "completion_tokens": 0}
+
+
+def _usage_report() -> dict[str, object]:
+    """Measured tokens where the provider reported them, and never a cost built from nothing."""
+    return {
+        "responses": USAGE["responses"],
+        "measured_responses": USAGE["measured"],
+        "prompt_tokens": USAGE["prompt_tokens"] if USAGE["measured"] else None,
+        "completion_tokens": USAGE["completion_tokens"] if USAGE["measured"] else None,
+    }
 
 
 def model_provider(case: dict) -> object:
@@ -470,9 +489,10 @@ def main() -> int:
         if not math.isfinite(args.price_per_request_usd) or args.price_per_request_usd <= 0:
             print("--max-usd needs a finite positive --price-per-request-usd", file=sys.stderr)
             return 2
-    global BUDGET, LIVE_PROVIDER, UPSTREAM_ERRORS
+    global BUDGET, LIVE_PROVIDER, UPSTREAM_ERRORS, USAGE
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
     UPSTREAM_ERRORS = 0
+    USAGE = {"responses": 0, "measured": 0, "prompt_tokens": 0, "completion_tokens": 0}
     if args.provider == "deepseek" and args.max_requests is None:
         # A live run without a request cap has no hard stop; refuse before building the provider.
         print("--provider deepseek requires --max-requests", file=sys.stderr)
@@ -522,6 +542,7 @@ def main() -> int:
                    "spent_usd": round(BUDGET.spent_usd, 4), "max_usd": BUDGET.max_usd,
                    "price_per_request_usd": BUDGET.price_per_request_usd,
                    "skipped": skipped},
+        "usage": _usage_report(),
         "totals": {"cases": len(cases),
                    "failed": len(failures),
                    "skipped": skipped,

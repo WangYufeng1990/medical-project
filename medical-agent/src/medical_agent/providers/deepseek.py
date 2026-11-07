@@ -57,9 +57,12 @@ class DeepSeekProvider:
             raise ProviderError("deepseek answered with an unexpected shape") from None
         if not isinstance(text, str) or not text.strip():
             raise ProviderError("deepseek answered with no text")
+        usage = response.json().get("usage") or {}
         return ProviderResponse(
             text=text,
             provider=self.name,
             model=self._model,
             latency_ms=int((perf_counter() - started) * 1000),
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
         )

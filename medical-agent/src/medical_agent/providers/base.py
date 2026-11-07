@@ -31,6 +31,10 @@ class ProviderResponse(BaseModel):
     provider: str
     model: str
     latency_ms: int = Field(ge=0)
+    # Usage is what the provider reported. None means it was not reported, which is not zero
+    # (Round 59.2): a caller must not turn a missing measurement into a cost figure.
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
 
 
 class ProviderError(RuntimeError):

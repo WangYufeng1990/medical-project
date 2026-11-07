@@ -359,3 +359,39 @@ def test_an_upstream_failure_is_an_error_not_a_pass(tmp_path, monkeypatch) -> No
     payload = json.loads(report.read_text())
     assert payload["totals"]["errors"] == 1
     assert payload["totals"]["failed"] == 0
+
+
+def test_the_report_separates_measured_usage_from_the_price_assumption(
+        tmp_path, monkeypatch) -> None:
+    from evals import run as runner
+
+    from medical_agent.providers.base import ProviderResponse
+
+    monkeypatch.setattr(runner, "USAGE", {"responses": 0, "measured": 0, "prompt_tokens": 0,
+                                          "completion_tokens": 0})
+    monkeypatch.setattr(runner, "BUDGET", runner.Budget(None, None))
+
+    class WithUsage:
+        name = "stub"
+
+        def invoke_now(self, request):  # type: ignore[no-untyped-def]
+            return ProviderResponse(text="{}", provider="stub", model="stub-1", latency_ms=1,
+                                     prompt_tokens=11, completion_tokens=7)
+
+    class WithoutUsage:
+        name = "stub"
+
+        def invoke_now(self, request):  # type: ignore[no-untyped-def]
+            return ProviderResponse(text="{}", provider="stub", model="stub-1", latency_ms=1)
+
+    provided = runner.BudgetedProvider(WithUsage())
+    provided.invoke_now(object())
+    silent = runner.BudgetedProvider(WithoutUsage())
+    silent.invoke_now(object())
+
+    assert runner.USAGE["measured"] == 1
+    report = runner._usage_report()
+    assert report["prompt_tokens"] == 11
+    assert report["completion_tokens"] == 7
+    assert report["responses"] == 2, "both responses are counted"
+    assert report["measured_responses"] == 1, "only the one that reported usage is measured"
