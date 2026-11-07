@@ -736,11 +736,12 @@ def test_a_copied_checkpoint_can_finish_a_pending_run(tmp_path) -> None:
 
 
 def test_a_killed_worker_resumes_from_its_checkpoint(tmp_path) -> None:
-    # 59.3: SIGKILL, not a graceful close, then a new process finishes the saved run.
+    # 59.3: SIGKILL at the submit step, then a new process finishes the saved run - not a rerun.
     import os
     import signal
     import subprocess
     import sys
+    import time
 
     from medical_agent.checkpoints import open_checkpointer
     from medical_agent.java_client import CallCredentials
@@ -749,9 +750,10 @@ def test_a_killed_worker_resumes_from_its_checkpoint(tmp_path) -> None:
     from medical_agent.worker import AgentWorker
 
     database = tmp_path / "killed.sqlite"
+    marker = tmp_path / "at-submit"
     child = subprocess.Popen(
         [sys.executable, "-c", f"""
-import time
+from pathlib import Path
 from medical_agent.checkpoints import open_checkpointer
 from medical_agent.java_client import CallCredentials
 from medical_agent.providers.mock import MockProvider
@@ -765,37 +767,47 @@ credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:
                               outbound_token="out")
 with open_checkpointer("sqlite://{database}") as checkpointer:
     def blocking_submit(state):
-        time.sleep(60)
+        Path("{marker}").write_text("ready")
+        while True:
+            pass
     AgentWorker(MockProvider(), checkpointer, blocking_submit).process(request, credentials)
 """],
         env={**os.environ, "PYTHONPATH": "src"},
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        import time
-
         deadline = time.time() + 30
-        while time.time() < deadline:
-            if database.exists() and database.stat().st_size > 0 and child.poll() is None:
-                break
-            time.sleep(0.2)
-        time.sleep(3)
-        assert child.poll() is None, "the child is still running at the submit step"
-        assert database.exists() and database.stat().st_size > 0
+        while time.time() < deadline and not marker.exists():
+            time.sleep(0.1)
+        assert marker.exists(), "the child reached the submit step"
+        assert child.poll() is None
+        time.sleep(1.5)  # let the transition checkpoint reach the file before the kill
         child.send_signal(signal.SIGKILL)
         child.wait(timeout=20)
     finally:
         if child.poll() is None:
             child.kill()
+    assert child.returncode == -signal.SIGKILL, child.returncode
 
-    submitted: list[object] = []
     request = RunStartRequest(run_id=195, message_id=1950, patient_id=100,
                               conversation_revision=1, execution_generation=1,
                               content="When is my next appointment?", request_id="req-kill-195")
     credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
                                   outbound_token="out")
+    submitted: list[object] = []
     with open_checkpointer(f"sqlite://{database}") as checkpointer:
-        state = AgentWorker(MockProvider(), checkpointer, submitted.append).process(
-            request, credentials)
+        saved = AgentWorker(MockProvider(), checkpointer, submitted.append)
+        snapshot = saved._graph.get_state(
+            {"configurable": {"thread_id": f"run-{request.run_id}"}})
+        assert snapshot.next == ("submit_result",), snapshot.next
+        original_draft = snapshot.values["draft"]
+        assert original_draft
 
-    assert len(submitted) == 1, "the killed run is finished, not restarted"
-    assert state["draft"]
+        class ExplodingProvider:
+            def invoke_now(self, request):  # type: ignore[no-untyped-def]
+                raise AssertionError("a killed run must not be classified again")
+
+        resumed = AgentWorker(ExplodingProvider(), checkpointer, submitted.append)
+        state = resumed.process(request, credentials)
+
+    assert len(submitted) == 1, "the killed run is finished once, not restarted"
+    assert state["draft"] == original_draft, "the draft came from the killed process"

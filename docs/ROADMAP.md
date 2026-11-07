@@ -7484,10 +7484,11 @@ row, runs `purgeExpiredAuditLogs`, and asserts the old row is `archived = 1`, th
 both rows still exist — retention archives, it never deletes. Job log: `Archived 1 audit logs older than
 2190 days`.
 
-**SIGKILL.** A child process runs a worker whose submit blocks; once the checkpoint file is non-empty and
-the child is still alive, the parent sends `SIGKILL`, then opens the same SQLite file and finishes the
-run. The submission happens **once** and the draft is present, so the state came from the checkpoint
-rather than a restart from scratch.
+**SIGKILL, with proof it resumes rather than reruns.** The child writes a readiness marker from inside
+its blocking submit; the parent waits for the marker (plus a 1.5 s settle so the transition checkpoint
+reaches the file), sends `SIGKILL` and asserts the exit code is `-SIGKILL`. On the same SQLite file it
+then asserts the checkpoint's next step is `submit_result` and saves the draft, resumes with a provider
+that **raises if it is asked to classify again**, and checks one submission with an unchanged draft.
 
 **Verification (actually run).** `pytest` → **296 passed** (ruff and `mypy --strict` clean, 38 files);
 Java `mvn clean verify` → **423 tests, 0 failures, 2 skipped**.
