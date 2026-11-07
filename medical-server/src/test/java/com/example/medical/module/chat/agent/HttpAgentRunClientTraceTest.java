@@ -1,6 +1,7 @@
 package com.example.medical.module.chat.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -114,6 +115,32 @@ class HttpAgentRunClientTraceTest {
 
         assertThat(traceparents.get(0)).isEqualTo(
                 "00-" + "c".repeat(32) + "-" + "d".repeat(16) + "-01");
+        verify(span).end();
+    }
+
+    @Test
+    void a_failed_dispatch_marks_the_span_and_ends_it_once() {
+        server.removeContext("/internal/v1/runs");
+        server.createContext("/internal/v1/runs", exchange -> {
+            exchange.sendResponseHeaders(500, -1);
+            exchange.close();
+        });
+        Span span = mock(Span.class);
+        TraceContext context = mock(TraceContext.class);
+        when(context.traceId()).thenReturn("c".repeat(32));
+        when(context.spanId()).thenReturn("d".repeat(16));
+        when(span.context()).thenReturn(context);
+        when(span.name("agent.dispatch")).thenReturn(span);
+        when(span.start()).thenReturn(span);
+        Tracer tracer = mock(Tracer.class);
+        when(tracer.nextSpan()).thenReturn(span);
+        client.setTracer(tracer);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.start(request(155), "cap"))
+                .isInstanceOf(AgentDispatchException.class);
+
+        verify(span).tag("agent.outcome", "http_500");
+        verify(span).error(any(IllegalStateException.class));
         verify(span).end();
     }
 

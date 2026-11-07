@@ -67,26 +67,34 @@ public class HttpAgentRunClient implements AgentRunClient {
         headers.set("traceparent", traceparent);
         long startedAt = System.nanoTime();
         try {
-            restTemplate.postForEntity(trimTrailingSlash(baseUrl) + "/internal/v1/runs",
-                    new HttpEntity<>(request, headers), Void.class);
-        } catch (HttpStatusCodeException answered) {
-            // Status only. The body may echo the rejected input, and that input is patient
-            // text: it must not reach the queue's error column or the logs.
-            logDispatch(request, traceparent, startedAt, "http_" + answered.getStatusCode().value());
+            try {
+                restTemplate.postForEntity(trimTrailingSlash(baseUrl) + "/internal/v1/runs",
+                        new HttpEntity<>(request, headers), Void.class);
+            } catch (HttpStatusCodeException answered) {
+                // Status only. The body may echo the rejected input, and that input is patient
+                // text: it must not reach the queue's error column, the logs or the trace.
+                String outcome = "http_" + answered.getStatusCode().value();
+                markFailure(span, outcome);
+                logDispatch(request, traceparent, startedAt, outcome);
+                throw new AgentDispatchException("AGENT_HTTP_" + answered.getStatusCode().value(),
+                        "agent service answered " + answered.getStatusCode().value());
+            } catch (ResourceAccessException unreachable) {
+                markFailure(span, "unreachable");
+                logDispatch(request, traceparent, startedAt, "unreachable");
+                throw new AgentDispatchException("AGENT_UNREACHABLE",
+                        "agent service could not be reached");
+            } catch (RestClientException failure) {
+                markFailure(span, "client_error");
+                logDispatch(request, traceparent, startedAt, "client_error");
+                throw new AgentDispatchException("AGENT_CLIENT_ERROR",
+                        "the agent request could not be completed");
+            }
+            tag(span, "ok");
+            logDispatch(request, traceparent, startedAt, "ok");
+        } finally {
+            // Every path ends the span exactly once (Round 59.2 review).
             endSpan(span);
-            throw new AgentDispatchException("AGENT_HTTP_" + answered.getStatusCode().value(),
-                    "agent service answered " + answered.getStatusCode().value());
-        } catch (ResourceAccessException unreachable) {
-            logDispatch(request, traceparent, startedAt, "unreachable");
-            endSpan(span);
-            throw new AgentDispatchException("AGENT_UNREACHABLE", "agent service could not be reached");
-        } catch (RestClientException failure) {
-            logDispatch(request, traceparent, startedAt, "client_error");
-            endSpan(span);
-            throw new AgentDispatchException("AGENT_CLIENT_ERROR", "the agent request could not be completed");
         }
-        logDispatch(request, traceparent, startedAt, "ok");
-        endSpan(span);
     }
 
     /**
@@ -94,6 +102,24 @@ public class HttpAgentRunClient implements AgentRunClient {
      * that the agent received but Java never saw answered can still be joined to its spans. Nothing
      * from the request or the response body is logged (Round 59.2 review).
      */
+    private static void tag(@Nullable Span span, String outcome) {
+        if (span != null) {
+            span.tag("agent.outcome", outcome);
+        }
+    }
+
+    /**
+     * Marks the span failed with a fixed, sanitized error: the exception carries only the outcome
+     * class, never a response body, so the tracer cannot become a copy of the patient's message
+     * (Round 59.2 review).
+     */
+    private static void markFailure(@Nullable Span span, String outcome) {
+        if (span != null) {
+            span.tag("agent.outcome", outcome);
+            span.error(new IllegalStateException("agent dispatch failed: " + outcome));
+        }
+    }
+
     private static void endSpan(@Nullable Span span) {
         if (span != null) {
             span.end();

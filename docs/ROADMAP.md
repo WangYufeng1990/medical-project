@@ -7348,7 +7348,24 @@ is configuration, not evidence; the Java-to-Python parent link through live HTTP
 **Verification (actually run).** Java `mvn clean verify` → **419 tests, 0 failures, 1 skipped**;
 `pytest` → **289 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — A failed dispatch marks its span (2026-11-07)
+
+The failure paths only called `endSpan`, so the span looked successful: Micrometer does not infer an
+error from an exception thrown after a manually created span. Every path now tags `agent.outcome`
+(`ok`, `http_<status>`, `unreachable`, `client_error`), failures also call
+`span.error(new IllegalStateException("agent dispatch failed: <outcome>"))` — a fixed, sanitized
+exception that cannot carry a response body — and the span ends in a `finally` block exactly once.
+
+Test: with a mocked tracer and a 500 response, the span is tagged `http_500`, receives an
+`IllegalStateException`, and is ended once.
+
+**Verification (actually run).** Java `mvn clean verify` → **420 tests, 0 failures, 1 skipped**;
+`pytest` → 289 passed, `ruff` and `mypy --strict` clean (38 files).
+
+**Still open.** No real OTLP collector or Langfuse instance; the Java → Python parent link over live
+HTTP is unproven.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
