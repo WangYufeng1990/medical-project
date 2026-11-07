@@ -40,6 +40,7 @@ from medical_agent.kb.retrieval import Retriever
 from medical_agent.providers.base import Provider
 from medical_agent.schemas.run import RunStartRequest
 from medical_agent.tools.registry import ToolExecutor, ToolSession
+from medical_agent.trace import Tracer
 
 
 def _validated(values: dict[str, Any]) -> bool:
@@ -65,6 +66,7 @@ class AgentWorker:
         retriever: Retriever | None = None,
         tool_client: Callable[[str, float], object] | None = None,
         tool_clock: Callable[[], float] = time.time,
+        tracer: Tracer | None = None,
     ) -> None:
         self._tool_client = tool_client
         # The start is persisted as an epoch value, so the session must measure with the same clock;
@@ -75,6 +77,7 @@ class AgentWorker:
         self._graph = build_graph(
             Classifier(provider, max_prompt_chars), retriever, submit, checkpointer,
             tools=self._read_appointments if tool_client is not None else None,
+            tracer=tracer,
         )
 
     def _read_appointments(self, state: RunState) -> dict[str, object]:

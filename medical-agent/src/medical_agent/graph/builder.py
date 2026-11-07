@@ -23,6 +23,7 @@ from medical_agent.graph.nodes import (
 )
 from medical_agent.graph.state import RunState
 from medical_agent.kb.retrieval import Retriever
+from medical_agent.trace import Tracer
 
 # The nodes a resumed run may need to re-enter (see the worker's legacy-checkpoint path).
 # Scheduling *from* a node's predecessor makes that node run; scheduling from the node itself
@@ -43,14 +44,28 @@ def build_graph(
     submit_result: Callable[[RunState], None],
     checkpointer: BaseCheckpointSaver[Any],
     tools: Callable[[RunState], dict[str, object]] | None = None,
+    tracer: Tracer | None = None,
 ) -> CompiledStateGraph:
+    def traced(
+        name: str, node: Callable[[RunState], dict[str, object]]
+    ) -> Callable[[RunState], dict[str, object]]:
+        """Instrumentation is metadata only: the node's inputs never reach the span (59.2)."""
+        if tracer is None:
+            return node
+
+        def run(state: RunState) -> dict[str, object]:
+            with tracer.span(name, run_id=state.get("run_id")):
+                return node(state)
+
+        return run
+
     graph = StateGraph(RunState)
-    graph.add_node("validate_content", validate_node)
-    graph.add_node("classify_message", classify_node(classifier))
-    graph.add_node("retrieve_evidence", retrieve_node(retriever))
+    graph.add_node("validate_content", traced("validate_content", validate_node))
+    graph.add_node("classify_message", traced("classify_message", classify_node(classifier)))
+    graph.add_node("retrieve_evidence", traced("retrieve_evidence", retrieve_node(retriever)))
     if tools is not None:
-        graph.add_node(TOOL_NODE, tool_node(tools))
-    graph.add_node(DRAFT_NODE, draft_node)
+        graph.add_node(TOOL_NODE, traced(TOOL_NODE, tool_node(tools)))
+    graph.add_node(DRAFT_NODE, traced(DRAFT_NODE, draft_node))
     graph.add_node("submit_result", submit_node(submit_result))
     graph.add_edge(START, "validate_content")
     graph.add_edge("validate_content", "classify_message")

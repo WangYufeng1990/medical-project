@@ -6766,7 +6766,7 @@ cover.
 | Slice | Priority / status | Work | Completion gate |
 |---|---|---|---|
 | 59.1 Golden dataset/regression | P1 / **Done** (2026-11-06; 300 dev + 27 held-out, live-model run recorded) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
-| 59.2 Tracing/cost | P1 / Pending | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
+| 59.2 Tracing/cost | P1 / **In progress** (2026-11-06; Python trace continuation and export masking done) | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
 | 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
 | 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
@@ -7145,7 +7145,26 @@ any more.
 
 **Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Python trace continuation and export masking (2026-11-06)
+
+The Python service now continues a Java W3C `traceparent` instead of starting its own trace:
+`medical_agent/trace.py` parses `00-<32 hex>-<16 hex>-<flags>` (anything else starts a fresh trace),
+and the graph builder wraps every node in a span that carries only the node name, run id, status and
+timing. The JSONL exporter writes one line per span to `MEDICAL_AGENT_TRACE_FILE`.
+
+Test: a run whose message contains a canary (`canary-9f2-chest-pain`) with a `traceparent` from the
+"Java" side exports spans for `validate_content`, `classify_message`, `retrieve_evidence`,
+`read_appointment` and `draft_reply`, all under the **same trace id**, and the canary appears **nowhere**
+in the export. The test asserts both the continuation and the masking, so a future attribute that
+copies the message would fail it.
+
+**Still open in 59.2.** Java-side span creation and header injection, Langfuse, and token/cost
+accounting (distinguishing measured usage from the recorded price assumption) are not part of this
+increment.
+
+**Verification (actually run).** `pytest` → **275 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

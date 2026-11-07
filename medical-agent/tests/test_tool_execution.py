@@ -415,6 +415,7 @@ def _appointment_state(run_id: int = 41) -> dict[str, Any]:
 
 
 def test_the_worker_reads_appointments_for_an_appointment_message(tmp_path) -> None:
+
     from medical_agent.checkpoints import open_checkpointer
     from medical_agent.java_client import CallCredentials
     from medical_agent.providers.base import ProviderResponse
@@ -646,3 +647,43 @@ def test_an_injected_message_does_not_call_the_tool(tmp_path) -> None:
     assert "prompt_injection" in state["flags"]
     assert calls == [], "an injected message must not trigger a patient-data read"
     assert state["tool_calls"] == 0
+
+
+def test_the_trace_keeps_the_java_trace_id_and_leaks_no_message_text(tmp_path) -> None:
+    # 59.2: one Java trace, node spans for classify/retrieve/tool, and no PHI in the export.
+    import json
+
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.mock import MockProvider
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.trace import Tracer, format_traceparent
+    from medical_agent.worker import AgentWorker
+
+    trace_file = tmp_path / "trace.jsonl"
+    tracer = Tracer(trace_file)
+    tracer.bind("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+    canary = "canary-9f2-chest-pain"
+
+    with open_checkpointer(f"sqlite://{tmp_path / 'trace.sqlite'}") as checkpointer:
+        worker = AgentWorker(MockProvider(), checkpointer, lambda state: None,
+                             tool_client=lambda path, timeout: [], tracer=tracer)
+        worker.process(
+            RunStartRequest(run_id=140, message_id=1400, patient_id=100,
+                            conversation_revision=1, execution_generation=1,
+                            content=f"I have {canary} and want an appointment",
+                            request_id="req-trace-140"),
+            CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                            outbound_token="out"),
+        )
+
+    exported = trace_file.read_text()
+    names = [json.loads(line)["name"] for line in exported.splitlines()]
+    trace_ids = {json.loads(line)["trace_id"] for line in exported.splitlines()}
+
+    assert {"validate_content", "classify_message", "retrieve_evidence", "read_appointment",
+            "draft_reply"} <= set(names)
+    assert trace_ids == {"4bf92f3577b34da6a3ce929d0e0e4736"}, "the Java trace is continued"
+    assert canary not in exported, "the export must not contain the message text"
+    assert format_traceparent(tracer.context).startswith(
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-")
