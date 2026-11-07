@@ -44,6 +44,9 @@ public class HttpAgentRunClient implements AgentRunClient {
             headers.setBearerAuth(properties.getOutboundToken());
         }
         headers.set("X-Agent-Capability", capability);
+        String traceparent = newTraceparent();
+        headers.set("traceparent", traceparent);
+        long startedAt = System.nanoTime();
         try {
             restTemplate.postForEntity(trimTrailingSlash(baseUrl) + "/internal/v1/runs",
                     new HttpEntity<>(request, headers), Void.class);
@@ -57,7 +60,20 @@ public class HttpAgentRunClient implements AgentRunClient {
         } catch (RestClientException failure) {
             throw new AgentDispatchException("AGENT_CLIENT_ERROR", "the agent request could not be completed");
         }
-        log.debug("Agent run {} dispatched", request.runId());
+        // The span id in this header is the parent the agent records for its node spans; the
+        // dispatch span itself is this line (no OTel SDK on the classpath yet, Round 59.2).
+        log.debug("Agent dispatch run={} traceparent={} durationMs={}", request.runId(), traceparent,
+                (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    private static String newTraceparent() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] trace = new byte[16];
+        byte[] span = new byte[8];
+        random.nextBytes(trace);
+        random.nextBytes(span);
+        return "00-" + java.util.HexFormat.of().formatHex(trace) + "-"
+                + java.util.HexFormat.of().formatHex(span) + "-01";
     }
 
     private String trimTrailingSlash(String url) {

@@ -7212,7 +7212,26 @@ submit and asserts every exported span has trace `eee…` and parent `fff…`.
 
 **Verification (actually run).** `pytest` → **282 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Java dispatch sends traceparent (2026-11-06)
+
+`HttpAgentRunClient` now generates a W3C `traceparent` per dispatch (`00-<32 hex>-<16 hex>-01`, from
+`SecureRandom`) and sends it on `POST /internal/v1/runs`. That span id is the parent the Python side
+records for its node spans, so the two services share one trace. The dispatch itself is a debug line
+carrying the same traceparent and its duration — there is no OTel SDK on the classpath, which is
+recorded rather than implied.
+
+Test: `HttpAgentRunClientTraceTest` starts a JDK `HttpServer`, dispatches twice, and asserts both headers
+match the traceparent pattern and differ from each other.
+
+**Cross-service status.** Java → Python correlation is now wired on both sides: Java emits the header,
+the Python API binds it, and the graph exports node spans with `parent_span_id`. A single end-to-end
+probe using the **default startup path** (`MEDICAL_AGENT_TRACE_FILE` + a real dispatch from the running
+services) has not been run; the evidence so far is the two unit-level tests plus the API test.
+
+**Verification (actually run).** Java `mvn clean verify` → **417 tests, 0 failures, 1 skipped**;
+`pytest` → 282 passed, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
