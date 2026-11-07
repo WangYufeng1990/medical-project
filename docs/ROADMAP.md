@@ -7324,7 +7324,31 @@ line, not a span.
 
 **Verification (actually run).** `pytest` → **289 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Java dispatch span with the OTel bridge (2026-11-07)
+
+Added the Spring Boot-managed tracing stack (`spring-boot-starter-actuator`,
+`micrometer-tracing-bridge-otel`, `opentelemetry-exporter-otlp`) — no hand-pinned SDK — and
+`HttpAgentRunClient` now creates an `agent.dispatch` span when a `Tracer` bean exists. The
+`traceparent` header is built **from that span's context**, so the Python node spans hang off the
+Java dispatch span rather than off an unrelated id. Faults end the span too. Tracing is off by
+default (`management.tracing.enabled: ${OTEL_TRACING_ENABLED:false}`), so the existing tests and
+deployments are unchanged until an operator enables it.
+
+Tests: with a mocked micrometer `Tracer`, the dispatched header equals the span's trace/span ids and
+the span is ended; without a tracer the client still sends a valid, unique traceparent (the earlier
+two tests remain).
+
+**Environment note.** `~/.m2` is not writable here, so these dependencies were resolved into a
+writable local repository (`-Dmaven.repo.local=/tmp/m2-probe`); Maven Central is reachable. A clean
+`mvn clean verify` on that repository passes.
+
+**Still open.** No real OTLP collector or Langfuse instance was contacted, and the exporter endpoint
+is configuration, not evidence; the Java-to-Python parent link through live HTTP is still unproven.
+
+**Verification (actually run).** Java `mvn clean verify` → **419 tests, 0 failures, 1 skipped**;
+`pytest` → **289 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

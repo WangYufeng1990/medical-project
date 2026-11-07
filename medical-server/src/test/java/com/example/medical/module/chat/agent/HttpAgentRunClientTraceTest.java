@@ -1,9 +1,15 @@
 package com.example.medical.module.chat.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.example.medical.module.chat.dto.agent.AgentRunStartRequest;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
@@ -89,6 +95,26 @@ class HttpAgentRunClientTraceTest {
         assertThat(message).contains("outcome=http_500");
         assertThat(message).containsPattern("traceparent=00-[0-9a-f]{32}-[0-9a-f]{16}-01");
         assertThat(message).doesNotContain("Can I move my appointment?");
+    }
+
+    @Test
+    void the_header_comes_from_the_dispatch_span_when_tracing_is_configured() {
+        Span span = mock(Span.class);
+        TraceContext context = mock(TraceContext.class);
+        when(context.traceId()).thenReturn("c".repeat(32));
+        when(context.spanId()).thenReturn("d".repeat(16));
+        when(span.context()).thenReturn(context);
+        when(span.name("agent.dispatch")).thenReturn(span);
+        when(span.start()).thenReturn(span);
+        Tracer tracer = mock(Tracer.class);
+        when(tracer.nextSpan()).thenReturn(span);
+        client.setTracer(tracer);
+
+        client.start(request(154), "cap");
+
+        assertThat(traceparents.get(0)).isEqualTo(
+                "00-" + "c".repeat(32) + "-" + "d".repeat(16) + "-01");
+        verify(span).end();
     }
 
     private AgentRunStartRequest request(long runId) {

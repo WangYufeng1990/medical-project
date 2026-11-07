@@ -1,3 +1,14 @@
+# Round 59.2: traces are produced for the dispatch span; exporting them is an operational
+# choice. Nothing is sent unless an endpoint is configured.
+management:
+  tracing:
+    enabled: ${OTEL_TRACING_ENABLED:false}
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
 spring:
   # No default active profile — startup fails fast unless SPRING_PROFILES_ACTIVE
   # is explicitly set to prod / dev / h2 (Review III C5). See ProdGuard.
