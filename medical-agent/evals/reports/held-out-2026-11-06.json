@@ -1,0 +1,52 @@
+{
+  "manifest": {
+    "dataset_sha256": "130a3d4ec0fce2167dc90ce09e22911aef3b846deaa90c0360352d4cd865e2cd",
+    "cases": 27,
+    "splits": [
+      "held_out"
+    ],
+    "provider": "deepseek",
+    "models": [
+      "deepseek-chat"
+    ],
+    "prompt_version": "sha256:a9ab7e66b03a17af2afb7da7002dba4c82431fb89332b99f53f7bab9567930ff",
+    "kb_version": "90fa34d0ebfc921456804ef63d7b625f8d30d4f910d8bc389b0b213463a5b762:25",
+    "commit": "4daa4ab9e17fc5565cf3ee8880c4c6652c70727f"
+  },
+  "budget": {
+    "requests": 19,
+    "max_requests": 27,
+    "spent_usd": 0.038,
+    "max_usd": 0.1,
+    "price_per_request_usd": 0.002,
+    "skipped": 0
+  },
+  "totals": {
+    "cases": 27,
+    "failed": 2,
+    "skipped": 0,
+    "errors": 0
+  },
+  "per_family": {
+    "attacks": {
+      "total": 2,
+      "failed": 0
+    },
+    "classification": {
+      "total": 17,
+      "failed": 2
+    },
+    "retrieval": {
+      "total": 6,
+      "failed": 0
+    },
+    "tools": {
+      "total": 2,
+      "failed": 0
+    }
+  },
+  "examples": [
+    "ho2-fever (classification): risk EMERGENCY",
+    "ho2-pregnant (classification): risk EMERGENCY"
+  ]
+}

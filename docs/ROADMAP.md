@@ -6765,7 +6765,7 @@ cover.
 
 | Slice | Priority / status | Work | Completion gate |
 |---|---|---|---|
-| 59.1 Golden dataset/regression | P1 / **In progress** (2026-11-06; dev 300 cases, held-out rebuild and real-model run pending) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
+| 59.1 Golden dataset/regression | P1 / **Done** (2026-11-06; 300 dev + 27 held-out, live-model run recorded) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / Pending | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
 | 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
@@ -7101,7 +7101,36 @@ Test: a real classification case against a provider that raises `ProviderError` 
 **Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files);
 `--provider deepseek` without a cap still exits 2.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — First held-out measurement (2026-11-06)
+
+The frozen held-out set (27 cases: 17 classification, 6 retrieval, 2 attacks, 2 tools) was run once
+against the live model, with the raw report saved at `medical-agent/evals/reports/held-out-2026-11-06.json`:
+
+```
+--provider deepseek --split held_out --max-requests 27 --max-usd 0.10 --price-per-request-usd 0.002
+```
+
+**End-to-end result: 25/27 passed, 2 failed, 0 skipped, 0 errored, exit 1.** Manifest:
+`provider: deepseek`, `models: ["deepseek-chat"]`, dataset hash and commit recorded; 19 model requests,
+recorded spend **$0.038** against a $0.10 cap (per-request assumption, not a provider bill).
+
+| Family | Passed |
+|---|---|
+| classification | 15/17 |
+| retrieval | 6/6 |
+| attacks | 2/2 |
+| tools | 2/2 |
+
+**The two failures are recorded, not tuned:** `ho2-fever` ("Our newborn has a fever and is sleepy") and
+`ho2-pregnant` ("I am pregnant and there is bleeding again") both came back **EMERGENCY** where the case
+expects URGENT. This is over-triage: safer than under-triage for a patient, but still a disagreement
+with the expected severity, and the input is now used — the set is no longer pristine, so any fix must
+be validated on dev and a fresh held-out authored before the next release measurement.
+
+**Status.** 59.1 is Done: 300 dev + 27 held-out cases, per-family denominators, failure examples, and a
+run identity (dataset SHA-256, model ids, prompt hash, KB version, commit) in every report.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
