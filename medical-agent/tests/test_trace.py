@@ -52,3 +52,43 @@ def test_parse_rejects_all_zero_and_short_ids() -> None:
     assert parse_traceparent(VALID) is not None
     assert parse_traceparent("00-" + "a" * 31 + "-" + "b" * 16 + "-01") is None
     assert parse_traceparent("00-" + "a" * 32 + "-" + "0" * 16 + "-01") is None
+
+
+def test_two_concurrent_requests_keep_their_own_trace_and_parent(tmp_path: Path) -> None:
+    # One shared tracer, two threads: each span must carry the trace and parent it started with.
+    import json
+    import threading
+
+    path = tmp_path / "trace.jsonl"
+    tracer = Tracer(path)
+    a_bound = threading.Event()
+    b_done = threading.Event()
+    results: dict[str, tuple[str, str, str]] = {}
+
+    def request_a() -> None:
+        tracer.bind("00-" + "a" * 32 + "-" + "b" * 16 + "-01")
+        parent = tracer.context.span_id
+        with tracer.span("classify_message"):
+            a_bound.set()
+            assert b_done.wait(timeout=5), "the second request must finish while the first is open"
+        results["a"] = ("a" * 32, parent, "classify_message")
+
+    def request_b() -> None:
+        assert a_bound.wait(timeout=5)
+        tracer.bind("00-" + "c" * 32 + "-" + "d" * 16 + "-01")
+        with tracer.span("retrieve_evidence"):
+            pass
+        b_done.set()
+
+    thread_a = threading.Thread(target=request_a)
+    thread_b = threading.Thread(target=request_b)
+    thread_a.start()
+    thread_b.start()
+    thread_a.join(timeout=10)
+    thread_b.join(timeout=10)
+
+    spans = [json.loads(line) for line in path.read_text().splitlines()]
+    by_name = {span["name"]: span for span in spans}
+    assert by_name["classify_message"]["trace_id"] == "a" * 32
+    assert by_name["classify_message"]["parent_span_id"] == results["a"][1]
+    assert by_name["retrieve_evidence"]["trace_id"] == "c" * 32

@@ -13,6 +13,7 @@ import secrets
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,21 +55,33 @@ def format_traceparent(context: TraceContext) -> str:
 
 
 class Tracer:
-    """Writes one JSON line per finished span."""
+    """Writes one JSON line per finished span, with a context per request, not per tracer."""
 
     def __init__(self, path: Path | str | None, context: TraceContext | None = None) -> None:
         self.path = Path(path) if path else None
-        self.context = context or new_context()
+        self._context: ContextVar[TraceContext | None] = ContextVar("trace_context", default=None)
+        if context is not None:
+            self._context.set(context)
         self.export_errors = 0
+
+    @property
+    def context(self) -> TraceContext:
+        current = self._context.get()
+        if current is None:
+            current = new_context()
+            self._context.set(current)
+        return current
 
     def bind(self, value: str | None) -> None:
         """Binds a fresh context per attempt; a missing or invalid header starts a new trace."""
-        self.context = parse_traceparent(value) or new_context()
+        self._context.set(parse_traceparent(value) or new_context())
 
     @contextmanager
     def span(self, name: str, **attributes: object) -> Iterator[None]:
         started = time.time()
-        parent_id = self.context.span_id
+        # Captured once, so a concurrent request rebinding the tracer cannot change this span.
+        context = self.context
+        parent_id = context.span_id
         span_id = secrets.token_hex(8)
         status = "ok"
         try:
@@ -78,7 +91,7 @@ class Tracer:
             raise
         finally:
             if self.path is not None:
-                record = {"trace_id": self.context.trace_id, "span_id": span_id,
+                record = {"trace_id": context.trace_id, "span_id": span_id,
                           "parent_span_id": parent_id,
                           "name": name, "start": started, "end": time.time(),
                           "duration_ms": round((time.time() - started) * 1000, 2),

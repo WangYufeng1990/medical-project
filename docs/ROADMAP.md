@@ -7183,7 +7183,21 @@ header, the parent id in the export, and a node succeeding while the exporter fa
 
 **Verification (actually run).** `pytest` → **280 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — A shared tracer cannot cross two requests (2026-11-06)
+
+A single `Tracer` shared by concurrent requests crossed their traces: A opened a span, B rebound the
+tracer, and A exported B's `trace_id` with A's parent. The context now lives in a `ContextVar`, so it is
+per-request/per-thread while the exporter stays shared, and `span()` captures the context **once at
+span start** so a later rebind cannot leak into an open span.
+
+Test: one tracer, two threads; A opens `classify_message`, B binds its own header, writes
+`retrieve_evidence` and finishes while A is still open. A's span keeps trace `aaa…` and its own
+parent id, B's keeps `ccc…`. Removing the `ContextVar` (a plain attribute) makes the test fail with the
+two ids mixed, which is the reported behaviour.
+
+**Verification (actually run).** `pytest` → **281 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
