@@ -2,6 +2,10 @@
 
 HIPAA-compliant medical practice management system. Spring Boot 3.4 + React 18 + MySQL + Redis + Okta OAuth2 (implemented in code; currently runs on local dev JWT — see Architecture doc §5.1).
 
+The AI draft pipeline (Java dispatch → Python agent → staff review) is documented with a six-minute
+demo script and an evidence table in [docs/DEMO.md](docs/DEMO.md); each figure there names the command
+that produced it and whether it is deterministic, live-model or a local tracing probe.
+
 ## Quick Start
 
 ```bash
