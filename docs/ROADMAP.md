@@ -6767,7 +6767,7 @@ cover.
 |---|---|---|---|
 | 59.1 Golden dataset/regression | P1 / **Done** (2026-11-06; 300 dev + 27 held-out, live-model run recorded) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / **In progress** (2026-11-06; Python trace continuation and export masking done) | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
-| 59.3 Fault/database verification | P1 / **In progress** (2026-11-07; submit-refusal retryability covered, real MySQL/PostgreSQL blocked) | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
+| 59.3 Fault/database verification | P1 / **In progress** (2026-11-07; submit retryability and SQLite restore covered; real MySQL/PostgreSQL deferred by scope) | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
 | 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
 
@@ -7455,14 +7455,27 @@ Tests (`tests/test_submit_faults.py`): a 429 raises `httpx.HTTPStatusError`, the
 recorded as accepted, and a second attempt sends it again and succeeds (two bodies observed); a receipt
 that says `accepted: true` stops a resend entirely (zero bodies).
 
-**Still blocked in 59.3.** There is no MySQL or PostgreSQL server and no Docker in this environment, so
-the "actual MySQL/PostgreSQL integration" part cannot be run here, and H2 cannot stand in for it —
-recorded rather than claimed. Backup/restore, retention jobs and kill -9 restarts against a real database
-remain open.
+**Scope correction.** The test proves HTTP retryability only: it calls `submit_result` twice directly and
+never runs the graph. The "graph stops with the checkpoint intact" part is the evidence already recorded by
+the worker restart tests (57.3 and 58.3), not by this test. Real MySQL/PostgreSQL verification is **deferred**
+by the agreed scope (Java H2 and Python SQLite are the development acceptance targets), not blocked.
 
 **Verification (actually run).** `pytest` → **294 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.3 — A copied SQLite checkpoint finishes the pending run (2026-11-07)
+
+Backup/restore evidence at the level this build actually uses: the run is started, the submission fails,
+the worker and its connection are closed, the checkpoint **file is copied**, the original is deleted, and a
+new worker opened on the copy submits the result exactly once and keeps the draft. That treats the file —
+not the process — as the state, which is what a restore in this deployment means.
+
+Scope is corrected in the record: the 429 test covers HTTP retryability only; "the graph stopped and the
+checkpoint kept the draft" comes from the restart tests in 57.3 and 58.3. Real MySQL/PostgreSQL coverage
+stays **deferred** by the agreed H2/SQLite scope rather than reported as a current blocker.
+
+**Verification (actually run).** `pytest` → **295 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

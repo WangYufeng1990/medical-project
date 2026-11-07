@@ -687,3 +687,38 @@ def test_the_trace_keeps_the_java_trace_id_and_leaks_no_message_text(tmp_path) -
     assert canary not in exported, "the export must not contain the message text"
     assert format_traceparent(tracer.context).startswith(
         "00-4bf92f3577b34da6a3ce929d0e0e4736-")
+
+
+def test_a_copied_checkpoint_can_finish_a_pending_run(tmp_path) -> None:
+    # 59.3 backup/restore at the checkpoint level: the file, not the process, is the state.
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.mock import MockProvider
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    live = tmp_path / "live.sqlite"
+    backup = tmp_path / "backup.sqlite"
+    submitted: list[object] = []
+    request = RunStartRequest(run_id=190, message_id=1900, patient_id=100,
+                              conversation_revision=1, execution_generation=1,
+                              content="When is my next appointment?", request_id="req-backup-190")
+    credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                                  outbound_token="out")
+
+    def failing_submit(state: object) -> None:
+        raise RuntimeError("java is unreachable")
+
+    with open_checkpointer(f"sqlite://{live}") as checkpointer:
+        first = AgentWorker(MockProvider(), checkpointer, failing_submit)
+        with pytest.raises(RuntimeError):
+            first.process(request, credentials)
+    backup.write_bytes(live.read_bytes())
+    live.unlink()
+
+    with open_checkpointer(f"sqlite://{backup}") as restored:
+        worker = AgentWorker(MockProvider(), restored, submitted.append)
+        state = worker.process(request, credentials)
+
+    assert len(submitted) == 1, "the restored checkpoint finishes the pending submission"
+    assert state["draft"]
