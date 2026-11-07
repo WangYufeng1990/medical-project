@@ -7466,8 +7466,10 @@ by the agreed scope (Java H2 and Python SQLite are the development acceptance ta
 
 Backup/restore evidence at the level this build actually uses: the run is started, the submission fails,
 the worker and its connection are closed, the checkpoint **file is copied**, the original is deleted, and a
-new worker opened on the copy submits the result exactly once and keeps the draft. That treats the file —
-not the process — as the state, which is what a restore in this deployment means.
+new worker opened on the copy submits the result exactly once. Three assertions separate a restore from a
+fresh run: the checkpoint's next step is `submit_result`, the restored provider **raises if called**, and
+the submitted draft equals the draft saved before the copy. That treats the file — not the process — as
+the state.
 
 Scope is corrected in the record: the 429 test covers HTTP retryability only; "the graph stopped and the
 checkpoint kept the draft" comes from the restart tests in 57.3 and 58.3. Real MySQL/PostgreSQL coverage

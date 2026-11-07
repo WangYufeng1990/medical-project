@@ -713,12 +713,23 @@ def test_a_copied_checkpoint_can_finish_a_pending_run(tmp_path) -> None:
         first = AgentWorker(MockProvider(), checkpointer, failing_submit)
         with pytest.raises(RuntimeError):
             first.process(request, credentials)
+        snapshot = first._graph.get_state(
+            {"configurable": {"thread_id": f"run-{request.run_id}"}})
+    # The checkpoint, not a fresh run, is what the copy must carry.
+    assert snapshot.next == ("submit_result",), snapshot.next
+    original_draft = snapshot.values["draft"]
+    assert original_draft
+
     backup.write_bytes(live.read_bytes())
     live.unlink()
 
+    class ExplodingProvider:
+        def invoke_now(self, request):  # type: ignore[no-untyped-def]
+            raise AssertionError("a restored checkpoint must not classify again")
+
     with open_checkpointer(f"sqlite://{backup}") as restored:
-        worker = AgentWorker(MockProvider(), restored, submitted.append)
+        worker = AgentWorker(ExplodingProvider(), restored, submitted.append)
         state = worker.process(request, credentials)
 
     assert len(submitted) == 1, "the restored checkpoint finishes the pending submission"
-    assert state["draft"]
+    assert state["draft"] == original_draft, "the restored draft is the one that was saved"
