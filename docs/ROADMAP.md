@@ -7164,7 +7164,26 @@ increment.
 
 **Verification (actually run).** `pytest` → **275 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Trace validation, per-attempt binding, best-effort export (2026-11-06)
+
+**Strict header validation.** `parse_traceparent` accepts exactly `00-<32 lowercase hex>-<16 lowercase
+hex>-<2 hex flags>` and rejects all-zero ids; anything else (missing, wrong version, short id, garbage)
+starts a new trace. `Tracer.bind` now **always** resets the context, so a missing header no longer
+inherits the previous run's trace id.
+
+**Parent linkage.** Every exported span records `parent_span_id`, so a Java dispatch span and the Python
+node spans can be read as a parent/child chain.
+
+**Export is best effort.** A failed write (e.g. a missing directory) increments `export_errors` and is
+swallowed: the node's result is unchanged. Tests cover malformed/zero ids, rebinding after a valid
+header, the parent id in the export, and a node succeeding while the exporter fails.
+
+**Still open.** FastAPI does not yet read the `traceparent` request header or wire
+`MEDICAL_AGENT_TRACE_FILE`, and no Java side sends it; Langfuse and token/cost accounting remain.
+
+**Verification (actually run).** `pytest` → **280 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
