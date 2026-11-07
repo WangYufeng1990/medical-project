@@ -7365,7 +7365,22 @@ Test: with a mocked tracer and a 500 response, the span is tagged `http_500`, re
 **Still open.** No real OTLP collector or Langfuse instance; the Java → Python parent link over live
 HTTP is unproven.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — The exported dispatch span carries the header's ids (2026-11-07)
+
+A new test runs the client with a **real OTel SDK tracer** (`SdkTracerProvider` + `SimpleSpanProcessor`
+over a capturing `SpanExporter`), not a mock: the exported `agent.dispatch` span is ended, and its
+`traceId`/`spanId` equal the ids in the `traceparent` the agent received. That closes the Java half of
+the parent link with production plumbing — the header and the exported span are the same context.
+
+**Still open (unchanged honesty).** No OTLP collector or Langfuse instance was contacted, and the two
+services have not been run together: the Python side proves "header → node spans with that parent"
+(API test plus the default-startup probe), and Java proves "dispatch span → header". A single live
+Java → Python request is not part of this evidence.
+
+**Verification (actually run).** Java `mvn clean verify` → **421 tests, 0 failures, 1 skipped**;
+`pytest` → 289 passed, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
