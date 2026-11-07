@@ -7408,7 +7408,32 @@ it received data.
 **Verification (actually run).** Java `mvn clean verify` → **422 tests, 0 failures, 2 skipped**;
 `pytest` → 289 passed, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — The canary probe actually carries a canary (2026-11-07)
+
+The previous live run sent ordinary text, so "no canary in the export" proved nothing. The opt-in test
+now sends `PLEASE ROLL OUT canary-trace-7f3a and move my appointment?` (run 180) and the run is checked
+by a saved script, `medical-agent/evals/verify_trace_link.py`:
+
+```
+java: agent.dispatch 8678f36b33f4e489818afe4e2c9d451f / 83583a80520ff9f7
+traces: [8678f36b33f4e489818afe4e2c9d451f]  parents: [83583a80520ff9f7]
+spans: validate_content, classify_message, retrieve_evidence, read_appointment, draft_reply
+problems: []   (exit 0)
+```
+
+The script asserts the Java span ids equal the Python trace and parent, that the canary appears in
+neither the Python JSONL export nor the collector's received bytes, and that the collector received
+something. The Java side of the test also asserts the recorded span is `agent.dispatch` with a 32-hex
+trace id and 16-hex span id instead of merely "a tracer exists".
+
+**Recorded limits.** The collector still stores the Java payload as protobuf and the check is a byte
+search, not a decoded attribute audit; Langfuse itself remains uncontacted; the opt-in test is skipped
+in the default build (2 skipped).
+
+**Verification (actually run).** `pytest` → **289 passed**, `ruff` and `mypy --strict` clean (38 files);
+Java `mvn clean verify` → **422 tests, 0 failures, 2 skipped**; the link/canary script exits 0.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

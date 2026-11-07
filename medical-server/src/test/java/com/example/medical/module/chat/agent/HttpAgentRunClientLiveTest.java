@@ -24,11 +24,16 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 class HttpAgentRunClientLiveTest {
 
     @Test
-    void a_real_dispatch_exports_a_span_to_the_collector() {
+    void a_real_dispatch_exports_a_span_to_the_collector() throws java.io.IOException {
         OtlpHttpSpanExporter exporter = OtlpHttpSpanExporter.builder()
                 .setEndpoint(System.getenv("AGENT_COLLECTOR_URL"))
                 .build();
         String spanFile = System.getenv().getOrDefault("AGENT_SPAN_FILE", "/tmp/java-span.json");
+        try {
+            java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(spanFile));
+        } catch (java.io.IOException ignored) {
+            // the export is best effort in this test as well
+        }
         SpanExporter recorder = new SpanExporter() {
             @Override
             public CompletableResultCode export(Collection<SpanData> spans) {
@@ -68,11 +73,15 @@ class HttpAgentRunClientLiveTest {
             HttpAgentRunClient client = new HttpAgentRunClient(properties);
             client.setTracer(new OtelTracer(provider.get("live"), new OtelCurrentTraceContext(), null));
 
-            client.start(new AgentRunStartRequest("v1", 175L, 1750L, 100L, 1L, "PATIENT", 1L,
-                    "Can I move my appointment?", "en", "req-live-175"), "live-cap");
+            client.start(new AgentRunStartRequest("v1", 180L, 1800L, 100L, 1L, "PATIENT", 1L,
+                    "PLEASE ROLL OUT canary-trace-7f3a and move my appointment?", "en", "req-live-180"), "live-cap");
         } finally {
             provider.close();
         }
-        assertThat(provider.get("live")).isNotNull();
+        var line = java.nio.file.Files.readAllLines(
+                java.nio.file.Path.of(spanFile)).get(0);
+        assertThat(line).containsPattern("\"traceId\":\"[0-9a-f]{32}\"");
+        assertThat(line).containsPattern("\"spanId\":\"[0-9a-f]{16}\"");
+        assertThat(line).contains("agent.dispatch");
     }
 }
