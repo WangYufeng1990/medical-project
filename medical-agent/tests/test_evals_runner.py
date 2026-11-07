@@ -224,6 +224,7 @@ def test_the_budget_stops_before_the_second_case_is_measured(tmp_path) -> None:
     assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 1}
     assert payload["budget"]["requests"] == 1
     assert payload["budget"]["skipped"] == 1
+    assert "price_per_request_usd" in payload["budget"]
 
 
 def test_a_case_without_a_model_call_does_not_consume_the_budget(tmp_path) -> None:
@@ -266,3 +267,50 @@ def test_a_dollar_cap_without_a_price_is_refused(tmp_path) -> None:
 
     assert completed.returncode == 2
     assert "--price-per-request-usd" in completed.stderr
+
+
+def test_a_non_finite_dollar_cap_is_refused(tmp_path) -> None:
+    import os
+    import subprocess as sp
+
+    for price in ("nan", "inf"):
+        completed = sp.run([sys.executable, "-m", "evals.run", "--max-usd", "0.01",
+                            "--price-per-request-usd", price], cwd=ROOT,
+                           env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                           capture_output=True, text=True)
+        assert completed.returncode == 2, price
+        assert "finite" in completed.stderr
+
+
+def test_free_cases_still_run_after_the_model_budget_is_gone(tmp_path) -> None:
+    # classify -> classify -> tool with one request: the second classify is skipped, the tool runs.
+    import os
+    import subprocess as sp
+
+    dataset = tmp_path / "mixed.jsonl"
+    classify = {
+        "family": "classification", "kind": "classify", "split": "dev",
+        "message": "Where do I send my bill payment?",
+        "model_answer": json.dumps({"intents": ["BILLING"], "risk": "ROUTINE",
+                                    "confidence": 0.9}),
+        "expect": {"intents_include": ["BILLING"], "risk": "ROUTINE",
+                   "requires_clinician": False, "flags_include": []},
+    }
+    dataset.write_text("\n".join([
+        json.dumps({"id": "m1", **classify}),
+        json.dumps({"id": "m2", **classify}),
+        json.dumps({"id": "tool-1", "family": "tools", "kind": "tool", "split": "dev",
+                    "tool": "get_my_appointments", "arguments": {}, "response": [],
+                    "expect": {"needs_human": False, "fact_count": 0}}),
+    ]) + "\n")
+    report = tmp_path / "report.json"
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--cases", str(dataset),
+                        "--max-requests", "1", "--report", str(report)], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 3, completed.stdout
+    payload = json.loads(report.read_text())
+    assert payload["totals"] == {"cases": 3, "failed": 0, "skipped": 1}
+    assert payload["budget"]["requests"] == 1

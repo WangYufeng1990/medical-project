@@ -7032,7 +7032,25 @@ recalled regression where an injected message still read the appointments.
 passed**, `ruff` and `mypy --strict` clean (37 files); `--max-requests 1` reports 1 measured, 299
 skipped and exits 3.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Non-finite budgets and per-case skipping (2026-11-06)
+
+**A NaN price could disable the dollar cap.** `--max-usd 0.01 --price-per-request-usd nan` let two
+requests through and reported `spent_usd: NaN`, because every comparison with NaN is false. Startup now
+rejects a non-finite or non-positive `--max-usd` and a non-finite or non-positive
+`--price-per-request-usd` (exit 2), and the report includes `price_per_request_usd` so the assumption is
+visible.
+
+**The budget no longer stops the free cases.** The loop used to `break` on exhaustion, so a
+`classify → classify → tool` run skipped the trailing tool case. It now skips only the model-backed
+cases and keeps running tool, retrieval and validation cases; the run still exits **3** with
+`INCOMPLETE`. Tests: two classify cases with one request measure one and skip one; a classify, another
+classify and a tool case with one request skip only the second classify, run the tool, and report
+`{cases: 3, failed: 0, skipped: 1}`.
+
+**Verification (actually run).** `pytest` → **272 passed**, `ruff` and `mypy --strict` clean (37 files);
+`--max-usd 0.01 --price-per-request-usd nan` exits 2; `--max-requests 3` exits 3 with `INCOMPLETE`.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

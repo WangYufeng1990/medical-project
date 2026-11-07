@@ -397,9 +397,19 @@ def main() -> int:
                         help="recorded per-request price assumption")
     args = parser.parse_args()
 
-    if args.max_usd is not None and args.price_per_request_usd <= 0:
-        print("--max-usd needs a positive --price-per-request-usd", file=sys.stderr)
+    import math
+
+    if args.max_requests is not None and args.max_requests < 1:
+        print("--max-requests must be at least 1", file=sys.stderr)
         return 2
+    if args.max_usd is not None:
+        # A non-finite cap or price (NaN, inf) makes every comparison false and disables the limit.
+        if not math.isfinite(args.max_usd) or args.max_usd <= 0:
+            print("--max-usd must be a finite positive amount", file=sys.stderr)
+            return 2
+        if not math.isfinite(args.price_per_request_usd) or args.price_per_request_usd <= 0:
+            print("--max-usd needs a finite positive --price-per-request-usd", file=sys.stderr)
+            return 2
     global BUDGET
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
     retriever = corpus_retriever()
@@ -411,18 +421,16 @@ def main() -> int:
     per_family: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     failures: list[str] = []
     skipped = 0
-    for executed, case in enumerate(cases, start=1):
+    for case in cases:
         if case_needs_model(case) and BUDGET.exhausted():
-            # The next model request would be refused, so this and the rest were not measured.
-            skipped = len(cases) - (executed - 1)
-            print(f"budget exhausted; {skipped} case(s) not run", file=sys.stderr)
-            break
+            # This request would be refused; the case is unmeasured, but free cases still run.
+            skipped += 1
+            continue
         try:
             problems = HANDLERS[case["kind"]](case, retriever)
-        except BudgetExhausted as exhausted:
-            skipped = len(cases) - (executed - 1)
-            print(f"budget exhausted: {exhausted}; {skipped} case(s) not run", file=sys.stderr)
-            break
+        except BudgetExhausted:
+            skipped += 1
+            continue
         per_family[case["family"]][0] += 1
         if problems:
             per_family[case["family"]][1] += 1
@@ -432,6 +440,7 @@ def main() -> int:
         "manifest": manifest(retriever, cases, args.cases),
         "budget": {"requests": BUDGET.requests, "max_requests": BUDGET.max_requests,
                    "spent_usd": round(BUDGET.spent_usd, 4), "max_usd": BUDGET.max_usd,
+                   "price_per_request_usd": BUDGET.price_per_request_usd,
                    "skipped": skipped},
         "totals": {"cases": len(cases),
                    "failed": len(failures),
