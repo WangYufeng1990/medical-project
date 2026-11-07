@@ -90,6 +90,7 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert payload["totals"]["cases"] == 300
     assert payload["totals"]["failed"] == len(payload["examples"])
     assert payload["totals"]["skipped"] == 0
+    assert payload["totals"]["errors"] == 0
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(payload["per_family"])
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
@@ -132,7 +133,7 @@ def test_a_failing_dataset_writes_the_report_and_exits_one(tmp_path) -> None:
 
     assert completed.returncode == 1, "a failing case must fail the run"
     payload = json.loads(report.read_text())
-    assert payload["totals"] == {"cases": 1, "failed": 1, "skipped": 0}
+    assert payload["totals"] == {"cases": 1, "failed": 1, "skipped": 0, "errors": 0}
     assert payload["examples"], "the failing example is reported"
 
 
@@ -221,7 +222,7 @@ def test_the_budget_stops_before_the_second_case_is_measured(tmp_path) -> None:
     assert completed.returncode == 3, "an incomplete run must not exit zero"
     assert "INCOMPLETE" in completed.stdout
     payload = json.loads(report.read_text())
-    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 1}
+    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 1, "errors": 0}
     assert payload["budget"]["requests"] == 1
     assert payload["budget"]["skipped"] == 1
     assert "price_per_request_usd" in payload["budget"]
@@ -253,7 +254,7 @@ def test_a_case_without_a_model_call_does_not_consume_the_budget(tmp_path) -> No
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
     payload = json.loads(report.read_text())
-    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 0}
+    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 0, "errors": 0}
     assert payload["budget"]["requests"] == 1, "only the classify case sent a request"
 
 
@@ -312,5 +313,31 @@ def test_free_cases_still_run_after_the_model_budget_is_gone(tmp_path) -> None:
 
     assert completed.returncode == 3, completed.stdout
     payload = json.loads(report.read_text())
-    assert payload["totals"] == {"cases": 3, "failed": 0, "skipped": 1}
+    assert payload["totals"] == {"cases": 3, "failed": 0, "skipped": 1, "errors": 0}
     assert payload["budget"]["requests"] == 1
+
+
+def test_a_live_run_without_a_request_cap_is_refused() -> None:
+    import os
+    import subprocess as sp
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--provider", "deepseek"], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 2
+    assert "--max-requests" in completed.stderr
+
+
+def test_an_upstream_failure_is_an_error_not_a_pass() -> None:
+    # The product degrades to a safe answer; the evaluation must still record the upstream failure.
+    from evals import run as runner
+
+    from medical_agent.providers.base import ProviderError
+
+    class Failing:
+        def invoke_now(self, request):  # type: ignore[no-untyped-def]
+            raise ProviderError("upstream down")
+
+    with pytest.raises(runner.UpstreamError):
+        runner.BudgetedProvider(Failing()).invoke_now(object())

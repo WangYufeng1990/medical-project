@@ -7070,7 +7070,21 @@ measurement and will be reported as such, including failures.
 
 **Verification (actually run).** `pytest` → **272 passed**, `ruff` and `mypy --strict` clean (37 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Live runs need a cap; upstream errors are not passes (2026-11-06)
+
+**A live run must carry a request cap.** `--provider deepseek` without `--max-requests` now exits **2**
+before the provider is built, so there is no path to uncapped requests.
+
+**An upstream failure is recorded, not scored.** The classifier degrades to a safe routing answer by
+design, which made a provider outage look like a model pass. `BudgetedProvider` now converts a
+`ProviderError` into an `UpstreamError`; the loop counts that case as **errored** (neither passed nor
+failed), the run reports `INCOMPLETE: N not run, M errored` and exits **3**, and the report carries
+`errors`. Degradation itself is unchanged and still tested with the fixed `uncertain` cases.
+
+**Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files);
+`--provider deepseek` alone exits 2; `--max-requests 3` exits 3.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

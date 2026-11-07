@@ -46,6 +46,10 @@ CASES = Path(__file__).with_name("cases.jsonl")
 MODELS: set[str] = set()
 
 
+class UpstreamError(RuntimeError):
+    """The provider failed before an answer arrived: the case is unmeasured, not passed (59.1)."""
+
+
 class BudgetedProvider:
     """Charges the budget at the moment a request is sent, retries included (59.1 review)."""
 
@@ -54,7 +58,14 @@ class BudgetedProvider:
 
     def invoke_now(self, request):  # type: ignore[no-untyped-def]
         BUDGET.take()
-        response = self._provider.invoke_now(request)  # type: ignore[attr-defined]
+        from medical_agent.providers.base import ProviderError
+
+        try:
+            response = self._provider.invoke_now(request)  # type: ignore[attr-defined]
+        except ProviderError:
+            # The product degrades to a safe routing answer by design; an evaluation must not call
+            # that a model pass, so the case is errored and the run is incomplete (59.1 review).
+            raise UpstreamError("provider unavailable") from None
         model = getattr(response, "model", None)
         if model:
             MODELS.add(str(model))
@@ -450,6 +461,10 @@ def main() -> int:
             return 2
     global BUDGET, LIVE_PROVIDER
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
+    if args.provider == "deepseek" and args.max_requests is None:
+        # A live run without a request cap has no hard stop; refuse before building the provider.
+        print("--provider deepseek requires --max-requests", file=sys.stderr)
+        return 2
     if args.provider == "deepseek":
         LIVE_PROVIDER = _live_provider()
         if LIVE_PROVIDER is None:
@@ -463,6 +478,7 @@ def main() -> int:
     per_family: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     failures: list[str] = []
     skipped = 0
+    errors = 0
     for case in cases:
         if case_needs_model(case) and BUDGET.exhausted():
             # This request would be refused; the case is unmeasured, but free cases still run.
@@ -472,6 +488,9 @@ def main() -> int:
             problems = HANDLERS[case["kind"]](case, retriever)
         except BudgetExhausted:
             skipped += 1
+            continue
+        except UpstreamError:
+            errors += 1
             continue
         per_family[case["family"]][0] += 1
         if problems:
@@ -486,7 +505,8 @@ def main() -> int:
                    "skipped": skipped},
         "totals": {"cases": len(cases),
                    "failed": len(failures),
-                   "skipped": skipped},
+                   "skipped": skipped,
+                   "errors": errors},
         "per_family": {family: {"total": total, "failed": failed}
                        for family, (total, failed) in sorted(per_family.items())},
         "examples": failures,
@@ -503,9 +523,9 @@ def main() -> int:
         for failure in failures:
             print("  " + failure)
         return 1
-    if skipped:
+    if skipped or errors:
         # A release gate must not read a partial run as complete (59.1 review).
-        print(f"\nINCOMPLETE: {skipped} case(s) were not run")
+        print(f"\nINCOMPLETE: {skipped} case(s) not run, {errors} errored")
         return 3
     print("\nall cases passed")
     return 0
