@@ -6767,7 +6767,7 @@ cover.
 |---|---|---|---|
 | 59.1 Golden dataset/regression | P1 / **Done** (2026-11-06; 300 dev + 27 held-out, live-model run recorded) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / **In progress** (2026-11-06; Python trace continuation and export masking done) | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
-| 59.3 Fault/database verification | P1 / Pending | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
+| 59.3 Fault/database verification | P1 / **In progress** (2026-11-07; submit-refusal retryability covered, real MySQL/PostgreSQL blocked) | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
 | 59.4 Portfolio/demo | P1 / Pending | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
 | 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
 
@@ -7445,7 +7445,24 @@ spans listed and `problems: []`.
 
 **Verification (actually run).** `pytest` → **292 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.3 — A refused submission stays retryable (2026-11-07)
+
+First increment of the fault slice, on the boundary that matters most: a result Java refuses must not be
+silently lost. `submit_result` already propagates the HTTP error, so the graph stops with the checkpoint
+still holding the draft and no accepted receipt; the test makes that explicit against a local Java stub.
+
+Tests (`tests/test_submit_faults.py`): a 429 raises `httpx.HTTPStatusError`, the result is **not**
+recorded as accepted, and a second attempt sends it again and succeeds (two bodies observed); a receipt
+that says `accepted: true` stops a resend entirely (zero bodies).
+
+**Still blocked in 59.3.** There is no MySQL or PostgreSQL server and no Docker in this environment, so
+the "actual MySQL/PostgreSQL integration" part cannot be run here, and H2 cannot stand in for it —
+recorded rather than claimed. Backup/restore, retention jobs and kill -9 restarts against a real database
+remain open.
+
+**Verification (actually run).** `pytest` → **294 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
