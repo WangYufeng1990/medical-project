@@ -7084,7 +7084,24 @@ failed), the run reports `INCOMPLETE: N not run, M errored` and exits **3**, and
 **Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files);
 `--provider deepseek` alone exits 2; `--max-requests 3` exits 3.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — A degraded answer is not a model pass (2026-11-06)
+
+The earlier fix converted `ProviderError` into `UpstreamError`, but the classifier catches the provider
+failure first and answers from the rules, so the exception never reached the evaluation loop: a stubbed
+outage still printed `all cases passed` with `errors: 0`. `BudgetedProvider` now counts the failure in
+`UPSTREAM_ERRORS` and re-raises; the product's fail-safe degradation is untouched. In a live run the
+loop compares the counter around each case and counts it as **errored** when it rose, so a degraded
+answer is neither a pass nor a failure, the run prints `INCOMPLETE: N not run, M errored` and exits
+**3**. Canned cases (including the fixed `uncertain` degradation tests) do not touch the counter,
+because it only applies when a live provider is in use.
+
+Test: a real classification case against a provider that raises `ProviderError` returns exit **3** with
+`errors: 1` and `failed: 0` — through `runner.main`, not just the wrapper.
+
+**Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files);
+`--provider deepseek` without a cap still exits 2.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

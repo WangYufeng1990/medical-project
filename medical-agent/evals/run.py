@@ -46,10 +46,6 @@ CASES = Path(__file__).with_name("cases.jsonl")
 MODELS: set[str] = set()
 
 
-class UpstreamError(RuntimeError):
-    """The provider failed before an answer arrived: the case is unmeasured, not passed (59.1)."""
-
-
 class BudgetedProvider:
     """Charges the budget at the moment a request is sent, retries included (59.1 review)."""
 
@@ -57,15 +53,19 @@ class BudgetedProvider:
         self._provider = provider
 
     def invoke_now(self, request):  # type: ignore[no-untyped-def]
+        global UPSTREAM_ERRORS
+
         BUDGET.take()
         from medical_agent.providers.base import ProviderError
 
         try:
             response = self._provider.invoke_now(request)  # type: ignore[attr-defined]
         except ProviderError:
-            # The product degrades to a safe routing answer by design; an evaluation must not call
-            # that a model pass, so the case is errored and the run is incomplete (59.1 review).
-            raise UpstreamError("provider unavailable") from None
+            # The classifier catches this and degrades to a safe routing answer by design. The
+            # counter lets the evaluation mark that case as errored instead of a model pass, without
+            # changing the product's fail-safe behaviour (59.1 review).
+            UPSTREAM_ERRORS += 1
+            raise
         model = getattr(response, "model", None)
         if model:
             MODELS.add(str(model))
@@ -73,6 +73,7 @@ class BudgetedProvider:
 
 
 LIVE_PROVIDER: object | None = None
+UPSTREAM_ERRORS = 0
 
 
 def model_provider(case: dict) -> object:
@@ -459,8 +460,9 @@ def main() -> int:
         if not math.isfinite(args.price_per_request_usd) or args.price_per_request_usd <= 0:
             print("--max-usd needs a finite positive --price-per-request-usd", file=sys.stderr)
             return 2
-    global BUDGET, LIVE_PROVIDER
+    global BUDGET, LIVE_PROVIDER, UPSTREAM_ERRORS
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
+    UPSTREAM_ERRORS = 0
     if args.provider == "deepseek" and args.max_requests is None:
         # A live run without a request cap has no hard stop; refuse before building the provider.
         print("--provider deepseek requires --max-requests", file=sys.stderr)
@@ -484,12 +486,14 @@ def main() -> int:
             # This request would be refused; the case is unmeasured, but free cases still run.
             skipped += 1
             continue
+        before = UPSTREAM_ERRORS
         try:
             problems = HANDLERS[case["kind"]](case, retriever)
         except BudgetExhausted:
             skipped += 1
             continue
-        except UpstreamError:
+        if LIVE_PROVIDER is not None and before < UPSTREAM_ERRORS:
+            # A degraded answer is not a model pass (59.1 review).
             errors += 1
             continue
         per_family[case["family"]][0] += 1

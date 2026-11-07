@@ -329,15 +329,30 @@ def test_a_live_run_without_a_request_cap_is_refused() -> None:
     assert "--max-requests" in completed.stderr
 
 
-def test_an_upstream_failure_is_an_error_not_a_pass() -> None:
-    # The product degrades to a safe answer; the evaluation must still record the upstream failure.
+def test_an_upstream_failure_is_an_error_not_a_pass(tmp_path, monkeypatch) -> None:
+    # Through the real classification path: the product degrades, the evaluation records it.
     from evals import run as runner
 
     from medical_agent.providers.base import ProviderError
+
+    dataset = tmp_path / "one.jsonl"
+    dataset.write_text(json.dumps({
+        "id": "live-1", "family": "classification", "kind": "classify", "split": "dev",
+        "message": "I have chest pain", "model_answer": "{}",
+        "expect": {"intents_include": [], "risk": "EMERGENCY", "requires_clinician": True,
+                   "flags_include": ["emergency:chest_pain"]},
+    }) + "\n")
+    report = tmp_path / "report.json"
 
     class Failing:
         def invoke_now(self, request):  # type: ignore[no-untyped-def]
             raise ProviderError("upstream down")
 
-    with pytest.raises(runner.UpstreamError):
-        runner.BudgetedProvider(Failing()).invoke_now(object())
+    monkeypatch.setattr(runner, "LIVE_PROVIDER", Failing())
+    monkeypatch.setattr(sys, "argv", ["run.py", "--cases", str(dataset),
+                                      "--max-requests", "1", "--report", str(report)])
+
+    assert runner.main() == 3
+    payload = json.loads(report.read_text())
+    assert payload["totals"]["errors"] == 1
+    assert payload["totals"]["failed"] == 0
