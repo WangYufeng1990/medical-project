@@ -78,7 +78,10 @@ class OtlpExporter:
         try:
             import httpx
 
-            httpx.post(self.endpoint, json=body, headers=self.headers, timeout=self.timeout)
+            response = httpx.post(self.endpoint, json=body, headers=self.headers,
+                                  timeout=self.timeout)
+            if response.status_code >= 300:
+                self.failures += 1
         except Exception:
             self.failures += 1
 
@@ -137,7 +140,7 @@ class Tracer:
             status = "error"
             raise
         finally:
-            if self.path is not None:
+            if self.path is not None or self.otlp is not None:
                 record = {"trace_id": context.trace_id, "span_id": span_id,
                           "parent_span_id": parent_id,
                           "name": name, "start": started, "end": time.time(),
@@ -145,16 +148,15 @@ class Tracer:
                           "status": status,
                           "attributes": {key: value for key, value in attributes.items()
                                          if value is not None}}
-                exported = False
                 if self.path is not None:
                     try:
                         with self.path.open("a", encoding="utf-8") as handle:
                             handle.write(json.dumps(record, sort_keys=True) + "\n")
-                        exported = True
                     except OSError:
                         # Best effort: a broken exporter must not change the task's result.
                         self.export_errors += 1
-                if self.otlp is not None and exported:
+                # The two sinks are independent: a broken JSONL path must not stop the collector.
+                if self.otlp is not None:
                     self.otlp.export([record])
 
 

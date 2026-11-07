@@ -7300,7 +7300,31 @@ collector on a closed port leaves the node successful with `failures == 1`.
 
 **Verification (actually run).** `pytest` → **287 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — OTLP enabled from configuration, sinks independent (2026-11-06)
+
+Three defects kept the exporter from being usable:
+
+- **The app never built the OTLP exporter.** `Settings` gained `otlp_endpoint`
+  (`MEDICAL_AGENT_OTLP_ENDPOINT`) and the app constructs `Tracer(trace_file, otlp=OtlpExporter(...))`,
+  so the variable now takes effect.
+- **OTLP depended on the JSONL write.** The two sinks are executed independently; a span with no JSONL
+  path, or an unwritable one, still reaches the collector.
+- **A rejecting collector counted as success.** Any HTTP status ≥ 300 increments `failures`; the node
+  still succeeds.
+
+Tests: a collector on a closed port reached from a tracer with **no JSONL path** receives the span
+(`failures == 1` on connection error and delivery still attempted); a collector answering 500 makes
+`failures == 1`; the earlier local-collector test still checks the payload shape. Running
+`tracer_from_env()` with `MEDICAL_AGENT_OTLP_ENDPOINT` set shows `otlp endpoint: .../otel` and one
+failure against the closed port.
+
+**Recorded limit.** This is an OTLP prototype: a real Langfuse endpoint also needs its full traces URL
+and auth headers, and no Langfuse instance was contacted. The Java dispatch is still a correlated log
+line, not a span.
+
+**Verification (actually run).** `pytest` → **289 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

@@ -25,7 +25,7 @@ from medical_agent.providers.base import Provider
 from medical_agent.providers.factory import build_provider
 from medical_agent.schemas.run import CONTRACT_VERSION, RunStartRequest
 from medical_agent.tools.http_client import java_reader
-from medical_agent.trace import Tracer
+from medical_agent.trace import OtlpExporter, Tracer
 from medical_agent.worker import AgentWorker
 
 
@@ -99,7 +99,8 @@ def create_app(
                 checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
                 retriever = _open_retriever(settings)
                 tool_client = java_reader(settings.java_base_url)
-                tracer = Tracer(settings.trace_file)
+                otlp = OtlpExporter(settings.otlp_endpoint) if settings.otlp_endpoint else None
+                tracer = Tracer(settings.trace_file, otlp=otlp)
                 active_worker = AgentWorker(active_provider, checkpointer,
                                            max_prompt_chars=settings.max_prompt_chars,
                                            retriever=retriever, tool_client=tool_client,

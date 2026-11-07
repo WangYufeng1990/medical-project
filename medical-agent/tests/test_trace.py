@@ -179,3 +179,62 @@ def test_a_dead_collector_does_not_fail_the_node(tmp_path: Path) -> None:
     with tracer.span("classify_message"):
         pass
     assert tracer.otlp is not None and tracer.otlp.failures == 1
+
+
+def test_otlp_runs_even_without_a_jsonl_path() -> None:
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    received: list[dict[str, object]] = []
+
+    class Collector(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            received.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Collector)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        tracer = Tracer(None, otlp=OtlpExporter(
+            f"http://127.0.0.1:{server.server_address[1]}/otel"))
+        with tracer.span("classify_message"):
+            pass
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert received, "OTLP must not depend on the JSONL sink"
+
+
+def test_a_collector_that_rejects_the_payload_counts_as_a_failure() -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Rejecting(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.send_response(500)
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Rejecting)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    exporter = OtlpExporter(f"http://127.0.0.1:{server.server_address[1]}/otel")
+    try:
+        with Tracer(None, otlp=exporter).span("classify_message"):
+            pass
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert exporter.failures == 1
