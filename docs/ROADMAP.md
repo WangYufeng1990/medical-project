@@ -7231,7 +7231,30 @@ services) has not been run; the evidence so far is the two unit-level tests plus
 **Verification (actually run).** Java `mvn clean verify` → **417 tests, 0 failures, 1 skipped**;
 `pytest` → 282 passed, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Cross-service probe through the default startup path (2026-11-06)
+
+**Failed dispatches keep their trace id.** `HttpAgentRunClient` logged only after a successful
+response, so a dispatch the agent received but never answered had no Java-side id to join. Every path
+now calls `logDispatch(run, traceparent, startedAt, outcome)` with `ok`, `http_<status>`, `unreachable`
+or `client_error`; the line carries the trace id, duration and outcome, never the request or response
+body. Test: a 500 response throws `AGENT_HTTP_500` and logs `outcome=http_500` with a matching
+traceparent and no request text.
+
+**The end-to-end probe now uses the default startup path.** A uvicorn instance started only from
+environment variables (`MEDICAL_AGENT_TRACE_FILE`, tokens, `MEDICAL_AGENT_PROVIDER=mock`) received one
+dispatch with `traceparent: 00-1111…-2222…-01`. The JSONL export contains `validate_content`,
+`classify_message`, `retrieve_evidence`, `read_appointment`, `draft_reply`, **all** under trace
+`1111…` with parent `2222…`. The response was **500** because `MEDICAL_AGENT_JAVA_BASE_URL` pointed at a
+closed port, so the submit failed — the probe covers the environment variable, the header binding and
+the parent/child export, not a successful submission.
+
+**Still open in 59.2.** Langfuse export, token/cost accounting that separates measured usage from the
+price assumption, and a Java-side OTel span (the dispatch is still a log line, not a span).
+
+**Verification (actually run).** Java `mvn clean verify` → **418 tests, 0 failures, 1 skipped**;
+`pytest` → **282 passed**, `ruff` and `mypy --strict` clean (38 files); the probe output above.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

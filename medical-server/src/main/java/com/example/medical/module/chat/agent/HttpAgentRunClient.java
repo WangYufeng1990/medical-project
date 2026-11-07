@@ -53,17 +53,28 @@ public class HttpAgentRunClient implements AgentRunClient {
         } catch (HttpStatusCodeException answered) {
             // Status only. The body may echo the rejected input, and that input is patient
             // text: it must not reach the queue's error column or the logs.
+            logDispatch(request, traceparent, startedAt, "http_" + answered.getStatusCode().value());
             throw new AgentDispatchException("AGENT_HTTP_" + answered.getStatusCode().value(),
                     "agent service answered " + answered.getStatusCode().value());
         } catch (ResourceAccessException unreachable) {
+            logDispatch(request, traceparent, startedAt, "unreachable");
             throw new AgentDispatchException("AGENT_UNREACHABLE", "agent service could not be reached");
         } catch (RestClientException failure) {
+            logDispatch(request, traceparent, startedAt, "client_error");
             throw new AgentDispatchException("AGENT_CLIENT_ERROR", "the agent request could not be completed");
         }
-        // The span id in this header is the parent the agent records for its node spans; the
-        // dispatch span itself is this line (no OTel SDK on the classpath yet, Round 59.2).
-        log.debug("Agent dispatch run={} traceparent={} durationMs={}", request.runId(), traceparent,
-                (System.nanoTime() - startedAt) / 1_000_000);
+        logDispatch(request, traceparent, startedAt, "ok");
+    }
+
+    /**
+     * Success and failure both carry the trace id, its duration and an outcome class, so a dispatch
+     * that the agent received but Java never saw answered can still be joined to its spans. Nothing
+     * from the request or the response body is logged (Round 59.2 review).
+     */
+    private void logDispatch(AgentRunStartRequest request, String traceparent, long startedAt,
+                             String outcome) {
+        log.debug("Agent dispatch run={} traceparent={} durationMs={} outcome={}", request.runId(),
+                traceparent, (System.nanoTime() - startedAt) / 1_000_000, outcome);
     }
 
     private static String newTraceparent() {
