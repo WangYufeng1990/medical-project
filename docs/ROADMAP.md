@@ -7128,9 +7128,24 @@ with the expected severity, and the input is now used — the set is no longer p
 be validated on dev and a fresh held-out authored before the next release measurement.
 
 **Status.** 59.1 is Done: 300 dev + 27 held-out cases, per-family denominators, failure examples, and a
-run identity (dataset SHA-256, model ids, prompt hash, KB version, commit) in every report.
+run identity (dataset SHA-256, model ids, prompt hash, KB version, commit) in every report. The
+first held-out report predates the per-class breakdown below, so it carries per-family numbers only.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Per-class metrics (2026-11-06)
+
+The completion gate asks for `per-class` metrics; the report only had per-family totals. Classification
+cases are now also counted by **severity** (`risk:EMERGENCY|URGENT|ROUTINE`) and **intent**
+(`intent:BILLING`, …) with `{total, failed}` each, so an error can be read per class rather than per
+family. The dev report shows EMERGENCY 71, URGENT 28, ROUTINE 27 and every intent with non-zero
+denominators; a test asserts the breakdown is present.
+
+The already-recorded held-out report was produced before this and keeps its per-family numbers; it is
+not re-run, because the set has been measured once and re-running it would not be a held-out measurement
+any more.
+
+**Verification (actually run).** `pytest` → **274 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

@@ -93,6 +93,9 @@ def test_the_report_carries_the_run_identity_and_denominators(tmp_path) -> None:
     assert payload["totals"]["errors"] == 0
     assert {"classification", "uncertainty", "retrieval", "citations", "validation", "graph",
             "tools", "attacks"} <= set(payload["per_family"])
+    assert "risk:EMERGENCY" in payload["per_class"], "classification is broken down by class"
+    assert "intent:BILLING" in payload["per_class"]
+    assert all(entry["total"] > 0 for entry in payload["per_class"].values())
     assert all(entry["total"] > 0 for entry in payload["per_family"].values())
 
 

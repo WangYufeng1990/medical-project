@@ -425,6 +425,16 @@ def _live_provider() -> object | None:
         return None
 
 
+def _class_labels(case: dict) -> list[str]:
+    """Intent and severity labels, so a report can show errors per class (59.1 review)."""
+    if case["family"] != "classification":
+        return []
+    expect = case["expect"]
+    labels = [f"risk:{expect['risk']}"]
+    labels += [f"intent:{intent}" for intent in expect.get("intents_include") or []]
+    return labels
+
+
 def case_needs_model(case: dict) -> bool:
     """Only these kinds send a request; the rest must not be charged or skipped (59.1 review)."""
     return case["kind"] in {"classify", "uncertain", "graph"}
@@ -481,6 +491,7 @@ def main() -> int:
     failures: list[str] = []
     skipped = 0
     errors = 0
+    per_class: dict[str, dict[str, int]] = {}
     for case in cases:
         if case_needs_model(case) and BUDGET.exhausted():
             # This request would be refused; the case is unmeasured, but free cases still run.
@@ -496,6 +507,10 @@ def main() -> int:
             # A degraded answer is not a model pass (59.1 review).
             errors += 1
             continue
+        for label in _class_labels(case):
+            entry = per_class.setdefault(label, {"total": 0, "failed": 0})
+            entry["total"] += 1
+            entry["failed"] += 1 if problems else 0
         per_family[case["family"]][0] += 1
         if problems:
             per_family[case["family"]][1] += 1
@@ -511,6 +526,7 @@ def main() -> int:
                    "failed": len(failures),
                    "skipped": skipped,
                    "errors": errors},
+        "per_class": dict(sorted(per_class.items())),
         "per_family": {family: {"total": total, "failed": failed}
                        for family, (total, failed) in sorted(per_family.items())},
         "examples": failures,
