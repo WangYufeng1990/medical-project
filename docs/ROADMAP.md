@@ -7050,7 +7050,27 @@ classify and a tool case with one request skip only the second classify, run the
 **Verification (actually run).** `pytest` → **272 passed**, `ruff` and `mypy --strict` clean (37 files);
 `--max-usd 0.01 --price-per-request-usd nan` exits 2; `--max-requests 3` exits 3 with `INCOMPLETE`.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Live-model wiring smoke (2026-11-06)
+
+`evals/run.py --provider deepseek` builds the real `DeepSeekProvider` from the local `.env`
+(`MEDICAL_AGENT_DEEPSEEK_API_KEY`, never printed), and the manifest records `provider: deepseek` and the
+model ids the responses report (`deepseek-chat`). The hard limits apply unchanged: the budget is charged
+per request and non-model cases keep running after it is exhausted.
+
+**Runs (actually executed, small on purpose):**
+- `--provider deepseek --max-requests 3` → 3 classification cases, 3/3 passed, 175 skipped, exit 3
+  (`INCOMPLETE`), manifest `provider: deepseek`, `models: ["deepseek-chat"]`.
+- `--provider deepseek --family classification --max-requests 8 --max-usd 0.10
+  --price-per-request-usd 0.002` → 8/8 passed, 8 requests, recorded spend 0.016, 118 skipped, exit 3.
+
+These are **wiring smokes on dev classification cases**, not a held-out measurement and not an accuracy
+claim: eight cases cannot support one. The cost figure is the recorded per-request assumption, not the
+provider's bill. The held-out set (27 cases) remains unexecuted; its first run is the release
+measurement and will be reported as such, including failures.
+
+**Verification (actually run).** `pytest` → **272 passed**, `ruff` and `mypy --strict` clean (37 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

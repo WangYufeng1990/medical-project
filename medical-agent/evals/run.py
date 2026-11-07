@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import tempfile
 from collections import defaultdict
@@ -23,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from medical_agent.checkpoints import open_checkpointer  # noqa: E402
 from medical_agent.classification.classifier import PROMPT_TEMPLATE, Classifier  # noqa: E402
+from medical_agent.config import load_settings  # noqa: E402
 from medical_agent.graph.nodes import DraftBlocked  # noqa: E402
 from medical_agent.java_client import CallCredentials  # noqa: E402
 from medical_agent.kb.chunking import Chunk  # noqa: E402
@@ -52,7 +54,22 @@ class BudgetedProvider:
 
     def invoke_now(self, request):  # type: ignore[no-untyped-def]
         BUDGET.take()
-        return self._provider.invoke_now(request)  # type: ignore[attr-defined]
+        response = self._provider.invoke_now(request)  # type: ignore[attr-defined]
+        model = getattr(response, "model", None)
+        if model:
+            MODELS.add(str(model))
+        return response
+
+
+LIVE_PROVIDER: object | None = None
+
+
+def model_provider(case: dict) -> object:
+    """The live provider when the run asked for one, otherwise the case's canned answer."""
+    if LIVE_PROVIDER is not None:
+        return BudgetedProvider(LIVE_PROVIDER)
+    return BudgetedProvider(
+        MockProvider() if case["model_answer"] is None else CannedProvider(case["model_answer"]))
 
 
 class BudgetExhausted(RuntimeError):
@@ -138,8 +155,7 @@ def contains(actual: list[str], expected: list[str]) -> bool:
 
 def check_classify(case: dict, retriever: Retriever) -> list[str]:
     expect = case["expect"]
-    provider = BudgetedProvider(
-        MockProvider() if case["model_answer"] is None else CannedProvider(case["model_answer"]))
+    provider = model_provider(case)
     decision = Classifier(provider).classify(case["message"])
     problems: list[str] = []
     if not contains([intent.value for intent in decision.intents], expect["intents_include"]):
@@ -155,8 +171,9 @@ def check_classify(case: dict, retriever: Retriever) -> list[str]:
 
 def check_uncertain(case: dict, retriever: Retriever) -> list[str]:
     expect = case["expect"]
-    provider = BudgetedProvider(
-        CannedProvider(case["model_answer"], case.get("provider_error")))
+    provider = (BudgetedProvider(LIVE_PROVIDER) if LIVE_PROVIDER is not None
+                else BudgetedProvider(
+                    CannedProvider(case["model_answer"], case.get("provider_error"))))
     decision = Classifier(provider).classify(case["message"])
     problems: list[str] = []
     if RISK_ORDER[decision.risk] < RISK_ORDER[RiskLevel(expect["risk_at_least"])]:
@@ -296,7 +313,7 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
 
 
 def check_graph(case: dict, retriever: Retriever) -> list[str]:
-    provider = BudgetedProvider(CannedProvider(case["model_answer"]))
+    provider = model_provider(case)
     tool_calls: list[str] = []
     tool_client = ((lambda path, timeout: tool_calls.append(path) or [])
                    if "tool_calls" in case["expect"] else None)
@@ -369,12 +386,31 @@ def manifest(retriever: Retriever, cases: list[dict], path: Path) -> dict:
         "dataset_sha256": hashlib.sha256(dataset).hexdigest(),
         "cases": len(cases),
         "splits": sorted({case.get("split") for case in cases}),
-        "provider": "mock-or-canned",
+        "provider": "deepseek" if LIVE_PROVIDER is not None else "mock-or-canned",
         "models": sorted(MODELS),
         "prompt_version": "sha256:" + hashlib.sha256(PROMPT_TEMPLATE.encode()).hexdigest(),
         "kb_version": f"{version.id}:{version.chunk_count}",
         "commit": commit,
     }
+
+
+def _live_provider() -> object | None:
+    """The DeepSeek provider, with the local .env loaded without printing its values."""
+    env_file = ROOT / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                name, value = line.split("=", 1)
+                os.environ.setdefault(name.strip(), value.strip())
+    os.environ.setdefault("MEDICAL_AGENT_PROVIDER", "deepseek")
+    try:
+        from medical_agent.providers.deepseek import DeepSeekProvider
+
+        return DeepSeekProvider(load_settings())
+    except Exception as error:  # a missing key or bad config must be a clear refusal
+        print(f"cannot build the live provider: {type(error).__name__}", file=sys.stderr)
+        return None
 
 
 def case_needs_model(case: dict) -> bool:
@@ -395,6 +431,8 @@ def main() -> int:
                         help="hard cap on estimated cost for this run")
     parser.add_argument("--price-per-request-usd", type=float, default=0.0,
                         help="recorded per-request price assumption")
+    parser.add_argument("--provider", choices=("canned", "deepseek"), default="canned",
+                        help="canned answers, or the live DeepSeek model")
     args = parser.parse_args()
 
     import math
@@ -410,8 +448,12 @@ def main() -> int:
         if not math.isfinite(args.price_per_request_usd) or args.price_per_request_usd <= 0:
             print("--max-usd needs a finite positive --price-per-request-usd", file=sys.stderr)
             return 2
-    global BUDGET
+    global BUDGET, LIVE_PROVIDER
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
+    if args.provider == "deepseek":
+        LIVE_PROVIDER = _live_provider()
+        if LIVE_PROVIDER is None:
+            return 2
     retriever = corpus_retriever()
     cases = load_cases(args.cases, args.family, args.split)
     if not cases:
