@@ -57,12 +57,29 @@ class DeepSeekProvider:
             raise ProviderError("deepseek answered with an unexpected shape") from None
         if not isinstance(text, str) or not text.strip():
             raise ProviderError("deepseek answered with no text")
-        usage = response.json().get("usage") or {}
+        prompt_tokens, completion_tokens = _usage_tokens(response.json().get("usage"))
         return ProviderResponse(
             text=text,
             provider=self.name,
             model=self._model,
             latency_ms=int((perf_counter() - started) * 1000),
-            prompt_tokens=usage.get("prompt_tokens"),
-            completion_tokens=usage.get("completion_tokens"),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
+
+
+def _usage_tokens(usage: object) -> tuple[int | None, int | None]:
+    """Usage is optional statistics: a malformed block means "not measured", not a failed answer.
+
+    The answer itself is kept, the tokens become None, and nothing from the response is logged
+    (Round 59.2 review).
+    """
+    if not isinstance(usage, dict):
+        return None, None
+    prompt = usage.get("prompt_tokens")
+    completion = usage.get("completion_tokens")
+    if (isinstance(prompt, bool) or isinstance(completion, bool)
+            or not isinstance(prompt, int) or not isinstance(completion, int)
+            or prompt < 0 or completion < 0):
+        return None, None
+    return prompt, completion

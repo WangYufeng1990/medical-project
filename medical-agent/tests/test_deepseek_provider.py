@@ -139,3 +139,26 @@ def test_an_unreachable_model_is_a_failure() -> None:
 
     with pytest.raises(ProviderError, match="could not be reached"):
         provider.invoke_now(ProviderRequest(prompt="x"))
+
+
+def test_usage_is_kept_when_reported(model_server: str) -> None:
+    StubModel.body = json.dumps({
+        "choices": [{"message": {"content": "{}"}}],
+        "usage": {"prompt_tokens": 21, "completion_tokens": 5},
+    })
+    response = provider_for(model_server).invoke_now(
+        ProviderRequest(prompt="x", max_output_tokens=8))
+
+    assert (response.prompt_tokens, response.completion_tokens) == (21, 5)
+
+
+def test_malformed_usage_leaves_the_answer_intact_and_tokens_unmeasured(model_server: str) -> None:
+    # Statistics must not break message handling (59.2 review).
+    for usage in ("not-a-dict", {"prompt_tokens": -3, "completion_tokens": 5},
+                  {"prompt_tokens": "21", "completion_tokens": 5}, None):
+        StubModel.body = json.dumps({"choices": [{"message": {"content": "{}"}}], "usage": usage})
+        response = provider_for(model_server).invoke_now(
+            ProviderRequest(prompt="x", max_output_tokens=8))
+
+        assert response.text == "{}", usage
+        assert (response.prompt_tokens, response.completion_tokens) == (None, None), usage

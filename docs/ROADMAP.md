@@ -7274,7 +7274,20 @@ responses counted — and the report keeps tokens null when nothing was measured
 
 **Verification (actually run).** `pytest` → **283 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — Malformed usage cannot break an answer (2026-11-06)
+
+Reading `usage` straight from the response let a string block raise `AttributeError` and negative or
+string counts raise `ValidationError`, so a statistics field could fail the classification path without
+registering as an upstream error. `_usage_tokens` now validates the block on its own: if it is not a
+mapping, or either count is not a non-negative integer (booleans excluded), the tokens are reported as
+**not measured** and the answer is returned unchanged. Nothing from the response is logged.
+
+Tests: a valid block yields 21/5; a string block, negative counts, string counts and `null` each leave
+the answer `{}` intact with both tokens `None`.
+
+**Verification (actually run).** `pytest` → **285 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
