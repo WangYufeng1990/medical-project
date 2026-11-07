@@ -218,8 +218,51 @@ def test_the_budget_stops_before_the_second_case_is_measured(tmp_path) -> None:
                        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
                        capture_output=True, text=True)
 
-    assert completed.returncode == 0, "a skipped case is not a failure"
+    assert completed.returncode == 3, "an incomplete run must not exit zero"
+    assert "INCOMPLETE" in completed.stdout
     payload = json.loads(report.read_text())
     assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 1}
     assert payload["budget"]["requests"] == 1
     assert payload["budget"]["skipped"] == 1
+
+
+def test_a_case_without_a_model_call_does_not_consume_the_budget(tmp_path) -> None:
+    # A tool case runs first and must not spend the single allowed request (59.1 review).
+    import os
+    import subprocess as sp
+
+    dataset = tmp_path / "mixed.jsonl"
+    dataset.write_text("\n".join([
+        json.dumps({"id": "tool-1", "family": "tools", "kind": "tool", "split": "dev",
+                    "tool": "get_my_appointments", "arguments": {}, "response": [],
+                    "expect": {"needs_human": False, "fact_count": 0}}),
+        json.dumps({"id": "model-1", "family": "classification", "kind": "classify",
+                    "split": "dev", "message": "Where do I send my bill payment?",
+                    "model_answer": json.dumps({"intents": ["BILLING"], "risk": "ROUTINE",
+                                                "confidence": 0.9}),
+                    "expect": {"intents_include": ["BILLING"], "risk": "ROUTINE",
+                               "requires_clinician": False, "flags_include": []}}),
+    ]) + "\n")
+    report = tmp_path / "mixed-report.json"
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--cases", str(dataset),
+                        "--max-requests", "1", "--report", str(report)], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    payload = json.loads(report.read_text())
+    assert payload["totals"] == {"cases": 2, "failed": 0, "skipped": 0}
+    assert payload["budget"]["requests"] == 1, "only the classify case sent a request"
+
+
+def test_a_dollar_cap_without_a_price_is_refused(tmp_path) -> None:
+    import os
+    import subprocess as sp
+
+    completed = sp.run([sys.executable, "-m", "evals.run", "--max-usd", "1"], cwd=ROOT,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                       capture_output=True, text=True)
+
+    assert completed.returncode == 2
+    assert "--price-per-request-usd" in completed.stderr

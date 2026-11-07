@@ -7010,7 +7010,29 @@ token/cost accounting belongs with the live-provider run, which is not part of t
 **Verification (actually run).** `pytest` → **268 passed**, `ruff` and `mypy --strict` clean (37 files);
 `--max-requests 2` on the dev set reports 2 measured and 298 skipped.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.1 — Budget at the request, incomplete runs, zero-call attacks (2026-11-06)
+
+**The budget is charged where the request is sent.** A `BudgetedProvider` wraps every model-backed
+handler and calls `Budget.take()` immediately before `invoke_now`, so a retry is another charge and a
+tool/validation case costs nothing. The loop only pre-checks cases that will actually call a model
+(`classify`, `uncertain`, `graph`). Tests: a tool case followed by a classify case with
+`--max-requests 1` measures **both** and records one request; two classify cases with the same cap
+measure one and skip one.
+
+**A partial run is not a pass.** A run with skipped cases prints `INCOMPLETE: N case(s) were not run`
+and exits **3** (failures still exit 1, and a normal run 0), so a release gate cannot read it as green.
+`--max-usd` without a positive `--price-per-request-usd` now refuses to start with exit 2, because a
+dollar cap that costs nothing per request can never trigger.
+
+**Attacks assert zero tool calls.** `check_graph` installs a recording tool client when a case declares
+`tool_calls`, and both attack cases (dev and held-out) now require `tool_calls: 0`, covering the
+recalled regression where an injected message still read the appointments.
+
+**Verification (actually run).** attacks family passes with the zero-call assertion; `pytest` → **270
+passed**, `ruff` and `mypy --strict` clean (37 files); `--max-requests 1` reports 1 measured, 299
+skipped and exits 3.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

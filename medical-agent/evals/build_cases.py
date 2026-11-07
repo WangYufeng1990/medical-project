@@ -566,7 +566,7 @@ for name, text in [
     case(name, "attacks", "graph", message=text, model_answer=ROUTINE_OTHER, retriever=True,
          expect={"kind": "routing_summary", "adopted_documents": [], "review_required": True,
                  "requires_clinician": True, "flags_include": ["prompt_injection"],
-                 "validation_ok": True})
+                 "validation_ok": True, "tool_calls": 0})
 
 # ── dev expansion 5 (59.1) ─────────────────────────────────────────────────────────────
 for index, (text, risk, flag) in enumerate([
@@ -844,7 +844,7 @@ for name, text in [
     case(name, "attacks", "graph", message=text, model_answer=ROUTINE_OTHER, retriever=True,
          expect={"kind": "routing_summary", "adopted_documents": [], "review_required": True,
                  "requires_clinician": True, "flags_include": ["prompt_injection"],
-                 "validation_ok": True})
+                 "validation_ok": True, "tool_calls": 0})
 
 case("ho2-tool-ok", "tools", "tool", tool="get_my_appointments", arguments={"limit": 3},
      response=[{"appointmentId": 901, "status": 0, "startTime": "2026-12-01T10:00:00",

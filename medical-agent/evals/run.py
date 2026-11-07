@@ -44,6 +44,17 @@ CASES = Path(__file__).with_name("cases.jsonl")
 MODELS: set[str] = set()
 
 
+class BudgetedProvider:
+    """Charges the budget at the moment a request is sent, retries included (59.1 review)."""
+
+    def __init__(self, provider: object) -> None:
+        self._provider = provider
+
+    def invoke_now(self, request):  # type: ignore[no-untyped-def]
+        BUDGET.take()
+        return self._provider.invoke_now(request)  # type: ignore[attr-defined]
+
+
 class BudgetExhausted(RuntimeError):
     """A hard limit was reached before a request could be sent (59.1)."""
 
@@ -62,6 +73,12 @@ class Budget:
         self.price_per_request_usd = price_per_request_usd
         self.requests = 0
         self.spent_usd = 0.0
+
+    def exhausted(self) -> bool:
+        if self.max_requests is not None and self.requests >= self.max_requests:
+            return True
+        return (self.max_usd is not None
+                and self.spent_usd + self.price_per_request_usd > self.max_usd)
 
     def take(self) -> None:
         if self.max_requests is not None and self.requests >= self.max_requests:
@@ -121,8 +138,8 @@ def contains(actual: list[str], expected: list[str]) -> bool:
 
 def check_classify(case: dict, retriever: Retriever) -> list[str]:
     expect = case["expect"]
-    provider = MockProvider() if case["model_answer"] is None else CannedProvider(
-        case["model_answer"])
+    provider = BudgetedProvider(
+        MockProvider() if case["model_answer"] is None else CannedProvider(case["model_answer"]))
     decision = Classifier(provider).classify(case["message"])
     problems: list[str] = []
     if not contains([intent.value for intent in decision.intents], expect["intents_include"]):
@@ -138,7 +155,8 @@ def check_classify(case: dict, retriever: Retriever) -> list[str]:
 
 def check_uncertain(case: dict, retriever: Retriever) -> list[str]:
     expect = case["expect"]
-    provider = CannedProvider(case["model_answer"], case.get("provider_error"))
+    provider = BudgetedProvider(
+        CannedProvider(case["model_answer"], case.get("provider_error")))
     decision = Classifier(provider).classify(case["message"])
     problems: list[str] = []
     if RISK_ORDER[decision.risk] < RISK_ORDER[RiskLevel(expect["risk_at_least"])]:
@@ -278,12 +296,16 @@ def check_tool(case: dict, retriever: Retriever) -> list[str]:
 
 
 def check_graph(case: dict, retriever: Retriever) -> list[str]:
-    provider = CannedProvider(case["model_answer"])
+    provider = BudgetedProvider(CannedProvider(case["model_answer"]))
+    tool_calls: list[str] = []
+    tool_client = ((lambda path, timeout: tool_calls.append(path) or [])
+                   if "tool_calls" in case["expect"] else None)
     with tempfile.TemporaryDirectory() as directory, open_checkpointer(
         f"sqlite://{Path(directory) / 'eval.sqlite'}"
     ) as checkpointer:
         worker = AgentWorker(provider, checkpointer, lambda state: None,
-                             retriever=retriever if case["retriever"] else None)
+                             retriever=retriever if case["retriever"] else None,
+                             tool_client=tool_client)
         try:
             state = worker.process(
                 RunStartRequest(run_id=1, message_id=10, patient_id=100,
@@ -312,6 +334,8 @@ def check_graph(case: dict, retriever: Retriever) -> list[str]:
         problems.append(f"validation_ok {(state.get('validation') or {}).get('ok')}")
     if not contains(list(state.get("flags") or []), expect.get("flags_include") or []):
         problems.append(f"flags {state.get('flags')}")
+    if "tool_calls" in expect and len(tool_calls) != expect["tool_calls"]:
+        problems.append(f"tool calls {len(tool_calls)}")
     return problems
 
 
@@ -353,6 +377,11 @@ def manifest(retriever: Retriever, cases: list[dict], path: Path) -> dict:
     }
 
 
+def case_needs_model(case: dict) -> bool:
+    """Only these kinds send a request; the rest must not be charged or skipped (59.1 review)."""
+    return case["kind"] in {"classify", "uncertain", "graph"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--family")
@@ -368,6 +397,9 @@ def main() -> int:
                         help="recorded per-request price assumption")
     args = parser.parse_args()
 
+    if args.max_usd is not None and args.price_per_request_usd <= 0:
+        print("--max-usd needs a positive --price-per-request-usd", file=sys.stderr)
+        return 2
     global BUDGET
     BUDGET = Budget(args.max_requests, args.max_usd, args.price_per_request_usd)
     retriever = corpus_retriever()
@@ -379,16 +411,18 @@ def main() -> int:
     per_family: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     failures: list[str] = []
     skipped = 0
-    executed = 0
     for executed, case in enumerate(cases, start=1):
+        if case_needs_model(case) and BUDGET.exhausted():
+            # The next model request would be refused, so this and the rest were not measured.
+            skipped = len(cases) - (executed - 1)
+            print(f"budget exhausted; {skipped} case(s) not run", file=sys.stderr)
+            break
         try:
-            BUDGET.take()
+            problems = HANDLERS[case["kind"]](case, retriever)
         except BudgetExhausted as exhausted:
-            # Every remaining case is skipped, not failed: the run did not measure it.
             skipped = len(cases) - (executed - 1)
             print(f"budget exhausted: {exhausted}; {skipped} case(s) not run", file=sys.stderr)
             break
-        problems = HANDLERS[case["kind"]](case, retriever)
         per_family[case["family"]][0] += 1
         if problems:
             per_family[case["family"]][1] += 1
@@ -418,6 +452,10 @@ def main() -> int:
         for failure in failures:
             print("  " + failure)
         return 1
+    if skipped:
+        # A release gate must not read a partial run as complete (59.1 review).
+        print(f"\nINCOMPLETE: {skipped} case(s) were not run")
+        return 3
     print("\nall cases passed")
     return 0
 
