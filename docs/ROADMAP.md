@@ -7380,7 +7380,35 @@ Java → Python request is not part of this evidence.
 **Verification (actually run).** Java `mvn clean verify` → **421 tests, 0 failures, 1 skipped**;
 `pytest` → 289 passed, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — One live Java → Python request, one trace (2026-11-07)
+
+The last gap is closed with a real two-process run (opt-in test `HttpAgentRunClientLiveTest`,
+`AGENT_LIVE_URL`):
+
+- a local OTLP collector on :4318 received the Java export;
+- the Python agent ran from its **default startup path** (`uvicorn …:app`, env-only config) with
+  `MEDICAL_AGENT_OTLP_ENDPOINT` and `MEDICAL_AGENT_TRACE_FILE`;
+- a real `HttpAgentRunClient` dispatched run **175** through the OTel SDK span.
+
+```
+java trace/span: 6d93624e2983d3e980179d4cf1f24c04 7ae3a64c458273d7
+python spans: ['validate_content','classify_message','retrieve_evidence','read_appointment','draft_reply']
+same trace: True
+parent == java span: True
+```
+
+The message used for the run contained no personal data, and the Python export was checked for the
+canary string: absent. The collector also received the Java export (protobuf payload, 2.6 kB).
+
+**Recorded limits.** Langfuse itself was not contacted (no instance/credentials); the opt-in test is
+skipped in the normal build (`mvn verify` → 2 skipped), so the evidence comes from the run above rather
+than from the default gate; and the collector did not assert the Java span's payload contents, only that
+it received data.
+
+**Verification (actually run).** Java `mvn clean verify` → **422 tests, 0 failures, 2 skipped**;
+`pytest` → 289 passed, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
