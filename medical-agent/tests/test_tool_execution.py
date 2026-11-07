@@ -753,6 +753,7 @@ def test_a_killed_worker_resumes_from_its_checkpoint(tmp_path) -> None:
     marker = tmp_path / "at-submit"
     child = subprocess.Popen(
         [sys.executable, "-c", f"""
+import time
 from pathlib import Path
 from medical_agent.checkpoints import open_checkpointer
 from medical_agent.java_client import CallCredentials
@@ -768,8 +769,7 @@ credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:
 with open_checkpointer("sqlite://{database}") as checkpointer:
     def blocking_submit(state):
         Path("{marker}").write_text("ready")
-        while True:
-            pass
+        time.sleep(3600)
     AgentWorker(MockProvider(), checkpointer, blocking_submit).process(request, credentials)
 """],
         env={**os.environ, "PYTHONPATH": "src"},
