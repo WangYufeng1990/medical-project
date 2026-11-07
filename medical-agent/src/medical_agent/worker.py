@@ -74,6 +74,7 @@ class AgentWorker:
         self._tool_clock = tool_clock
         self._locks: dict[int, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        self.tracer = tracer
         self._graph = build_graph(
             Classifier(provider, max_prompt_chars), retriever, submit, checkpointer,
             tools=self._read_appointments if tool_client is not None else None,

@@ -7197,7 +7197,22 @@ two ids mixed, which is the reported behaviour.
 
 **Verification (actually run).** `pytest` → **281 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — The dispatch header reaches the graph (2026-11-06)
+
+`Settings` gained `trace_file` (`MEDICAL_AGENT_TRACE_FILE`); the app builds one `Tracer` over it, hands
+it to the worker, and the `POST /internal/v1/runs` handler binds the request's `traceparent` before
+processing. The worker's graph then exports every node span under that trace and parent.
+
+Tests: the concurrency case now also opens a **second span for request A after B rebound** and asserts
+it still carries A's trace and parent, so the request context — not just an open span — is shown to be
+isolated. An API test posts a dispatch with `traceparent: 00-eee…-fff…-01` to a worker with a no-op
+submit and asserts every exported span has trace `eee…` and parent `fff…`.
+
+**Still open.** No Java side sends `traceparent` yet; Langfuse and token/cost accounting remain.
+
+**Verification (actually run).** `pytest` → **282 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

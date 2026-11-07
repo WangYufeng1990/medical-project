@@ -25,6 +25,7 @@ from medical_agent.providers.base import Provider
 from medical_agent.providers.factory import build_provider
 from medical_agent.schemas.run import CONTRACT_VERSION, RunStartRequest
 from medical_agent.tools.http_client import java_reader
+from medical_agent.trace import Tracer
 from medical_agent.worker import AgentWorker
 
 
@@ -98,9 +99,11 @@ def create_app(
                 checkpointer = stack.enter_context(open_checkpointer(settings.checkpoint_url))
                 retriever = _open_retriever(settings)
                 tool_client = java_reader(settings.java_base_url)
+                tracer = Tracer(settings.trace_file)
                 active_worker = AgentWorker(active_provider, checkpointer,
                                            max_prompt_chars=settings.max_prompt_chars,
-                                           retriever=retriever, tool_client=tool_client)
+                                           retriever=retriever, tool_client=tool_client,
+                                           tracer=tracer)
                 application.state.checkpointer = checkpointer
             application.state.worker = active_worker
             yield
@@ -121,6 +124,7 @@ def create_app(
         request: RunStartRequest,
         authorization: str | None = Header(default=None),
         capability: str | None = Header(default=None, alias="X-Agent-Capability"),
+        traceparent: str | None = Header(default=None),
     ) -> dict[str, object]:
         """Accept one dispatch. Validation happens before any model work."""
         _require_inbound_token(settings, authorization)
@@ -137,6 +141,10 @@ def create_app(
             if settings.outbound_token
             else "",
         )
+        tracer = getattr(worker_for_call, "tracer", None)
+        if tracer is not None:
+            # A fresh context per dispatch: an invalid or missing header starts a new trace.
+            tracer.bind(traceparent)
         worker_for_call.process(request, credentials)
         return {"run_id": request.run_id, "status": "ACCEPTED"}
 

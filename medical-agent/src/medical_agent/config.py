@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     inbound_token: SecretStr | None = None
 
     provider: ProviderName = ProviderName.MOCK
+    # Where the JSONL span export goes; unset means tracing is off (Round 59.2).
+    trace_file: str | None = None
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"

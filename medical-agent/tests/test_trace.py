@@ -71,6 +71,9 @@ def test_two_concurrent_requests_keep_their_own_trace_and_parent(tmp_path: Path)
         with tracer.span("classify_message"):
             a_bound.set()
             assert b_done.wait(timeout=5), "the second request must finish while the first is open"
+        # A second span for the same request after B rebound must still belong to A.
+        with tracer.span("draft_reply"):
+            pass
         results["a"] = ("a" * 32, parent, "classify_message")
 
     def request_b() -> None:
@@ -92,3 +95,40 @@ def test_two_concurrent_requests_keep_their_own_trace_and_parent(tmp_path: Path)
     assert by_name["classify_message"]["trace_id"] == "a" * 32
     assert by_name["classify_message"]["parent_span_id"] == results["a"][1]
     assert by_name["retrieve_evidence"]["trace_id"] == "c" * 32
+    assert by_name["draft_reply"]["trace_id"] == "a" * 32, "A's later span must stay in A's trace"
+    assert by_name["draft_reply"]["parent_span_id"] == results["a"][1]
+
+
+def test_the_dispatch_header_reaches_the_worker_trace(tmp_path: Path) -> None:
+    # The API binds the header per dispatch; the worker's graph then exports under that trace.
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from medical_agent.api.app import create_app
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.config import Settings
+    from medical_agent.providers.mock import MockProvider
+    from medical_agent.worker import AgentWorker
+
+    trace_file = tmp_path / "trace.jsonl"
+    settings = Settings(inbound_token="token", outbound_token="out", trace_file=str(trace_file))
+    with open_checkpointer(f"sqlite://{tmp_path / 'api.sqlite'}") as checkpointer:
+        worker = AgentWorker(MockProvider(), checkpointer, lambda state: None,
+                             tracer=Tracer(trace_file))
+        app = create_app(settings, worker=worker)
+        with TestClient(app) as client:
+            response = client.post(
+                "/internal/v1/runs",
+                json={"contract_version": "v1", "run_id": 150, "message_id": 1500,
+                      "patient_id": 100, "conversation_revision": 1, "execution_generation": 1,
+                      "content": "Can I move my appointment?", "request_id": "req-trace-150"},
+                headers={"Authorization": "Bearer token", "X-Agent-Capability": "cap",
+                         "traceparent": "00-" + "e" * 32 + "-" + "f" * 16 + "-01"},
+            )
+
+    assert response.status_code == 202, response.text
+    spans = [json.loads(line) for line in trace_file.read_text().splitlines()]
+    assert spans, "the dispatch is traced"
+    assert {span["trace_id"] for span in spans} == {"e" * 32}
+    assert {span["parent_span_id"] for span in spans} == {"f" * 16}
