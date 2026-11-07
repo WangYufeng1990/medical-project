@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from medical_agent.trace import Tracer, parse_traceparent
+from medical_agent.trace import OtlpExporter, Tracer, parse_traceparent
 
 VALID = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
@@ -132,3 +132,50 @@ def test_the_dispatch_header_reaches_the_worker_trace(tmp_path: Path) -> None:
     assert spans, "the dispatch is traced"
     assert {span["trace_id"] for span in spans} == {"e" * 32}
     assert {span["parent_span_id"] for span in spans} == {"f" * 16}
+
+
+def test_the_otlp_exporter_posts_standard_span_fields(tmp_path: Path) -> None:
+    # Langfuse accepts OTLP; the payload shape is what a collector would receive (59.2).
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    received: list[dict[str, object]] = []
+
+    class Collector(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            received.append(json.loads(self.rfile.read(length)))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Collector)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        tracer = Tracer(tmp_path / "trace.jsonl",
+                        otlp=OtlpExporter(f"http://127.0.0.1:{server.server_address[1]}/otel"))
+        tracer.bind("00-" + "a" * 32 + "-" + "b" * 16 + "-01")
+        with tracer.span("classify_message", run_id=1):
+            pass
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert received, "a span was posted"
+    span = received[0]["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+    assert span["traceId"] == "a" * 32
+    assert span["parentSpanId"] == "b" * 16
+    assert span["name"] == "classify_message"
+    assert span["attributes"] == [{"key": "run_id", "value": {"stringValue": "1"}}]
+
+
+def test_a_dead_collector_does_not_fail_the_node(tmp_path: Path) -> None:
+    tracer = Tracer(tmp_path / "trace.jsonl", otlp=OtlpExporter("http://127.0.0.1:1/otel"))
+    with tracer.span("classify_message"):
+        pass
+    assert tracer.otlp is not None and tracer.otlp.failures == 1

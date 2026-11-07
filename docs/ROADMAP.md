@@ -7287,7 +7287,20 @@ the answer `{}` intact with both tokens `None`.
 
 **Verification (actually run).** `pytest` → **285 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.2 — OTLP export for a Langfuse-compatible collector (2026-11-06)
+
+`Tracer` can now also export each span as OTLP/HTTP JSON (`OtlpExporter`, configured by
+`MEDICAL_AGENT_OTLP_ENDPOINT`): standard `traceId`, `spanId`, `parentSpanId`, name, kind, nanosecond
+start/end, attributes and status. Langfuse ingests OTLP, so this is the export path it would receive;
+**no real Langfuse instance was contacted**, which is recorded rather than implied. The export is best
+effort like the JSONL writer — a dead collector increments `failures` and the node still succeeds.
+
+Tests: a local collector receives one span whose trace, parent and attribute match the run, and a
+collector on a closed port leaves the node successful with `failures == 1`.
+
+**Verification (actually run).** `pytest` → **287 passed**, `ruff` and `mypy --strict` clean (38 files).
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 
