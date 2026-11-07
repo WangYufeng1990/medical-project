@@ -14,6 +14,9 @@ import json
 import sys
 from pathlib import Path
 
+EXPECTED_NODES = ("validate_content", "classify_message", "retrieve_evidence",
+                  "read_appointment", "draft_reply")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -29,6 +32,10 @@ def main() -> int:
     parents = {span["parent_span_id"] for span in spans}
 
     problems: list[str] = []
+    names = {span["name"] for span in spans}
+    missing = [name for name in EXPECTED_NODES if name not in names]
+    if missing:
+        problems.append(f"missing node spans: {missing}")
     if traces != {java["traceId"]}:
         problems.append(f"traces {traces} != java {java['traceId']}")
     if parents != {java["spanId"]}:
