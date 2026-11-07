@@ -7477,7 +7477,25 @@ stays **deferred** by the agreed H2/SQLite scope rather than reported as a curre
 
 **Verification (actually run).** `pytest` → **295 passed**, `ruff` and `mypy --strict` clean (38 files).
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.3 — Retention on H2 and a SIGKILL restart (2026-11-07)
+
+**Retention.** `DataRetentionJobTest` (H2) inserts one row older than the 2190-day window and one current
+row, runs `purgeExpiredAuditLogs`, and asserts the old row is `archived = 1`, the new row stays `0`, and
+both rows still exist — retention archives, it never deletes. Job log: `Archived 1 audit logs older than
+2190 days`.
+
+**SIGKILL.** A child process runs a worker whose submit blocks; once the checkpoint file is non-empty and
+the child is still alive, the parent sends `SIGKILL`, then opens the same SQLite file and finishes the
+run. The submission happens **once** and the draft is present, so the state came from the checkpoint
+rather than a restart from scratch.
+
+**Verification (actually run).** `pytest` → **296 passed** (ruff and `mypy --strict` clean, 38 files);
+Java `mvn clean verify` → **423 tests, 0 failures, 2 skipped**.
+
+**Still open in 59.3 (H2/SQLite scope).** Duplicate-publication and stale-worker evidence exists from
+earlier rounds and is cited rather than re-derived; real MySQL/PostgreSQL stays deferred by scope.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

@@ -733,3 +733,69 @@ def test_a_copied_checkpoint_can_finish_a_pending_run(tmp_path) -> None:
 
     assert len(submitted) == 1, "the restored checkpoint finishes the pending submission"
     assert state["draft"] == original_draft, "the restored draft is the one that was saved"
+
+
+def test_a_killed_worker_resumes_from_its_checkpoint(tmp_path) -> None:
+    # 59.3: SIGKILL, not a graceful close, then a new process finishes the saved run.
+    import os
+    import signal
+    import subprocess
+    import sys
+
+    from medical_agent.checkpoints import open_checkpointer
+    from medical_agent.java_client import CallCredentials
+    from medical_agent.providers.mock import MockProvider
+    from medical_agent.schemas.run import RunStartRequest
+    from medical_agent.worker import AgentWorker
+
+    database = tmp_path / "killed.sqlite"
+    child = subprocess.Popen(
+        [sys.executable, "-c", f"""
+import time
+from medical_agent.checkpoints import open_checkpointer
+from medical_agent.java_client import CallCredentials
+from medical_agent.providers.mock import MockProvider
+from medical_agent.schemas.run import RunStartRequest
+from medical_agent.worker import AgentWorker
+
+request = RunStartRequest(run_id=195, message_id=1950, patient_id=100,
+                          conversation_revision=1, execution_generation=1,
+                          content="When is my next appointment?", request_id="req-kill-195")
+credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                              outbound_token="out")
+with open_checkpointer("sqlite://{database}") as checkpointer:
+    def blocking_submit(state):
+        time.sleep(60)
+    AgentWorker(MockProvider(), checkpointer, blocking_submit).process(request, credentials)
+"""],
+        env={**os.environ, "PYTHONPATH": "src"},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        import time
+
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if database.exists() and database.stat().st_size > 0 and child.poll() is None:
+                break
+            time.sleep(0.2)
+        time.sleep(3)
+        assert child.poll() is None, "the child is still running at the submit step"
+        assert database.exists() and database.stat().st_size > 0
+        child.send_signal(signal.SIGKILL)
+        child.wait(timeout=20)
+    finally:
+        if child.poll() is None:
+            child.kill()
+
+    submitted: list[object] = []
+    request = RunStartRequest(run_id=195, message_id=1950, patient_id=100,
+                              conversation_revision=1, execution_generation=1,
+                              content="When is my next appointment?", request_id="req-kill-195")
+    credentials = CallCredentials(capability="cap", java_base_url="http://127.0.0.1:1",
+                                  outbound_token="out")
+    with open_checkpointer(f"sqlite://{database}") as checkpointer:
+        state = AgentWorker(MockProvider(), checkpointer, submitted.append).process(
+            request, credentials)
+
+    assert len(submitted) == 1, "the killed run is finished, not restarted"
+    assert state["draft"]
