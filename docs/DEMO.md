@@ -17,34 +17,67 @@ regression, a live-model measurement and a local tracing probe do not support th
 ## Run it (single instance, synthetic data)
 
 ```bash
-# backend (H2 profile, synthetic seed data only)
-cd medical-server && SPRING_PROFILES_ACTIVE=h2 mvn spring-boot:run
+# backend: H2 profile, synthetic seed data; the agent is opt-in and needs the directional tokens
+cd medical-server && \
+  SPRING_PROFILES_ACTIVE=h2 \
+  AGENT_ENABLED=true \
+  AGENT_BASE_URL=http://localhost:8090 \
+  AGENT_OUTBOUND_TOKEN=demo-java-to-python \
+  AGENT_INBOUND_TOKEN=demo-python-to-java \
+  mvn spring-boot:run
 
-# agent (three values are required; the service refuses to start without them)
+# agent: each side presents the token the other side expects
 cd medical-agent && \
-  MEDICAL_AGENT_INBOUND_TOKEN=<shared with app.agent.inbound-token> \
-  MEDICAL_AGENT_OUTBOUND_TOKEN=<shared with app.agent.outbound-token> \
+  MEDICAL_AGENT_INBOUND_TOKEN=demo-java-to-python \
+  MEDICAL_AGENT_OUTBOUND_TOKEN=demo-python-to-java \
   MEDICAL_AGENT_JAVA_BASE_URL=http://localhost:8080 \
   MEDICAL_AGENT_PROVIDER=mock \
   PYTHONPATH=src .venv/bin/python -m uvicorn medical_agent.api.main:app --port 8090
 
 # a live model instead of the mock: add MEDICAL_AGENT_PROVIDER=deepseek and
-# MEDICAL_AGENT_DEEPSEEK_API_KEY=<key>; evaluation runs additionally need hard caps:
-#   PYTHONPATH=src .venv/bin/python evals/run.py --provider deepseek --max-requests 27 \
-#     --max-usd 0.10 --price-per-request-usd 0.002 --report /tmp/run.json
+# MEDICAL_AGENT_DEEPSEEK_API_KEY=<key>; evaluation runs need hard caps or they refuse to start:
+#   PYTHONPATH=src .venv/bin/python evals/run.py --provider deepseek --split held_out \
+#     --max-requests 27 --max-usd 0.10 --price-per-request-usd 0.002 --report /tmp/run.json
 
-# frontend
-cd medical-web && npm run dev   # http://localhost:5173, dev login documented in README
+# frontend (staff shell only; review actions are exercised through the API below)
+cd medical-web && npm run dev   # http://localhost:5173
 ```
 
-## Demo script (about six minutes)
+## Demo script (about six minutes, API for review actions)
 
-1. Send a message as a patient; open the staff review queue and show the draft, citations, validation
-   block and (when present) the appointment facts the tool returned.
-2. Edit the draft and approve it; show the published message and the audit row.
-3. Reject another draft with a reason; show that nothing is published.
-4. Show a high-risk message routing to a human instead of a policy answer.
-5. Show a message that tries to instruct the system: flagged, routed to a human, **zero** tool calls.
+There is **no review UI yet**: `medical-web` does not call `/api/v1/agent/reviews`, so the review
+steps below are `curl` calls against the documented endpoints. Do not imply otherwise in a live demo.
+
+```bash
+BASE=http://localhost:8080
+TOKEN=$(curl -s -X POST $BASE/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"doctor1","password":"<dev seed password>"}' | jq -r '.data.token')
+
+# 1. a patient message produced a draft: list the review queue
+curl -s $BASE/api/v1/agent/reviews -H "Authorization: Bearer $TOKEN" | jq
+
+# 2. claim the run for review (the queue item shows who holds it)
+curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/claim -H "Authorization: Bearer $TOKEN" | jq
+
+# 3a. approve, optionally with an edited final text - this is the only publication path
+curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/approve \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"finalText":"Edited reply for staff review."}' | jq
+
+# 3b. or reject with a reason: nothing is published
+curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/reject \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"reason":"Wrong policy cited"}' | jq
+
+# 4. verify the effect: the patient thread shows the published message only after approval,
+#    and the audit log has the review decision
+curl -s "$BASE/api/v1/messages/<patientId>" -H "Authorization: Bearer $TOKEN" | jq
+curl -s "$BASE/api/v1/audit-logs?module=chat" -H "Authorization: Bearer $TOKEN" | jq
+```
+
+Additional things to show: a high-risk message routes to a human instead of a policy answer, and a
+message that tries to instruct the system is flagged, routed to a human and triggers **zero** tool
+calls (both are covered by the evaluation set and the worker tests).
 
 ## Evidence, by kind
 
@@ -53,11 +86,15 @@ cd medical-web && npm run dev   # http://localhost:5173, dev login documented in
 | Java suite | 423 tests, 0 failures, 2 skipped | `mvn clean verify` | deterministic |
 | Agent suite | 296 passed | `pytest` | deterministic |
 | Dev evaluation | 300/300 cases | `evals/run.py` (canned answers) | deterministic |
-| Held-out evaluation | 25/27, 19 model requests, $0.038 recorded spend | `evals/run.py --provider deepseek --split held_out --report evals/reports/held-out-2026-11-06.json` | live model, measured once |
-| Per-class denominators | EMERGENCY 71, URGENT 28, ROUTINE 27 | the same report (`per_class`) | live model |
-| Token usage | 238 prompt / 54 completion on a two-case live run | `usage` block in the report | live model |
+| Dev per-class denominators | EMERGENCY 71, URGENT 28, ROUTINE 27 | the dev run's `per_class` block | deterministic |
+| Held-out evaluation | 25/27, 19 requests, $0.038 recorded spend | `evals/run.py --provider deepseek --split held_out --max-requests 27 --max-usd 0.10 --price-per-request-usd 0.002 --report evals/reports/held-out-2026-11-06.json` | live model, measured once |
+| Token usage | 238 prompt / 54 completion | a **separate** two-case live smoke (`--max-requests 2`), not the held-out run | live model |
 | Cross-service trace | Java `agent.dispatch` span and five Python node spans under one trace, parent = Java span | `evals/verify_trace_link.py` over the canary probe | local OTLP probe, two processes |
 | Canary absence | the synthetic marker appears in neither export | same script | local OTLP probe |
+
+The historical held-out report predates per-class metrics and usage reporting, so it has `per_family`
+numbers only — it does not contain the 71/28/27 denominators or the token counts, and those figures are
+not read from it.
 
 The two held-out failures are `ho2-fever` and `ho2-pregnant`: both expected URGENT and received
 EMERGENCY. That is over-triage relative to the label; it is not evidence of a safer clinical outcome.

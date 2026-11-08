@@ -7528,8 +7528,15 @@ figures, plus the boundaries the demo does not cross and the trade-offs worth na
 Every figure in the table was re-checked while writing it: the dev run is 300/300 and the stored
 held-out report reads `{cases: 27, failed: 2, skipped: 0, errors: 0}`, 19 requests, `spent_usd: 0.038`.
 
-The README now links the guide, and the run block states the three required agent variables, the mock
-default and the capped live-evaluation command.
+The README links the guide. The run block now uses the real property names (`AGENT_ENABLED`,
+`AGENT_BASE_URL`, `AGENT_OUTBOUND_TOKEN`/`AGENT_INBOUND_TOKEN` with the directional pairing the services
+actually check), concrete synthetic token values instead of `<…>` placeholders a shell would treat as
+redirection, and the capped held-out command including `--max-requests`. The demo steps exercise review
+through the documented API (`/api/v1/agent/reviews`, claim/approve/reject, then `/api/v1/messages/…` and
+`/api/v1/audit-logs`) because the frontend has no review view yet. The evidence table no longer mixes
+runs: dev per-class denominators are labelled deterministic and read from the dev report, the token
+counts are a separate two-case smoke, and the historical held-out report is noted as predating
+`per_class` and usage.
 
 **Still open in 59.4.** A clean-environment start (fresh clone, locked installs, no warm caches) has not
 been performed.
