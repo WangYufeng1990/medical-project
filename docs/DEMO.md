@@ -18,7 +18,9 @@ regression, a live-model measurement and a local tracing probe do not support th
 
 ```bash
 # backend: H2 profile, synthetic seed data; the agent is opt-in and needs the directional tokens.
-# If 8080 is taken, append --server.port=8088 to the mvn command and use that port below.
+# If 8080 is taken, start with a free port instead:
+#   mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8088"
+# and use that port for MEDICAL_AGENT_JAVA_BASE_URL below and for BASE in the demo commands.
 cd medical-server && \
   SPRING_PROFILES_ACTIVE=h2 \
   AGENT_ENABLED=true \

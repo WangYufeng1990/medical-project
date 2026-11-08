@@ -7552,8 +7552,10 @@ counts are a separate two-case smoke, and the historical held-out report is note
   in 10.251 seconds`;
 - agent from the clone with the documented env vars → `/health/live` **200**, startup complete.
 
-Port 8080 was already occupied on this machine, so the verification used 8088 and passed
-`--server.port`; the guide still shows the default and notes the override.
+Port 8080 was already occupied on this machine, so the verification used 8088 (a packaged jar with
+`--server.port=8088`). The guide shows the default and documents the `mvn spring-boot:run` form for a busy
+port — `-Dspring-boot.run.arguments="--server.port=8088"` — and says to use that port for the agent's
+callback URL and the demo's `BASE`.
 
 **Verification (actually run).** `pytest` → 296 passed; `evals/run.py` → 300/300; the held-out report
 figures read back as quoted.
