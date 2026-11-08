@@ -50,15 +50,15 @@ steps below are `curl` calls against the documented endpoints. Do not imply othe
 
 ```bash
 BASE=http://localhost:8080
-RUN_ID=<runId from the review queue>
-PATIENT_ID=<the patient who sent the message>
 TOKEN=$(curl -s -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' \
   -d '{"username":"doctor1","password":"<dev seed password>"}' | jq -r '.data.token')
 
 # 1. a patient message produced a draft: list the review queue
 curl -s "$BASE/api/v1/agent/reviews" -H "Authorization: Bearer $TOKEN" | jq
 
-# 2. claim the run for review (the queue item shows who holds it)
+# 2. take the run id from the queue and the patient id from the item, then claim the run
+read -r -p "run id: " RUN_ID
+read -r -p "patient id: " PATIENT_ID
 curl -s -X POST "$BASE/api/v1/agent/reviews/$RUN_ID/claim" -H "Authorization: Bearer $TOKEN" | jq
 
 # 3a. approve, optionally with an edited final text - this is the only publication path
@@ -75,9 +75,12 @@ curl -s -X POST "$BASE/api/v1/agent/reviews/$RUN_ID/reject" \
 #    the published message only after approval (partnerType is required)
 curl -s "$BASE/api/v1/messages/$PATIENT_ID?partnerType=PATIENT" \
   -H "Authorization: Bearer $TOKEN" | jq
+```
 
-# 5. the review decision itself lives in agent_review_event (read-only H2 query, no new endpoint)
-#    - the SQL console is at /h2-console on the h2 profile
+The review decision itself is in `agent_review_event`. Run this in the H2 console at `/h2-console`
+(h2 profile), replacing `<RUN_ID>` with the run id you entered above — there is no endpoint for it:
+
+```sql
 SELECT run_id, action, actor_id, detail, create_time
 FROM agent_review_event WHERE run_id = <RUN_ID> ORDER BY id;
 ```
