@@ -50,30 +50,40 @@ steps below are `curl` calls against the documented endpoints. Do not imply othe
 
 ```bash
 BASE=http://localhost:8080
-TOKEN=$(curl -s -X POST $BASE/api/v1/auth/login -H 'Content-Type: application/json' \
+RUN_ID=<runId from the review queue>
+PATIENT_ID=<the patient who sent the message>
+TOKEN=$(curl -s -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' \
   -d '{"username":"doctor1","password":"<dev seed password>"}' | jq -r '.data.token')
 
 # 1. a patient message produced a draft: list the review queue
-curl -s $BASE/api/v1/agent/reviews -H "Authorization: Bearer $TOKEN" | jq
+curl -s "$BASE/api/v1/agent/reviews" -H "Authorization: Bearer $TOKEN" | jq
 
 # 2. claim the run for review (the queue item shows who holds it)
-curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/claim -H "Authorization: Bearer $TOKEN" | jq
+curl -s -X POST "$BASE/api/v1/agent/reviews/$RUN_ID/claim" -H "Authorization: Bearer $TOKEN" | jq
 
 # 3a. approve, optionally with an edited final text - this is the only publication path
-curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/approve \
+curl -s -X POST "$BASE/api/v1/agent/reviews/$RUN_ID/approve" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"finalText":"Edited reply for staff review."}' | jq
 
 # 3b. or reject with a reason: nothing is published
-curl -s -X POST $BASE/api/v1/agent/reviews/<runId>/reject \
+curl -s -X POST "$BASE/api/v1/agent/reviews/$RUN_ID/reject" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"reason":"Wrong policy cited"}' | jq
 
-# 4. verify the effect: the patient thread shows the published message only after approval,
-#    and the audit log has the review decision
-curl -s "$BASE/api/v1/messages/<patientId>" -H "Authorization: Bearer $TOKEN" | jq
-curl -s "$BASE/api/v1/audit-logs?module=chat" -H "Authorization: Bearer $TOKEN" | jq
+# 4. verify the effect: the decision response above carries the outcome; the patient thread shows
+#    the published message only after approval (partnerType is required)
+curl -s "$BASE/api/v1/messages/$PATIENT_ID?partnerType=PATIENT" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 5. the review decision itself lives in agent_review_event (read-only H2 query, no new endpoint)
+#    - the SQL console is at /h2-console on the h2 profile
+SELECT run_id, action, actor_id, detail, create_time
+FROM agent_review_event WHERE run_id = <RUN_ID> ORDER BY id;
 ```
+
+`/api/v1/audit-logs` is **not** the review trail: it is ADMIN-only and holds the general audit log.
+If you show it, use an ADMIN token and say that it is separate from `agent_review_event`.
 
 Additional things to show: a high-risk message routes to a human instead of a policy answer, and a
 message that tries to instruct the system is flagged, routed to a human and triggers **zero** tool

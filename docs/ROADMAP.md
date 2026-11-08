@@ -7532,8 +7532,11 @@ The README links the guide. The run block now uses the real property names (`AGE
 `AGENT_BASE_URL`, `AGENT_OUTBOUND_TOKEN`/`AGENT_INBOUND_TOKEN` with the directional pairing the services
 actually check), concrete synthetic token values instead of `<…>` placeholders a shell would treat as
 redirection, and the capped held-out command including `--max-requests`. The demo steps exercise review
-through the documented API (`/api/v1/agent/reviews`, claim/approve/reject, then `/api/v1/messages/…` and
-`/api/v1/audit-logs`) because the frontend has no review view yet. The evidence table no longer mixes
+through the documented API because the frontend has no review view yet: `RUN_ID`/`PATIENT_ID` variables
+keep the quoted URLs safe, the message lookup passes the required `partnerType`, the decision response is
+the outcome, and the review trail is read from `agent_review_event` with the schema's real columns
+(`action`, `actor_id`, `detail`, `create_time`). `/api/v1/audit-logs` is documented as ADMIN-only and
+separate from the review trail rather than being used as evidence for it. The evidence table no longer mixes
 runs: dev per-class denominators are labelled deterministic and read from the dev report, the token
 counts are a separate two-case smoke, and the historical held-out report is noted as predating
 `per_class` and usage.
