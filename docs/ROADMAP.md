@@ -6759,7 +6759,7 @@ cover.
 **Verification (actually run).** Python `pytest` → **258 passed**, `ruff` and `mypy --strict` clean
 (37 files). 58.3 is Done; Round 58 is complete.
 
-## Round 59 — Evaluation, observability and release evidence (In progress: 59.1 and 59.3 done)
+## Round 59 — Evaluation, observability and release evidence (In progress: 59.1, 59.3 and 59.4 done)
 
 **Goal:** reproducible evidence and honest operational boundaries. **Estimate:** 32–48 hours, excluding optional FAQ auto-response. Depends on completed earlier slices; foundational safety/testing/telemetry already exist.
 
@@ -6768,7 +6768,7 @@ cover.
 | 59.1 Golden dataset/regression | P1 / **Done** (2026-11-06; 300 dev + 27 held-out, live-model run recorded) | Expand to approximately 300–500 synthetic cases; classification/retrieval/clinical escalation/tools/attacks; retain held-out split | Every run identifies dataset/model/prompt/KB/commit; per-class metrics, error examples and denominators available |
 | 59.2 Tracing/cost | P1 / **In progress** (2026-11-06; Python trace continuation and export masking done) | Java/Python OTel correlation, graph/tool/retrieval spans, Langfuse, token/cost; export-stage masking | A run's path is traceable; sensitive canaries absent from logs/exported spans including third-party instrumentation; estimated cost uses recorded pricing assumptions |
 | 59.3 Fault/database verification | P1 / **Done** (2026-11-07, H2/SQLite scope; real MySQL/PostgreSQL deferred) | Actual MySQL/PostgreSQL integration, timeout/429/network/kill/restart; backup/restore; retention tests | No lost accepted messages, duplicate publication or stale-worker writes in tested scenarios; raw evidence and limits recorded |
-| 59.4 Portfolio/demo | P1 / **In progress** (2026-11-07; `docs/DEMO.md` written, clean-environment start still unverified) | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
+| 59.4 Portfolio/demo | P1 / **Done** (2026-11-07; guide written, clean-clone install/build/start verified) | Architecture/workflow/threat model, setup, benchmarks, trade-offs, demo script and truthful interview material | Clean environment starts; figures reproduce from raw output; single-instance and synthetic-data boundaries explicit |
 | 59.5 Optional FAQ auto-response | P2 / Pending | Default-off allowlist of low-risk administrative FAQ; evidence/version/freshness check before publish; kill switch | Only after agreed eval gates; clinical/uncertain/error paths remain human; disabling switch preserves manual messaging |
 
 #### Round 59.1 — Run identity and per-family report (2026-11-05)
@@ -7542,13 +7542,35 @@ runs: dev per-class denominators are labelled deterministic and read from the de
 counts are a separate two-case smoke, and the historical held-out report is noted as predating
 `per_class` and usage.
 
-**Still open in 59.4.** A clean-environment start (fresh clone, locked installs, no warm caches) has not
-been performed.
+**Clean-environment start (executed).** A fresh `git clone` into `/tmp` (no `node_modules`, no `.venv`, no
+`target/`) was installed and started with only writable temp directories:
+
+- `pip install -r requirements.lock` + editable install into a new venv → import works;
+- `npm ci --cache /tmp/npm-cache` and `npm run build` → exit 0;
+- `mvn -Dmaven.repo.local=/tmp/m2-probe -DskipTests package` → the jar builds;
+- backend `java -jar … --server.port=8088` (h2 profile, `H2_DB_PATH` in /tmp) → `Started MedicalApplication
+  in 10.251 seconds`;
+- agent from the clone with the documented env vars → `/health/live` **200**, startup complete.
+
+Port 8080 was already occupied on this machine, so the verification used 8088 and passed
+`--server.port`; the guide still shows the default and notes the override.
 
 **Verification (actually run).** `pytest` → 296 passed; `evals/run.py` → 300/300; the held-out report
 figures read back as quoted.
 
-### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
+#### Round 59.4 — Clean-clone install and start (2026-11-07)
+
+Executed against a fresh `git clone` in `/tmp` with no build artifacts: Python dependencies from
+`requirements.lock` in a new venv, `npm ci` + `npm run build`, `mvn package`, then both services started
+from that clone, with the h2 database and SQLite checkpoint paths under `/tmp`. Results: frontend build
+exit 0, jar built, backend `Started MedicalApplication in 10.251 seconds`, agent `/health/live` **200**.
+Port 8080 was in use on this machine, so the backend was started with `--server.port=8088`; the guide
+records the default and the override. Both services were stopped after the check.
+
+This closes 59.4. Remaining in Round 59: 59.2's real Langfuse instance (needs endpoint and credentials)
+and the optional 59.5.
+
+### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria### Evaluation and release criteria
 
 All thresholds below are **candidate engineering gates, not measured results or clinical safety guarantees**. Confirm them before enabling 59.5.
 

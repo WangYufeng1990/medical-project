@@ -17,7 +17,8 @@ regression, a live-model measurement and a local tracing probe do not support th
 ## Run it (single instance, synthetic data)
 
 ```bash
-# backend: H2 profile, synthetic seed data; the agent is opt-in and needs the directional tokens
+# backend: H2 profile, synthetic seed data; the agent is opt-in and needs the directional tokens.
+# If 8080 is taken, append --server.port=8088 to the mvn command and use that port below.
 cd medical-server && \
   SPRING_PROFILES_ACTIVE=h2 \
   AGENT_ENABLED=true \
